@@ -1,0 +1,25 @@
+src/auth/AuthService.ts(120,13): error TS2322: Type '""' is not assignable to type 'TenantRole'.
+src/components/DataEntryForm.tsx(185,17): error TS2345: Argument of type '{ id: any; source_id: any; mapping_rules: { target_entity_type_id: any; field_mappings: {}; }; created_at: Date; created_by: null; }' is not assignable to parameter of type 'IngestionSourceVersion'.
+  Property 'ingestion_source_id' is missing in type '{ id: any; source_id: any; mapping_rules: { target_entity_type_id: any; field_mappings: {}; }; created_at: Date; created_by: null; }' but required in type 'IngestionSourceVersion'.
+src/components/DecisionHistoryView.tsx(165,68): error TS2353: Object literal may only specify known properties, and 'block' does not exist in type 'Properties<string | number, string & {}>'.
+src/components/DecisionHistoryView.tsx(169,68): error TS2353: Object literal may only specify known properties, and 'block' does not exist in type 'Properties<string | number, string & {}>'.
+src/components/Login.tsx(123,29): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/Login.tsx(162,29): error TS1117: An object literal cannot have multiple properties with the same name.
+src/components/Login.tsx(201,29): error TS1117: An object literal cannot have multiple properties with the same name.
+src/ontology/definition/OntologyCompiler.ts(76,13): error TS2322: Type 'Map<string, CompiledValidator>' is not assignable to type 'Map<ObjectTypeDefinitionId, CompiledValidator>'.
+  Type 'string' is not assignable to type 'ObjectTypeDefinitionId'.
+    Type 'string' is not assignable to type '{ readonly [__brand]: "ObjectTypeDefinitionId"; }'.
+src/ontology/definition/OntologyCompiler.ts(78,13): error TS2322: Type 'Map<string, CompiledUISchema>' is not assignable to type 'Map<ObjectTypeDefinitionId, CompiledUISchema>'.
+  Type 'string' is not assignable to type 'ObjectTypeDefinitionId'.
+    Type 'string' is not assignable to type '{ readonly [__brand]: "ObjectTypeDefinitionId"; }'.
+src/ontology/definition/OntologyCompiler.ts(80,13): error TS2322: Type 'Map<string, CompiledAIContextSchema>' is not assignable to type 'Map<ObjectTypeDefinitionId, CompiledAIContextSchema>'.
+  Type 'string' is not assignable to type 'ObjectTypeDefinitionId'.
+    Type 'string' is not assignable to type '{ readonly [__brand]: "ObjectTypeDefinitionId"; }'.
+src/ontology/definition/OntologyCompiler.ts(392,34): error TS2677: A type predicate's type must be assignable to its parameter's type.
+  Type 'string' is not assignable to type 'AttributeDefinitionId'.
+    Type 'string' is not assignable to type '{ readonly [__brand]: "AttributeDefinitionId"; }'.
+src/ontology/definition/OntologyCompiler.ts(398,107): error TS2677: A type predicate's type must be assignable to its parameter's type.
+  Type 'string' is not assignable to type 'AttributeDefinitionId'.
+    Type 'string' is not assignable to type '{ readonly [__brand]: "AttributeDefinitionId"; }'.
+src/ontology/materialization/TruthMaterializationEngine.ts(113,19): error TS2739: Type '{ id: EntityId; tenant_id: string; entity_type_id: EntityTypeId; external_id: null; deleted_at: null; metadata: {}; }' is missing the following properties from type 'Entity': created_at, updated_at, created_by
+src/visualization/OverlayResolver.ts(196,25): error TS2353: Object literal may only specify known properties, and 'strokeOpacity' does not exist in type 'OverlayStyle'.
