@@ -22,11 +22,23 @@ type AttributeInput = {
   dataType: string;
   required: boolean;
   temporal?: boolean;
+  description?: string;
+  unit?: string;
+  regexPattern?: string;
+  minValue?: number;
+  maxValue?: number;
+  defaultValue?: Prisma.InputJsonValue;
+  allowedValues?: Prisma.InputJsonValue;
 };
 
 type CreateEntityTypeBody = {
   name: string;
   attributes: AttributeInput[];
+  semanticUri?: string;
+  description?: string;
+  status?: 'draft' | 'approved' | 'deprecated';
+  owner?: string;
+  parentTypeId?: string;
 };
 
 app.get('/health', async (_req, res) => {
@@ -41,7 +53,7 @@ app.get('/health', async (_req, res) => {
 });
 
 app.post('/entity-types', async (req, res) => {
-  const { name, attributes } = req.body as CreateEntityTypeBody;
+  const { name, attributes, semanticUri, description, status, owner, parentTypeId } = req.body as CreateEntityTypeBody;
 
   if (!name || !Array.isArray(attributes)) {
     return res.status(400).json({ error: 'name and attributes[] are required' });
@@ -52,12 +64,24 @@ app.post('/entity-types', async (req, res) => {
       data: {
         name,
         version: 1,
+        semanticUri: semanticUri ?? null,
+        description: description ?? null,
+        status: status ?? 'draft',
+        owner: owner ?? null,
+        ...(parentTypeId ? { parentType: { connect: { id: parentTypeId } } } : {}),
         attributes: {
           create: attributes.map((a) => ({
             name: a.name,
             dataType: a.dataType,
             required: a.required,
             temporal: a.temporal ?? false,
+            description: a.description ?? null,
+            unit: a.unit ?? null,
+            regexPattern: a.regexPattern ?? null,
+            minValue: a.minValue !== undefined ? Number(a.minValue) : null,
+            maxValue: a.maxValue !== undefined ? Number(a.maxValue) : null,
+            defaultValue: a.defaultValue ?? Prisma.JsonNull,
+            allowedValues: a.allowedValues ?? Prisma.JsonNull,
           })),
         },
       },
@@ -133,12 +157,26 @@ app.put('/entity-types/:id', async (req, res) => {
       data: {
         name: existing.name,
         version: newVersion,
+        semanticUri: (req.body as any).semanticUri ?? null,
+        description: (req.body as any).description ?? null,
+        status: (req.body as any).status ?? 'draft',
+        owner: (req.body as any).owner ?? null,
+        ...((req.body as any).parentTypeId
+          ? { parentType: { connect: { id: (req.body as any).parentTypeId } } }
+          : {}),
         attributes: {
           create: attributes.map((a) => ({
             name: a.name,
             dataType: a.dataType,
             required: a.required,
             temporal: a.temporal ?? false,
+            description: a.description ?? null,
+            unit: a.unit ?? null,
+            regexPattern: a.regexPattern ?? null,
+            minValue: a.minValue !== undefined ? Number(a.minValue) : null,
+            maxValue: a.maxValue !== undefined ? Number(a.maxValue) : null,
+            defaultValue: a.defaultValue ?? Prisma.JsonNull,
+            allowedValues: a.allowedValues ?? Prisma.JsonNull,
           })),
         },
       },
@@ -401,14 +439,42 @@ app.get('/events', async (req, res) => {
 
 app.post('/relationship-definitions', async (req, res) => {
   try {
-    const { name, sourceEntityTypeId, targetEntityTypeId } = req.body;
+    const {
+      name,
+      sourceEntityTypeId,
+      targetEntityTypeId,
+      semanticUri,
+      description,
+      inverseName,
+      minSourceCardinality,
+      maxSourceCardinality,
+      minTargetCardinality,
+      maxTargetCardinality,
+      symmetric,
+      transitive,
+      composition,
+    } = req.body;
 
     if (!name || !sourceEntityTypeId || !targetEntityTypeId) {
       return res.status(400).json({ error: 'name, sourceEntityTypeId, and targetEntityTypeId are required' });
     }
 
     const relDef = await prisma.relationshipDefinition.create({
-      data: { name, sourceEntityTypeId, targetEntityTypeId },
+      data: {
+        name,
+        sourceEntityTypeId,
+        targetEntityTypeId,
+        semanticUri,
+        description,
+        inverseName,
+        minSourceCardinality: minSourceCardinality ?? 0,
+        maxSourceCardinality,
+        minTargetCardinality: minTargetCardinality ?? 0,
+        maxTargetCardinality,
+        symmetric: symmetric ?? false,
+        transitive: transitive ?? false,
+        composition: composition ?? false,
+      },
       include: { sourceEntityType: true, targetEntityType: true },
     });
 
@@ -448,6 +514,32 @@ app.post('/relationships', async (req, res) => {
 
     if (!relDef) {
       return res.status(404).json({ error: 'relationship definition not found' });
+    }
+
+    if (relDef.maxSourceCardinality !== null) {
+      const sourceCount = await prisma.relationshipInstance.count({
+        where: {
+          relationshipDefinitionId,
+          sourceLogicalId,
+          validTo: null,
+        },
+      });
+      if (sourceCount >= relDef.maxSourceCardinality) {
+        return res.status(409).json({ error: 'source cardinality exceeded for this relationship definition' });
+      }
+    }
+
+    if (relDef.maxTargetCardinality !== null) {
+      const targetCount = await prisma.relationshipInstance.count({
+        where: {
+          relationshipDefinitionId,
+          targetLogicalId,
+          validTo: null,
+        },
+      });
+      if (targetCount >= relDef.maxTargetCardinality) {
+        return res.status(409).json({ error: 'target cardinality exceeded for this relationship definition' });
+      }
     }
 
     const now = new Date();
@@ -791,6 +883,49 @@ app.post('/telemetry', async (req, res) => {
       return res.status(400).json({ error: 'logicalId and metrics array are required' });
     }
 
+    const current = await prisma.currentEntityState.findUnique({ where: { logicalId } });
+    if (!current) {
+      return res.status(404).json({ error: 'logicalId not found in current entity state' });
+    }
+
+    const metricKeys = metrics
+      .map((m: any) => m.metric)
+      .filter((k: unknown): k is string => typeof k === 'string' && k.length > 0);
+
+    const defs = await prisma.metricDefinition.findMany({
+      where: {
+        entityTypeId: current.entityTypeId,
+        key: { in: metricKeys },
+        status: { not: 'deprecated' },
+      },
+    });
+
+    const defsByKey = new Map(defs.map((d) => [d.key, d]));
+
+    for (const m of metrics) {
+      if (!m?.metric || typeof m.metric !== 'string') {
+        return res.status(400).json({ error: 'every metric item must include a metric string' });
+      }
+
+      const def = defsByKey.get(m.metric);
+      if (!def) {
+        return res.status(400).json({ error: `metric '${m.metric}' is not defined for this entity type or is deprecated` });
+      }
+
+      const numericValue = Number(m.value);
+      if (Number.isNaN(numericValue)) {
+        return res.status(400).json({ error: `metric '${m.metric}' has non-numeric value` });
+      }
+
+      if (def.minValue !== null && numericValue < def.minValue) {
+        return res.status(400).json({ error: `metric '${m.metric}' is below minValue ${def.minValue}` });
+      }
+
+      if (def.maxValue !== null && numericValue > def.maxValue) {
+        return res.status(400).json({ error: `metric '${m.metric}' is above maxValue ${def.maxValue}` });
+      }
+    }
+
     // Fast append-only batch insert
     const created = await prisma.timeseriesMetric.createMany({
       data: metrics.map((m: any) => ({
@@ -804,6 +939,64 @@ app.post('/telemetry', async (req, res) => {
     return res.status(201).json({ inserted: created.count });
   } catch (error) {
     return res.status(500).json({ error: 'failed to ingest telemetry', details: String(error) });
+  }
+});
+
+// ── Metric Definitions ───────────────────────────────────────────
+
+app.post('/entity-types/:id/metric-definitions', async (req, res) => {
+  try {
+    const { key, semanticUri, name, description, unit, dataType, minValue, maxValue, required, status } = req.body;
+
+    if (!key || !name) {
+      return res.status(400).json({ error: 'key and name are required' });
+    }
+
+    const entityType = await prisma.entityType.findUnique({ where: { id: req.params.id } });
+    if (!entityType) {
+      return res.status(404).json({ error: 'entity type not found' });
+    }
+
+    const min = minValue !== undefined ? Number(minValue) : null;
+    const max = maxValue !== undefined ? Number(maxValue) : null;
+    if (min !== null && max !== null && min > max) {
+      return res.status(400).json({ error: 'minValue cannot be greater than maxValue' });
+    }
+
+    const created = await prisma.metricDefinition.create({
+      data: {
+        entityTypeId: req.params.id,
+        key,
+        semanticUri: semanticUri ?? null,
+        name,
+        description: description ?? null,
+        unit: unit ?? null,
+        dataType: dataType ?? 'float',
+        minValue: min,
+        maxValue: max,
+        required: required ?? false,
+        status: status ?? 'draft',
+      },
+    });
+
+    return res.status(201).json(created);
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ error: 'metric definition already exists for this entity type' });
+    }
+    return res.status(500).json({ error: 'failed to create metric definition', details: String(error) });
+  }
+});
+
+app.get('/entity-types/:id/metric-definitions', async (req, res) => {
+  try {
+    const defs = await prisma.metricDefinition.findMany({
+      where: { entityTypeId: req.params.id },
+      orderBy: [{ key: 'asc' }],
+    });
+    return res.json(defs);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to list metric definitions', details: String(error) });
   }
 });
 
@@ -885,5 +1078,3 @@ app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Server listening on http://localhost:${PORT}`);
 });
-
-

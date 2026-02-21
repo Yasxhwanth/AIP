@@ -22,19 +22,43 @@ export type EntityTypeMinAggregateOutputType = {
     id: string | null;
     name: string | null;
     version: number | null;
+    semanticUri: string | null;
+    description: string | null;
+    status: string | null;
+    owner: string | null;
+    effectiveFrom: Date | null;
+    effectiveTo: Date | null;
+    deprecatedAt: Date | null;
     createdAt: Date | null;
+    parentTypeId: string | null;
 };
 export type EntityTypeMaxAggregateOutputType = {
     id: string | null;
     name: string | null;
     version: number | null;
+    semanticUri: string | null;
+    description: string | null;
+    status: string | null;
+    owner: string | null;
+    effectiveFrom: Date | null;
+    effectiveTo: Date | null;
+    deprecatedAt: Date | null;
     createdAt: Date | null;
+    parentTypeId: string | null;
 };
 export type EntityTypeCountAggregateOutputType = {
     id: number;
     name: number;
     version: number;
+    semanticUri: number;
+    description: number;
+    status: number;
+    owner: number;
+    effectiveFrom: number;
+    effectiveTo: number;
+    deprecatedAt: number;
     createdAt: number;
+    parentTypeId: number;
     _all: number;
 };
 export type EntityTypeAvgAggregateInputType = {
@@ -47,19 +71,43 @@ export type EntityTypeMinAggregateInputType = {
     id?: true;
     name?: true;
     version?: true;
+    semanticUri?: true;
+    description?: true;
+    status?: true;
+    owner?: true;
+    effectiveFrom?: true;
+    effectiveTo?: true;
+    deprecatedAt?: true;
     createdAt?: true;
+    parentTypeId?: true;
 };
 export type EntityTypeMaxAggregateInputType = {
     id?: true;
     name?: true;
     version?: true;
+    semanticUri?: true;
+    description?: true;
+    status?: true;
+    owner?: true;
+    effectiveFrom?: true;
+    effectiveTo?: true;
+    deprecatedAt?: true;
     createdAt?: true;
+    parentTypeId?: true;
 };
 export type EntityTypeCountAggregateInputType = {
     id?: true;
     name?: true;
     version?: true;
+    semanticUri?: true;
+    description?: true;
+    status?: true;
+    owner?: true;
+    effectiveFrom?: true;
+    effectiveTo?: true;
+    deprecatedAt?: true;
     createdAt?: true;
+    parentTypeId?: true;
     _all?: true;
 };
 export type EntityTypeAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -142,7 +190,15 @@ export type EntityTypeGroupByOutputType = {
     id: string;
     name: string;
     version: number;
+    semanticUri: string | null;
+    description: string | null;
+    status: string;
+    owner: string | null;
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
+    deprecatedAt: Date | null;
     createdAt: Date;
+    parentTypeId: string | null;
     _count: EntityTypeCountAggregateOutputType | null;
     _avg: EntityTypeAvgAggregateOutputType | null;
     _sum: EntityTypeSumAggregateOutputType | null;
@@ -159,41 +215,82 @@ export type EntityTypeWhereInput = {
     id?: Prisma.StringFilter<"EntityType"> | string;
     name?: Prisma.StringFilter<"EntityType"> | string;
     version?: Prisma.IntFilter<"EntityType"> | number;
+    semanticUri?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    description?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    status?: Prisma.StringFilter<"EntityType"> | string;
+    owner?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    effectiveFrom?: Prisma.DateTimeFilter<"EntityType"> | Date | string;
+    effectiveTo?: Prisma.DateTimeNullableFilter<"EntityType"> | Date | string | null;
+    deprecatedAt?: Prisma.DateTimeNullableFilter<"EntityType"> | Date | string | null;
     createdAt?: Prisma.DateTimeFilter<"EntityType"> | Date | string;
+    parentTypeId?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    parentType?: Prisma.XOR<Prisma.EntityTypeNullableScalarRelationFilter, Prisma.EntityTypeWhereInput> | null;
+    childTypes?: Prisma.EntityTypeListRelationFilter;
     attributes?: Prisma.AttributeDefinitionListRelationFilter;
     instances?: Prisma.EntityInstanceListRelationFilter;
     outgoingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
     incomingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
+    metricDefinitions?: Prisma.MetricDefinitionListRelationFilter;
 };
 export type EntityTypeOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
     name?: Prisma.SortOrder;
     version?: Prisma.SortOrder;
+    semanticUri?: Prisma.SortOrderInput | Prisma.SortOrder;
+    description?: Prisma.SortOrderInput | Prisma.SortOrder;
+    status?: Prisma.SortOrder;
+    owner?: Prisma.SortOrderInput | Prisma.SortOrder;
+    effectiveFrom?: Prisma.SortOrder;
+    effectiveTo?: Prisma.SortOrderInput | Prisma.SortOrder;
+    deprecatedAt?: Prisma.SortOrderInput | Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    parentTypeId?: Prisma.SortOrderInput | Prisma.SortOrder;
+    parentType?: Prisma.EntityTypeOrderByWithRelationInput;
+    childTypes?: Prisma.EntityTypeOrderByRelationAggregateInput;
     attributes?: Prisma.AttributeDefinitionOrderByRelationAggregateInput;
     instances?: Prisma.EntityInstanceOrderByRelationAggregateInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionOrderByRelationAggregateInput;
     incomingRelationships?: Prisma.RelationshipDefinitionOrderByRelationAggregateInput;
+    metricDefinitions?: Prisma.MetricDefinitionOrderByRelationAggregateInput;
 };
 export type EntityTypeWhereUniqueInput = Prisma.AtLeast<{
     id?: string;
+    semanticUri?: string;
     name_version?: Prisma.EntityTypeNameVersionCompoundUniqueInput;
     AND?: Prisma.EntityTypeWhereInput | Prisma.EntityTypeWhereInput[];
     OR?: Prisma.EntityTypeWhereInput[];
     NOT?: Prisma.EntityTypeWhereInput | Prisma.EntityTypeWhereInput[];
     name?: Prisma.StringFilter<"EntityType"> | string;
     version?: Prisma.IntFilter<"EntityType"> | number;
+    description?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    status?: Prisma.StringFilter<"EntityType"> | string;
+    owner?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    effectiveFrom?: Prisma.DateTimeFilter<"EntityType"> | Date | string;
+    effectiveTo?: Prisma.DateTimeNullableFilter<"EntityType"> | Date | string | null;
+    deprecatedAt?: Prisma.DateTimeNullableFilter<"EntityType"> | Date | string | null;
     createdAt?: Prisma.DateTimeFilter<"EntityType"> | Date | string;
+    parentTypeId?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    parentType?: Prisma.XOR<Prisma.EntityTypeNullableScalarRelationFilter, Prisma.EntityTypeWhereInput> | null;
+    childTypes?: Prisma.EntityTypeListRelationFilter;
     attributes?: Prisma.AttributeDefinitionListRelationFilter;
     instances?: Prisma.EntityInstanceListRelationFilter;
     outgoingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
     incomingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
-}, "id" | "name_version">;
+    metricDefinitions?: Prisma.MetricDefinitionListRelationFilter;
+}, "id" | "semanticUri" | "name_version">;
 export type EntityTypeOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
     name?: Prisma.SortOrder;
     version?: Prisma.SortOrder;
+    semanticUri?: Prisma.SortOrderInput | Prisma.SortOrder;
+    description?: Prisma.SortOrderInput | Prisma.SortOrder;
+    status?: Prisma.SortOrder;
+    owner?: Prisma.SortOrderInput | Prisma.SortOrder;
+    effectiveFrom?: Prisma.SortOrder;
+    effectiveTo?: Prisma.SortOrderInput | Prisma.SortOrder;
+    deprecatedAt?: Prisma.SortOrderInput | Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    parentTypeId?: Prisma.SortOrderInput | Prisma.SortOrder;
     _count?: Prisma.EntityTypeCountOrderByAggregateInput;
     _avg?: Prisma.EntityTypeAvgOrderByAggregateInput;
     _max?: Prisma.EntityTypeMaxOrderByAggregateInput;
@@ -207,65 +304,148 @@ export type EntityTypeScalarWhereWithAggregatesInput = {
     id?: Prisma.StringWithAggregatesFilter<"EntityType"> | string;
     name?: Prisma.StringWithAggregatesFilter<"EntityType"> | string;
     version?: Prisma.IntWithAggregatesFilter<"EntityType"> | number;
+    semanticUri?: Prisma.StringNullableWithAggregatesFilter<"EntityType"> | string | null;
+    description?: Prisma.StringNullableWithAggregatesFilter<"EntityType"> | string | null;
+    status?: Prisma.StringWithAggregatesFilter<"EntityType"> | string;
+    owner?: Prisma.StringNullableWithAggregatesFilter<"EntityType"> | string | null;
+    effectiveFrom?: Prisma.DateTimeWithAggregatesFilter<"EntityType"> | Date | string;
+    effectiveTo?: Prisma.DateTimeNullableWithAggregatesFilter<"EntityType"> | Date | string | null;
+    deprecatedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"EntityType"> | Date | string | null;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"EntityType"> | Date | string;
+    parentTypeId?: Prisma.StringNullableWithAggregatesFilter<"EntityType"> | string | null;
 };
 export type EntityTypeCreateInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentTypeId?: string | null;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeCreateManyInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentTypeId?: string | null;
 };
 export type EntityTypeUpdateManyMutationInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type EntityTypeUncheckedUpdateManyInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+};
+export type EntityTypeNullableScalarRelationFilter = {
+    is?: Prisma.EntityTypeWhereInput | null;
+    isNot?: Prisma.EntityTypeWhereInput | null;
+};
+export type EntityTypeListRelationFilter = {
+    every?: Prisma.EntityTypeWhereInput;
+    some?: Prisma.EntityTypeWhereInput;
+    none?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeOrderByRelationAggregateInput = {
+    _count?: Prisma.SortOrder;
 };
 export type EntityTypeNameVersionCompoundUniqueInput = {
     name: string;
@@ -275,7 +455,15 @@ export type EntityTypeCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     name?: Prisma.SortOrder;
     version?: Prisma.SortOrder;
+    semanticUri?: Prisma.SortOrder;
+    description?: Prisma.SortOrder;
+    status?: Prisma.SortOrder;
+    owner?: Prisma.SortOrder;
+    effectiveFrom?: Prisma.SortOrder;
+    effectiveTo?: Prisma.SortOrder;
+    deprecatedAt?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    parentTypeId?: Prisma.SortOrder;
 };
 export type EntityTypeAvgOrderByAggregateInput = {
     version?: Prisma.SortOrder;
@@ -284,13 +472,29 @@ export type EntityTypeMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     name?: Prisma.SortOrder;
     version?: Prisma.SortOrder;
+    semanticUri?: Prisma.SortOrder;
+    description?: Prisma.SortOrder;
+    status?: Prisma.SortOrder;
+    owner?: Prisma.SortOrder;
+    effectiveFrom?: Prisma.SortOrder;
+    effectiveTo?: Prisma.SortOrder;
+    deprecatedAt?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    parentTypeId?: Prisma.SortOrder;
 };
 export type EntityTypeMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     name?: Prisma.SortOrder;
     version?: Prisma.SortOrder;
+    semanticUri?: Prisma.SortOrder;
+    description?: Prisma.SortOrder;
+    status?: Prisma.SortOrder;
+    owner?: Prisma.SortOrder;
+    effectiveFrom?: Prisma.SortOrder;
+    effectiveTo?: Prisma.SortOrder;
+    deprecatedAt?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    parentTypeId?: Prisma.SortOrder;
 };
 export type EntityTypeSumOrderByAggregateInput = {
     version?: Prisma.SortOrder;
@@ -298,6 +502,23 @@ export type EntityTypeSumOrderByAggregateInput = {
 export type EntityTypeScalarRelationFilter = {
     is?: Prisma.EntityTypeWhereInput;
     isNot?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeCreateNestedOneWithoutChildTypesInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutChildTypesInput, Prisma.EntityTypeUncheckedCreateWithoutChildTypesInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutChildTypesInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+};
+export type EntityTypeCreateNestedManyWithoutParentTypeInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutParentTypeInput, Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput> | Prisma.EntityTypeCreateWithoutParentTypeInput[] | Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput[];
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput | Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput[];
+    createMany?: Prisma.EntityTypeCreateManyParentTypeInputEnvelope;
+    connect?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+};
+export type EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutParentTypeInput, Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput> | Prisma.EntityTypeCreateWithoutParentTypeInput[] | Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput[];
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput | Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput[];
+    createMany?: Prisma.EntityTypeCreateManyParentTypeInputEnvelope;
+    connect?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
 };
 export type StringFieldUpdateOperationsInput = {
     set?: string;
@@ -309,8 +530,49 @@ export type IntFieldUpdateOperationsInput = {
     multiply?: number;
     divide?: number;
 };
+export type NullableStringFieldUpdateOperationsInput = {
+    set?: string | null;
+};
 export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string;
+};
+export type NullableDateTimeFieldUpdateOperationsInput = {
+    set?: Date | string | null;
+};
+export type EntityTypeUpdateOneWithoutChildTypesNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutChildTypesInput, Prisma.EntityTypeUncheckedCreateWithoutChildTypesInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutChildTypesInput;
+    upsert?: Prisma.EntityTypeUpsertWithoutChildTypesInput;
+    disconnect?: Prisma.EntityTypeWhereInput | boolean;
+    delete?: Prisma.EntityTypeWhereInput | boolean;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutChildTypesInput, Prisma.EntityTypeUpdateWithoutChildTypesInput>, Prisma.EntityTypeUncheckedUpdateWithoutChildTypesInput>;
+};
+export type EntityTypeUpdateManyWithoutParentTypeNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutParentTypeInput, Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput> | Prisma.EntityTypeCreateWithoutParentTypeInput[] | Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput[];
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput | Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput[];
+    upsert?: Prisma.EntityTypeUpsertWithWhereUniqueWithoutParentTypeInput | Prisma.EntityTypeUpsertWithWhereUniqueWithoutParentTypeInput[];
+    createMany?: Prisma.EntityTypeCreateManyParentTypeInputEnvelope;
+    set?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    disconnect?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    delete?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    connect?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    update?: Prisma.EntityTypeUpdateWithWhereUniqueWithoutParentTypeInput | Prisma.EntityTypeUpdateWithWhereUniqueWithoutParentTypeInput[];
+    updateMany?: Prisma.EntityTypeUpdateManyWithWhereWithoutParentTypeInput | Prisma.EntityTypeUpdateManyWithWhereWithoutParentTypeInput[];
+    deleteMany?: Prisma.EntityTypeScalarWhereInput | Prisma.EntityTypeScalarWhereInput[];
+};
+export type EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutParentTypeInput, Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput> | Prisma.EntityTypeCreateWithoutParentTypeInput[] | Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput[];
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput | Prisma.EntityTypeCreateOrConnectWithoutParentTypeInput[];
+    upsert?: Prisma.EntityTypeUpsertWithWhereUniqueWithoutParentTypeInput | Prisma.EntityTypeUpsertWithWhereUniqueWithoutParentTypeInput[];
+    createMany?: Prisma.EntityTypeCreateManyParentTypeInputEnvelope;
+    set?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    disconnect?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    delete?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    connect?: Prisma.EntityTypeWhereUniqueInput | Prisma.EntityTypeWhereUniqueInput[];
+    update?: Prisma.EntityTypeUpdateWithWhereUniqueWithoutParentTypeInput | Prisma.EntityTypeUpdateWithWhereUniqueWithoutParentTypeInput[];
+    updateMany?: Prisma.EntityTypeUpdateManyWithWhereWithoutParentTypeInput | Prisma.EntityTypeUpdateManyWithWhereWithoutParentTypeInput[];
+    deleteMany?: Prisma.EntityTypeScalarWhereInput | Prisma.EntityTypeScalarWhereInput[];
 };
 export type EntityTypeCreateNestedOneWithoutAttributesInput = {
     create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutAttributesInput, Prisma.EntityTypeUncheckedCreateWithoutAttributesInput>;
@@ -360,23 +622,220 @@ export type EntityTypeUpdateOneRequiredWithoutInstancesNestedInput = {
     connect?: Prisma.EntityTypeWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutInstancesInput, Prisma.EntityTypeUpdateWithoutInstancesInput>, Prisma.EntityTypeUncheckedUpdateWithoutInstancesInput>;
 };
+export type EntityTypeCreateNestedOneWithoutMetricDefinitionsInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutMetricDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutMetricDefinitionsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutMetricDefinitionsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+};
+export type EntityTypeUpdateOneRequiredWithoutMetricDefinitionsNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutMetricDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutMetricDefinitionsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutMetricDefinitionsInput;
+    upsert?: Prisma.EntityTypeUpsertWithoutMetricDefinitionsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutMetricDefinitionsInput, Prisma.EntityTypeUpdateWithoutMetricDefinitionsInput>, Prisma.EntityTypeUncheckedUpdateWithoutMetricDefinitionsInput>;
+};
+export type EntityTypeCreateWithoutChildTypesInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutChildTypesInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+    parentTypeId?: string | null;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutChildTypesInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutChildTypesInput, Prisma.EntityTypeUncheckedCreateWithoutChildTypesInput>;
+};
+export type EntityTypeCreateWithoutParentTypeInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutParentTypeInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutParentTypeInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutParentTypeInput, Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput>;
+};
+export type EntityTypeCreateManyParentTypeInputEnvelope = {
+    data: Prisma.EntityTypeCreateManyParentTypeInput | Prisma.EntityTypeCreateManyParentTypeInput[];
+    skipDuplicates?: boolean;
+};
+export type EntityTypeUpsertWithoutChildTypesInput = {
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutChildTypesInput, Prisma.EntityTypeUncheckedUpdateWithoutChildTypesInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutChildTypesInput, Prisma.EntityTypeUncheckedCreateWithoutChildTypesInput>;
+    where?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeUpdateToOneWithWhereWithoutChildTypesInput = {
+    where?: Prisma.EntityTypeWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutChildTypesInput, Prisma.EntityTypeUncheckedUpdateWithoutChildTypesInput>;
+};
+export type EntityTypeUpdateWithoutChildTypesInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutChildTypesInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUpsertWithWhereUniqueWithoutParentTypeInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutParentTypeInput, Prisma.EntityTypeUncheckedUpdateWithoutParentTypeInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutParentTypeInput, Prisma.EntityTypeUncheckedCreateWithoutParentTypeInput>;
+};
+export type EntityTypeUpdateWithWhereUniqueWithoutParentTypeInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutParentTypeInput, Prisma.EntityTypeUncheckedUpdateWithoutParentTypeInput>;
+};
+export type EntityTypeUpdateManyWithWhereWithoutParentTypeInput = {
+    where: Prisma.EntityTypeScalarWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateManyMutationInput, Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeInput>;
+};
+export type EntityTypeScalarWhereInput = {
+    AND?: Prisma.EntityTypeScalarWhereInput | Prisma.EntityTypeScalarWhereInput[];
+    OR?: Prisma.EntityTypeScalarWhereInput[];
+    NOT?: Prisma.EntityTypeScalarWhereInput | Prisma.EntityTypeScalarWhereInput[];
+    id?: Prisma.StringFilter<"EntityType"> | string;
+    name?: Prisma.StringFilter<"EntityType"> | string;
+    version?: Prisma.IntFilter<"EntityType"> | number;
+    semanticUri?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    description?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    status?: Prisma.StringFilter<"EntityType"> | string;
+    owner?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+    effectiveFrom?: Prisma.DateTimeFilter<"EntityType"> | Date | string;
+    effectiveTo?: Prisma.DateTimeNullableFilter<"EntityType"> | Date | string | null;
+    deprecatedAt?: Prisma.DateTimeNullableFilter<"EntityType"> | Date | string | null;
+    createdAt?: Prisma.DateTimeFilter<"EntityType"> | Date | string;
+    parentTypeId?: Prisma.StringNullableFilter<"EntityType"> | string | null;
+};
 export type EntityTypeCreateWithoutAttributesInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutAttributesInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentTypeId?: string | null;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutAttributesInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -395,37 +854,77 @@ export type EntityTypeUpdateWithoutAttributesInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutAttributesInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeCreateWithoutOutgoingRelationshipsInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutOutgoingRelationshipsInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentTypeId?: string | null;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutOutgoingRelationshipsInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -435,19 +934,39 @@ export type EntityTypeCreateWithoutIncomingRelationshipsInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutIncomingRelationshipsInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentTypeId?: string | null;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutIncomingRelationshipsInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -466,19 +985,39 @@ export type EntityTypeUpdateWithoutOutgoingRelationshipsInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutOutgoingRelationshipsInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUpsertWithoutIncomingRelationshipsInput = {
     update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutIncomingRelationshipsInput, Prisma.EntityTypeUncheckedUpdateWithoutIncomingRelationshipsInput>;
@@ -493,37 +1032,77 @@ export type EntityTypeUpdateWithoutIncomingRelationshipsInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutIncomingRelationshipsInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeCreateWithoutInstancesInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutInstancesInput = {
     id?: string;
     name: string;
     version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
     createdAt?: Date | string;
+    parentTypeId?: string | null;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutInstancesInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -542,34 +1121,211 @@ export type EntityTypeUpdateWithoutInstancesInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutInstancesInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeCreateWithoutMetricDefinitionsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+    parentType?: Prisma.EntityTypeCreateNestedOneWithoutChildTypesInput;
+    childTypes?: Prisma.EntityTypeCreateNestedManyWithoutParentTypeInput;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutMetricDefinitionsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+    parentTypeId?: string | null;
+    childTypes?: Prisma.EntityTypeUncheckedCreateNestedManyWithoutParentTypeInput;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutMetricDefinitionsInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutMetricDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutMetricDefinitionsInput>;
+};
+export type EntityTypeUpsertWithoutMetricDefinitionsInput = {
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutMetricDefinitionsInput, Prisma.EntityTypeUncheckedUpdateWithoutMetricDefinitionsInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutMetricDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutMetricDefinitionsInput>;
+    where?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeUpdateToOneWithWhereWithoutMetricDefinitionsInput = {
+    where?: Prisma.EntityTypeWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutMetricDefinitionsInput, Prisma.EntityTypeUncheckedUpdateWithoutMetricDefinitionsInput>;
+};
+export type EntityTypeUpdateWithoutMetricDefinitionsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentType?: Prisma.EntityTypeUpdateOneWithoutChildTypesNestedInput;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutMetricDefinitionsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    parentTypeId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+};
+export type EntityTypeCreateManyParentTypeInput = {
+    id?: string;
+    name: string;
+    version: number;
+    semanticUri?: string | null;
+    description?: string | null;
+    status?: string;
+    owner?: string | null;
+    effectiveFrom?: Date | string;
+    effectiveTo?: Date | string | null;
+    deprecatedAt?: Date | string | null;
+    createdAt?: Date | string;
+};
+export type EntityTypeUpdateWithoutParentTypeInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    childTypes?: Prisma.EntityTypeUpdateManyWithoutParentTypeNestedInput;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutParentTypeInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    childTypes?: Prisma.EntityTypeUncheckedUpdateManyWithoutParentTypeNestedInput;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    metricDefinitions?: Prisma.MetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateManyWithoutParentTypeInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    semanticUri?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    status?: Prisma.StringFieldUpdateOperationsInput | string;
+    owner?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    effectiveFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    effectiveTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    deprecatedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 /**
  * Count Type EntityTypeCountOutputType
  */
 export type EntityTypeCountOutputType = {
+    childTypes: number;
     attributes: number;
     instances: number;
     outgoingRelationships: number;
     incomingRelationships: number;
+    metricDefinitions: number;
 };
 export type EntityTypeCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    childTypes?: boolean | EntityTypeCountOutputTypeCountChildTypesArgs;
     attributes?: boolean | EntityTypeCountOutputTypeCountAttributesArgs;
     instances?: boolean | EntityTypeCountOutputTypeCountInstancesArgs;
     outgoingRelationships?: boolean | EntityTypeCountOutputTypeCountOutgoingRelationshipsArgs;
     incomingRelationships?: boolean | EntityTypeCountOutputTypeCountIncomingRelationshipsArgs;
+    metricDefinitions?: boolean | EntityTypeCountOutputTypeCountMetricDefinitionsArgs;
 };
 /**
  * EntityTypeCountOutputType without action
@@ -579,6 +1335,12 @@ export type EntityTypeCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.E
      * Select specific fields to fetch from the EntityTypeCountOutputType
      */
     select?: Prisma.EntityTypeCountOutputTypeSelect<ExtArgs> | null;
+};
+/**
+ * EntityTypeCountOutputType without action
+ */
+export type EntityTypeCountOutputTypeCountChildTypesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.EntityTypeWhereInput;
 };
 /**
  * EntityTypeCountOutputType without action
@@ -604,58 +1366,119 @@ export type EntityTypeCountOutputTypeCountOutgoingRelationshipsArgs<ExtArgs exte
 export type EntityTypeCountOutputTypeCountIncomingRelationshipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     where?: Prisma.RelationshipDefinitionWhereInput;
 };
+/**
+ * EntityTypeCountOutputType without action
+ */
+export type EntityTypeCountOutputTypeCountMetricDefinitionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.MetricDefinitionWhereInput;
+};
 export type EntityTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     name?: boolean;
     version?: boolean;
+    semanticUri?: boolean;
+    description?: boolean;
+    status?: boolean;
+    owner?: boolean;
+    effectiveFrom?: boolean;
+    effectiveTo?: boolean;
+    deprecatedAt?: boolean;
     createdAt?: boolean;
+    parentTypeId?: boolean;
+    parentType?: boolean | Prisma.EntityType$parentTypeArgs<ExtArgs>;
+    childTypes?: boolean | Prisma.EntityType$childTypesArgs<ExtArgs>;
     attributes?: boolean | Prisma.EntityType$attributesArgs<ExtArgs>;
     instances?: boolean | Prisma.EntityType$instancesArgs<ExtArgs>;
     outgoingRelationships?: boolean | Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs>;
     incomingRelationships?: boolean | Prisma.EntityType$incomingRelationshipsArgs<ExtArgs>;
+    metricDefinitions?: boolean | Prisma.EntityType$metricDefinitionsArgs<ExtArgs>;
     _count?: boolean | Prisma.EntityTypeCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["entityType"]>;
 export type EntityTypeSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     name?: boolean;
     version?: boolean;
+    semanticUri?: boolean;
+    description?: boolean;
+    status?: boolean;
+    owner?: boolean;
+    effectiveFrom?: boolean;
+    effectiveTo?: boolean;
+    deprecatedAt?: boolean;
     createdAt?: boolean;
+    parentTypeId?: boolean;
+    parentType?: boolean | Prisma.EntityType$parentTypeArgs<ExtArgs>;
 }, ExtArgs["result"]["entityType"]>;
 export type EntityTypeSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     name?: boolean;
     version?: boolean;
+    semanticUri?: boolean;
+    description?: boolean;
+    status?: boolean;
+    owner?: boolean;
+    effectiveFrom?: boolean;
+    effectiveTo?: boolean;
+    deprecatedAt?: boolean;
     createdAt?: boolean;
+    parentTypeId?: boolean;
+    parentType?: boolean | Prisma.EntityType$parentTypeArgs<ExtArgs>;
 }, ExtArgs["result"]["entityType"]>;
 export type EntityTypeSelectScalar = {
     id?: boolean;
     name?: boolean;
     version?: boolean;
+    semanticUri?: boolean;
+    description?: boolean;
+    status?: boolean;
+    owner?: boolean;
+    effectiveFrom?: boolean;
+    effectiveTo?: boolean;
+    deprecatedAt?: boolean;
     createdAt?: boolean;
+    parentTypeId?: boolean;
 };
-export type EntityTypeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "version" | "createdAt", ExtArgs["result"]["entityType"]>;
+export type EntityTypeOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "version" | "semanticUri" | "description" | "status" | "owner" | "effectiveFrom" | "effectiveTo" | "deprecatedAt" | "createdAt" | "parentTypeId", ExtArgs["result"]["entityType"]>;
 export type EntityTypeInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    parentType?: boolean | Prisma.EntityType$parentTypeArgs<ExtArgs>;
+    childTypes?: boolean | Prisma.EntityType$childTypesArgs<ExtArgs>;
     attributes?: boolean | Prisma.EntityType$attributesArgs<ExtArgs>;
     instances?: boolean | Prisma.EntityType$instancesArgs<ExtArgs>;
     outgoingRelationships?: boolean | Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs>;
     incomingRelationships?: boolean | Prisma.EntityType$incomingRelationshipsArgs<ExtArgs>;
+    metricDefinitions?: boolean | Prisma.EntityType$metricDefinitionsArgs<ExtArgs>;
     _count?: boolean | Prisma.EntityTypeCountOutputTypeDefaultArgs<ExtArgs>;
 };
-export type EntityTypeIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {};
-export type EntityTypeIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {};
+export type EntityTypeIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    parentType?: boolean | Prisma.EntityType$parentTypeArgs<ExtArgs>;
+};
+export type EntityTypeIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    parentType?: boolean | Prisma.EntityType$parentTypeArgs<ExtArgs>;
+};
 export type $EntityTypePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "EntityType";
     objects: {
+        parentType: Prisma.$EntityTypePayload<ExtArgs> | null;
+        childTypes: Prisma.$EntityTypePayload<ExtArgs>[];
         attributes: Prisma.$AttributeDefinitionPayload<ExtArgs>[];
         instances: Prisma.$EntityInstancePayload<ExtArgs>[];
         outgoingRelationships: Prisma.$RelationshipDefinitionPayload<ExtArgs>[];
         incomingRelationships: Prisma.$RelationshipDefinitionPayload<ExtArgs>[];
+        metricDefinitions: Prisma.$MetricDefinitionPayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: string;
         name: string;
         version: number;
+        semanticUri: string | null;
+        description: string | null;
+        status: string;
+        owner: string | null;
+        effectiveFrom: Date;
+        effectiveTo: Date | null;
+        deprecatedAt: Date | null;
         createdAt: Date;
+        parentTypeId: string | null;
     }, ExtArgs["result"]["entityType"]>;
     composites: {};
 };
@@ -985,10 +1808,13 @@ export interface EntityTypeDelegate<ExtArgs extends runtime.Types.Extensions.Int
  */
 export interface Prisma__EntityTypeClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
+    parentType<T extends Prisma.EntityType$parentTypeArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$parentTypeArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>;
+    childTypes<T extends Prisma.EntityType$childTypesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$childTypesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     attributes<T extends Prisma.EntityType$attributesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$attributesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AttributeDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     instances<T extends Prisma.EntityType$instancesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$instancesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$EntityInstancePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     outgoingRelationships<T extends Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RelationshipDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     incomingRelationships<T extends Prisma.EntityType$incomingRelationshipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$incomingRelationshipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RelationshipDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
+    metricDefinitions<T extends Prisma.EntityType$metricDefinitionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$metricDefinitionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$MetricDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1017,7 +1843,15 @@ export interface EntityTypeFieldRefs {
     readonly id: Prisma.FieldRef<"EntityType", 'String'>;
     readonly name: Prisma.FieldRef<"EntityType", 'String'>;
     readonly version: Prisma.FieldRef<"EntityType", 'Int'>;
+    readonly semanticUri: Prisma.FieldRef<"EntityType", 'String'>;
+    readonly description: Prisma.FieldRef<"EntityType", 'String'>;
+    readonly status: Prisma.FieldRef<"EntityType", 'String'>;
+    readonly owner: Prisma.FieldRef<"EntityType", 'String'>;
+    readonly effectiveFrom: Prisma.FieldRef<"EntityType", 'DateTime'>;
+    readonly effectiveTo: Prisma.FieldRef<"EntityType", 'DateTime'>;
+    readonly deprecatedAt: Prisma.FieldRef<"EntityType", 'DateTime'>;
     readonly createdAt: Prisma.FieldRef<"EntityType", 'DateTime'>;
+    readonly parentTypeId: Prisma.FieldRef<"EntityType", 'String'>;
 }
 /**
  * EntityType findUnique
@@ -1257,6 +2091,10 @@ export type EntityTypeCreateManyAndReturnArgs<ExtArgs extends runtime.Types.Exte
      */
     data: Prisma.EntityTypeCreateManyInput | Prisma.EntityTypeCreateManyInput[];
     skipDuplicates?: boolean;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.EntityTypeIncludeCreateManyAndReturn<ExtArgs> | null;
 };
 /**
  * EntityType update
@@ -1324,6 +2162,10 @@ export type EntityTypeUpdateManyAndReturnArgs<ExtArgs extends runtime.Types.Exte
      * Limit how many EntityTypes to update.
      */
     limit?: number;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.EntityTypeIncludeUpdateManyAndReturn<ExtArgs> | null;
 };
 /**
  * EntityType upsert
@@ -1387,6 +2229,47 @@ export type EntityTypeDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.In
      * Limit how many EntityTypes to delete.
      */
     limit?: number;
+};
+/**
+ * EntityType.parentType
+ */
+export type EntityType$parentTypeArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EntityType
+     */
+    select?: Prisma.EntityTypeSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the EntityType
+     */
+    omit?: Prisma.EntityTypeOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.EntityTypeInclude<ExtArgs> | null;
+    where?: Prisma.EntityTypeWhereInput;
+};
+/**
+ * EntityType.childTypes
+ */
+export type EntityType$childTypesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EntityType
+     */
+    select?: Prisma.EntityTypeSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the EntityType
+     */
+    omit?: Prisma.EntityTypeOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.EntityTypeInclude<ExtArgs> | null;
+    where?: Prisma.EntityTypeWhereInput;
+    orderBy?: Prisma.EntityTypeOrderByWithRelationInput | Prisma.EntityTypeOrderByWithRelationInput[];
+    cursor?: Prisma.EntityTypeWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.EntityTypeScalarFieldEnum | Prisma.EntityTypeScalarFieldEnum[];
 };
 /**
  * EntityType.attributes
@@ -1479,6 +2362,29 @@ export type EntityType$incomingRelationshipsArgs<ExtArgs extends runtime.Types.E
     take?: number;
     skip?: number;
     distinct?: Prisma.RelationshipDefinitionScalarFieldEnum | Prisma.RelationshipDefinitionScalarFieldEnum[];
+};
+/**
+ * EntityType.metricDefinitions
+ */
+export type EntityType$metricDefinitionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the MetricDefinition
+     */
+    select?: Prisma.MetricDefinitionSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the MetricDefinition
+     */
+    omit?: Prisma.MetricDefinitionOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.MetricDefinitionInclude<ExtArgs> | null;
+    where?: Prisma.MetricDefinitionWhereInput;
+    orderBy?: Prisma.MetricDefinitionOrderByWithRelationInput | Prisma.MetricDefinitionOrderByWithRelationInput[];
+    cursor?: Prisma.MetricDefinitionWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.MetricDefinitionScalarFieldEnum | Prisma.MetricDefinitionScalarFieldEnum[];
 };
 /**
  * EntityType without action
