@@ -1,0 +1,180 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model EntityType {
+  id        String   @id @default(uuid())
+  name      String
+  version   Int
+  createdAt DateTime @default(now())
+
+  attributes            AttributeDefinition[]
+  instances             EntityInstance[]
+  outgoingRelationships RelationshipDefinition[] @relation("RelationshipSource")
+  incomingRelationships RelationshipDefinition[] @relation("RelationshipTarget")
+
+  @@unique([name, version])
+}
+
+model AttributeDefinition {
+  id       String  @id @default(uuid())
+  name     String
+  dataType String
+  required Boolean
+  temporal Boolean @default(false)
+
+  entityTypeId String
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+}
+
+model RelationshipDefinition {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  sourceEntityTypeId String
+  targetEntityTypeId String
+
+  sourceEntityType EntityType @relation("RelationshipSource", fields: [sourceEntityTypeId], references: [id], onDelete: Restrict)
+  targetEntityType EntityType @relation("RelationshipTarget", fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
+
+  instances RelationshipInstance[]
+
+  @@index([sourceEntityTypeId])
+  @@index([targetEntityTypeId])
+}
+
+model RelationshipInstance {
+  id                       String   @id @default(uuid())
+  relationshipDefinitionId String
+  sourceLogicalId          String
+  targetLogicalId          String
+  properties               Json?
+
+  validFrom       DateTime
+  validTo         DateTime?
+  transactionTime DateTime @default(now())
+
+  relationshipDef RelationshipDefinition @relation(fields: [relationshipDefinitionId], references: [id])
+
+  @@index([sourceLogicalId, validFrom, validTo])
+  @@index([targetLogicalId, validFrom, validTo])
+  @@index([relationshipDefinitionId, sourceLogicalId, targetLogicalId])
+}
+
+model EntityInstance {
+  id            String   @id @default(uuid())
+  logicalId     String
+  entityTypeId  String
+  entityVersion Int
+  data          Json
+
+  validFrom       DateTime
+  validTo         DateTime?
+  transactionTime DateTime @default(now())
+
+  entityType EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+
+  @@index([entityTypeId, logicalId])
+  @@index([validFrom, validTo, transactionTime])
+}
+
+model DomainEvent {
+  id              String   @id @default(uuid())
+  idempotencyKey  String?  @unique
+  eventType       String
+  entityTypeId    String
+  logicalId       String
+  entityVersion   Int
+  payload         Json
+  occurredAt      DateTime @default(now())
+
+  @@index([entityTypeId, logicalId])
+  @@index([eventType])
+  @@index([occurredAt])
+}
+
+model PolicyDefinition {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  entityTypeId String
+  eventType    String   @default("EntityStateChanged")
+  condition    Json     // { "field": "temperature", "operator": ">", "value": 100 }
+  actionType   String   @default("EmitAlert")
+  actionConfig Json?    // { "alertType": "HighTemperatureAlert", "severity": "critical" }
+  version      Int      @default(1)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([entityTypeId, eventType])
+}
+
+model Alert {
+  id              String   @id @default(uuid())
+  alertType       String
+  severity        String   @default("warning")
+  policyId        String
+  policyVersion   Int?
+  eventId         String?
+  entityTypeId    String
+  logicalId       String
+  payload         Json
+  evaluationTrace Json?
+  acknowledged    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([eventId, policyId])
+  @@index([entityTypeId, logicalId])
+  @@index([alertType])
+  @@index([createdAt])
+}
+
+// ── CQRS Read Models (Projections) ───────────────────────────────
+
+model CurrentEntityState {
+  logicalId    String   @id
+  entityTypeId String
+  data         Json
+  updatedAt    DateTime
+
+  @@index([entityTypeId])
+}
+
+
+model CurrentGraph {
+  id                       String  @id @default(uuid())
+  relationshipDefinitionId String
+  relationshipName         String
+  sourceLogicalId          String
+  targetLogicalId          String
+  properties               Json?
+
+  @@unique([relationshipDefinitionId, sourceLogicalId, targetLogicalId])
+  @@index([sourceLogicalId])
+  @@index([targetLogicalId])
+}
+
+// ── Time-Series & Telemetry ────────────────────────────────────────
+
+model TimeseriesMetric {
+  id        String   @id @default(uuid())
+  logicalId String   // The entity this metric belongs to
+  metric    String   // e.g., "temperature", "pressure"
+  value     Float
+  timestamp DateTime @default(now())
+
+  // Optimize for: "Get all 'temperature' readings for 'asset-001' over time X to Y"
+  @@index([logicalId, metric, timestamp(sort: Desc)])
+}

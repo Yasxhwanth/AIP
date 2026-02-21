@@ -1,0 +1,4 @@
+{
+  "error": "failed to create entity type",
+  "details": "PrismaClientKnownRequestError: \nInvalid `prisma.entityType.findFirst()` invocation in\nC:\\Users\\YASHWANTH\\Projects\\AIP\\src\\server.ts:48:46\n\n  45 }\n  46 \n  47 try {\n→ 48   const existing = await prisma.entityType.findFirst(\n"
+}

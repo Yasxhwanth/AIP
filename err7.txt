@@ -1,0 +1,5 @@
+
+Invalid `prisma.entityType.create()` invocation in
+C:\Users\YASHWANTH\Projects\AIP\test6.ts:1:368
+
+→ 1 import 'dotenv/config'; import { Pool } from 'pg'; import { PrismaPg } from '@prisma/adapter-pg'; import { PrismaClient } from './src/generated/prisma/client'; const pool = new Pool({ connectionString: process.env.DATABASE_URL }); const adapter = new PrismaPg(pool); const prisma = new PrismaClient({ adapter }); async function main() { try { await prisma.entityType.create(
