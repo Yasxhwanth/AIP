@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.JsonNullValueFilter = exports.QueryMode = exports.JsonNullValueInput = exports.SortOrder = exports.EntityInstanceScalarFieldEnum = exports.RelationshipDefinitionScalarFieldEnum = exports.AttributeDefinitionScalarFieldEnum = exports.EntityTypeScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.MetricDefinitionScalarFieldEnum = exports.TimeseriesMetricScalarFieldEnum = exports.CurrentGraphScalarFieldEnum = exports.CurrentEntityStateScalarFieldEnum = exports.AlertScalarFieldEnum = exports.PolicyDefinitionScalarFieldEnum = exports.DomainEventScalarFieldEnum = exports.EntityInstanceScalarFieldEnum = exports.RelationshipInstanceScalarFieldEnum = exports.RelationshipDefinitionScalarFieldEnum = exports.AttributeDefinitionScalarFieldEnum = exports.EntityTypeScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -78,7 +78,15 @@ exports.ModelName = {
     EntityType: 'EntityType',
     AttributeDefinition: 'AttributeDefinition',
     RelationshipDefinition: 'RelationshipDefinition',
-    EntityInstance: 'EntityInstance'
+    RelationshipInstance: 'RelationshipInstance',
+    EntityInstance: 'EntityInstance',
+    DomainEvent: 'DomainEvent',
+    PolicyDefinition: 'PolicyDefinition',
+    Alert: 'Alert',
+    CurrentEntityState: 'CurrentEntityState',
+    CurrentGraph: 'CurrentGraph',
+    TimeseriesMetric: 'TimeseriesMetric',
+    MetricDefinition: 'MetricDefinition'
 };
 /*
  * Enums
@@ -93,7 +101,15 @@ exports.EntityTypeScalarFieldEnum = {
     id: 'id',
     name: 'name',
     version: 'version',
-    createdAt: 'createdAt'
+    semanticUri: 'semanticUri',
+    description: 'description',
+    status: 'status',
+    owner: 'owner',
+    effectiveFrom: 'effectiveFrom',
+    effectiveTo: 'effectiveTo',
+    deprecatedAt: 'deprecatedAt',
+    createdAt: 'createdAt',
+    parentTypeId: 'parentTypeId'
 };
 exports.AttributeDefinitionScalarFieldEnum = {
     id: 'id',
@@ -101,17 +117,45 @@ exports.AttributeDefinitionScalarFieldEnum = {
     dataType: 'dataType',
     required: 'required',
     temporal: 'temporal',
+    description: 'description',
+    unit: 'unit',
+    regexPattern: 'regexPattern',
+    minValue: 'minValue',
+    maxValue: 'maxValue',
+    defaultValue: 'defaultValue',
+    allowedValues: 'allowedValues',
     entityTypeId: 'entityTypeId'
 };
 exports.RelationshipDefinitionScalarFieldEnum = {
     id: 'id',
     name: 'name',
+    semanticUri: 'semanticUri',
+    description: 'description',
+    inverseName: 'inverseName',
+    minSourceCardinality: 'minSourceCardinality',
+    maxSourceCardinality: 'maxSourceCardinality',
+    minTargetCardinality: 'minTargetCardinality',
+    maxTargetCardinality: 'maxTargetCardinality',
+    symmetric: 'symmetric',
+    transitive: 'transitive',
+    composition: 'composition',
     createdAt: 'createdAt',
     sourceEntityTypeId: 'sourceEntityTypeId',
     targetEntityTypeId: 'targetEntityTypeId'
 };
+exports.RelationshipInstanceScalarFieldEnum = {
+    id: 'id',
+    relationshipDefinitionId: 'relationshipDefinitionId',
+    sourceLogicalId: 'sourceLogicalId',
+    targetLogicalId: 'targetLogicalId',
+    properties: 'properties',
+    validFrom: 'validFrom',
+    validTo: 'validTo',
+    transactionTime: 'transactionTime'
+};
 exports.EntityInstanceScalarFieldEnum = {
     id: 'id',
+    logicalId: 'logicalId',
     entityTypeId: 'entityTypeId',
     entityVersion: 'entityVersion',
     data: 'data',
@@ -119,9 +163,86 @@ exports.EntityInstanceScalarFieldEnum = {
     validTo: 'validTo',
     transactionTime: 'transactionTime'
 };
+exports.DomainEventScalarFieldEnum = {
+    id: 'id',
+    idempotencyKey: 'idempotencyKey',
+    eventType: 'eventType',
+    entityTypeId: 'entityTypeId',
+    logicalId: 'logicalId',
+    entityVersion: 'entityVersion',
+    payload: 'payload',
+    occurredAt: 'occurredAt'
+};
+exports.PolicyDefinitionScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
+    entityTypeId: 'entityTypeId',
+    eventType: 'eventType',
+    condition: 'condition',
+    actionType: 'actionType',
+    actionConfig: 'actionConfig',
+    version: 'version',
+    enabled: 'enabled',
+    createdAt: 'createdAt'
+};
+exports.AlertScalarFieldEnum = {
+    id: 'id',
+    alertType: 'alertType',
+    severity: 'severity',
+    policyId: 'policyId',
+    policyVersion: 'policyVersion',
+    eventId: 'eventId',
+    entityTypeId: 'entityTypeId',
+    logicalId: 'logicalId',
+    payload: 'payload',
+    evaluationTrace: 'evaluationTrace',
+    acknowledged: 'acknowledged',
+    createdAt: 'createdAt'
+};
+exports.CurrentEntityStateScalarFieldEnum = {
+    logicalId: 'logicalId',
+    entityTypeId: 'entityTypeId',
+    data: 'data',
+    updatedAt: 'updatedAt'
+};
+exports.CurrentGraphScalarFieldEnum = {
+    id: 'id',
+    relationshipDefinitionId: 'relationshipDefinitionId',
+    relationshipName: 'relationshipName',
+    sourceLogicalId: 'sourceLogicalId',
+    targetLogicalId: 'targetLogicalId',
+    properties: 'properties'
+};
+exports.TimeseriesMetricScalarFieldEnum = {
+    id: 'id',
+    logicalId: 'logicalId',
+    metric: 'metric',
+    value: 'value',
+    timestamp: 'timestamp'
+};
+exports.MetricDefinitionScalarFieldEnum = {
+    id: 'id',
+    key: 'key',
+    semanticUri: 'semanticUri',
+    name: 'name',
+    description: 'description',
+    unit: 'unit',
+    dataType: 'dataType',
+    minValue: 'minValue',
+    maxValue: 'maxValue',
+    required: 'required',
+    status: 'status',
+    createdAt: 'createdAt',
+    entityTypeId: 'entityTypeId'
+};
 exports.SortOrder = {
     asc: 'asc',
     desc: 'desc'
+};
+exports.NullableJsonNullValueInput = {
+    DbNull: exports.DbNull,
+    JsonNull: exports.JsonNull
 };
 exports.JsonNullValueInput = {
     JsonNull: exports.JsonNull
@@ -130,13 +251,13 @@ exports.QueryMode = {
     default: 'default',
     insensitive: 'insensitive'
 };
+exports.NullsOrder = {
+    first: 'first',
+    last: 'last'
+};
 exports.JsonNullValueFilter = {
     DbNull: exports.DbNull,
     JsonNull: exports.JsonNull,
     AnyNull: exports.AnyNull
-};
-exports.NullsOrder = {
-    first: 'first',
-    last: 'last'
 };
 //# sourceMappingURL=prismaNamespaceBrowser.js.map

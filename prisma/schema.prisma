@@ -17,14 +17,28 @@ model EntityType {
   id        String   @id @default(uuid())
   name      String
   version   Int
+  semanticUri String? @unique
+  description String?
+  status      String   @default("draft") // draft | approved | deprecated
+  owner       String?
+  effectiveFrom DateTime @default(now())
+  effectiveTo   DateTime?
+  deprecatedAt  DateTime?
   createdAt DateTime @default(now())
+
+  parentTypeId String?
+  parentType   EntityType? @relation("EntityTypeHierarchy", fields: [parentTypeId], references: [id], onDelete: Restrict)
+  childTypes   EntityType[] @relation("EntityTypeHierarchy")
 
   attributes            AttributeDefinition[]
   instances             EntityInstance[]
   outgoingRelationships RelationshipDefinition[] @relation("RelationshipSource")
   incomingRelationships RelationshipDefinition[] @relation("RelationshipTarget")
+  metricDefinitions      MetricDefinition[]
 
   @@unique([name, version])
+  @@index([parentTypeId])
+  @@index([status])
 }
 
 model AttributeDefinition {
@@ -33,6 +47,13 @@ model AttributeDefinition {
   dataType String
   required Boolean
   temporal Boolean @default(false)
+  description  String?
+  unit         String?
+  regexPattern String?
+  minValue     Float?
+  maxValue     Float?
+  defaultValue Json?
+  allowedValues Json?
 
   entityTypeId String
   entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
@@ -41,6 +62,16 @@ model AttributeDefinition {
 model RelationshipDefinition {
   id        String   @id @default(uuid())
   name      String
+  semanticUri String? @unique
+  description String?
+  inverseName String?
+  minSourceCardinality Int @default(0)
+  maxSourceCardinality Int?
+  minTargetCardinality Int @default(0)
+  maxTargetCardinality Int?
+  symmetric   Boolean @default(false)
+  transitive  Boolean @default(false)
+  composition Boolean @default(false)
   createdAt DateTime @default(now())
 
   sourceEntityTypeId String
@@ -177,4 +208,25 @@ model TimeseriesMetric {
 
   // Optimize for: "Get all 'temperature' readings for 'asset-001' over time X to Y"
   @@index([logicalId, metric, timestamp(sort: Desc)])
+}
+
+model MetricDefinition {
+  id           String   @id @default(uuid())
+  key          String
+  semanticUri  String?  @unique
+  name         String
+  description  String?
+  unit         String?
+  dataType     String   @default("float")
+  minValue     Float?
+  maxValue     Float?
+  required     Boolean  @default(false)
+  status       String   @default("draft")
+  createdAt    DateTime @default(now())
+
+  entityTypeId String
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([entityTypeId, key])
+  @@index([status])
 }

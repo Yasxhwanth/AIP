@@ -145,6 +145,17 @@ export interface PrismaClient<in LogOpts extends Prisma.LogLevel = never, in out
         omit: OmitOpts;
     }>;
     /**
+     * `prisma.relationshipInstance`: Exposes CRUD operations for the **RelationshipInstance** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more RelationshipInstances
+      * const relationshipInstances = await prisma.relationshipInstance.findMany()
+      * ```
+      */
+    get relationshipInstance(): Prisma.RelationshipInstanceDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
      * `prisma.entityInstance`: Exposes CRUD operations for the **EntityInstance** model.
       * Example usage:
       * ```ts
@@ -153,6 +164,83 @@ export interface PrismaClient<in LogOpts extends Prisma.LogLevel = never, in out
       * ```
       */
     get entityInstance(): Prisma.EntityInstanceDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.domainEvent`: Exposes CRUD operations for the **DomainEvent** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more DomainEvents
+      * const domainEvents = await prisma.domainEvent.findMany()
+      * ```
+      */
+    get domainEvent(): Prisma.DomainEventDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.policyDefinition`: Exposes CRUD operations for the **PolicyDefinition** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more PolicyDefinitions
+      * const policyDefinitions = await prisma.policyDefinition.findMany()
+      * ```
+      */
+    get policyDefinition(): Prisma.PolicyDefinitionDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.alert`: Exposes CRUD operations for the **Alert** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more Alerts
+      * const alerts = await prisma.alert.findMany()
+      * ```
+      */
+    get alert(): Prisma.AlertDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.currentEntityState`: Exposes CRUD operations for the **CurrentEntityState** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more CurrentEntityStates
+      * const currentEntityStates = await prisma.currentEntityState.findMany()
+      * ```
+      */
+    get currentEntityState(): Prisma.CurrentEntityStateDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.currentGraph`: Exposes CRUD operations for the **CurrentGraph** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more CurrentGraphs
+      * const currentGraphs = await prisma.currentGraph.findMany()
+      * ```
+      */
+    get currentGraph(): Prisma.CurrentGraphDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.timeseriesMetric`: Exposes CRUD operations for the **TimeseriesMetric** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more TimeseriesMetrics
+      * const timeseriesMetrics = await prisma.timeseriesMetric.findMany()
+      * ```
+      */
+    get timeseriesMetric(): Prisma.TimeseriesMetricDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.metricDefinition`: Exposes CRUD operations for the **MetricDefinition** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more MetricDefinitions
+      * const metricDefinitions = await prisma.metricDefinition.findMany()
+      * ```
+      */
+    get metricDefinition(): Prisma.MetricDefinitionDelegate<ExtArgs, {
         omit: OmitOpts;
     }>;
 }

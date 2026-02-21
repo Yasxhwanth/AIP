@@ -7,8 +7,18 @@ import type * as Prisma from "../internal/prismaNamespace";
 export type AttributeDefinitionModel = runtime.Types.Result.DefaultSelection<Prisma.$AttributeDefinitionPayload>;
 export type AggregateAttributeDefinition = {
     _count: AttributeDefinitionCountAggregateOutputType | null;
+    _avg: AttributeDefinitionAvgAggregateOutputType | null;
+    _sum: AttributeDefinitionSumAggregateOutputType | null;
     _min: AttributeDefinitionMinAggregateOutputType | null;
     _max: AttributeDefinitionMaxAggregateOutputType | null;
+};
+export type AttributeDefinitionAvgAggregateOutputType = {
+    minValue: number | null;
+    maxValue: number | null;
+};
+export type AttributeDefinitionSumAggregateOutputType = {
+    minValue: number | null;
+    maxValue: number | null;
 };
 export type AttributeDefinitionMinAggregateOutputType = {
     id: string | null;
@@ -16,6 +26,11 @@ export type AttributeDefinitionMinAggregateOutputType = {
     dataType: string | null;
     required: boolean | null;
     temporal: boolean | null;
+    description: string | null;
+    unit: string | null;
+    regexPattern: string | null;
+    minValue: number | null;
+    maxValue: number | null;
     entityTypeId: string | null;
 };
 export type AttributeDefinitionMaxAggregateOutputType = {
@@ -24,6 +39,11 @@ export type AttributeDefinitionMaxAggregateOutputType = {
     dataType: string | null;
     required: boolean | null;
     temporal: boolean | null;
+    description: string | null;
+    unit: string | null;
+    regexPattern: string | null;
+    minValue: number | null;
+    maxValue: number | null;
     entityTypeId: string | null;
 };
 export type AttributeDefinitionCountAggregateOutputType = {
@@ -32,8 +52,23 @@ export type AttributeDefinitionCountAggregateOutputType = {
     dataType: number;
     required: number;
     temporal: number;
+    description: number;
+    unit: number;
+    regexPattern: number;
+    minValue: number;
+    maxValue: number;
+    defaultValue: number;
+    allowedValues: number;
     entityTypeId: number;
     _all: number;
+};
+export type AttributeDefinitionAvgAggregateInputType = {
+    minValue?: true;
+    maxValue?: true;
+};
+export type AttributeDefinitionSumAggregateInputType = {
+    minValue?: true;
+    maxValue?: true;
 };
 export type AttributeDefinitionMinAggregateInputType = {
     id?: true;
@@ -41,6 +76,11 @@ export type AttributeDefinitionMinAggregateInputType = {
     dataType?: true;
     required?: true;
     temporal?: true;
+    description?: true;
+    unit?: true;
+    regexPattern?: true;
+    minValue?: true;
+    maxValue?: true;
     entityTypeId?: true;
 };
 export type AttributeDefinitionMaxAggregateInputType = {
@@ -49,6 +89,11 @@ export type AttributeDefinitionMaxAggregateInputType = {
     dataType?: true;
     required?: true;
     temporal?: true;
+    description?: true;
+    unit?: true;
+    regexPattern?: true;
+    minValue?: true;
+    maxValue?: true;
     entityTypeId?: true;
 };
 export type AttributeDefinitionCountAggregateInputType = {
@@ -57,6 +102,13 @@ export type AttributeDefinitionCountAggregateInputType = {
     dataType?: true;
     required?: true;
     temporal?: true;
+    description?: true;
+    unit?: true;
+    regexPattern?: true;
+    minValue?: true;
+    maxValue?: true;
+    defaultValue?: true;
+    allowedValues?: true;
     entityTypeId?: true;
     _all?: true;
 };
@@ -98,6 +150,18 @@ export type AttributeDefinitionAggregateArgs<ExtArgs extends runtime.Types.Exten
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      *
+     * Select which fields to average
+    **/
+    _avg?: AttributeDefinitionAvgAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to sum
+    **/
+    _sum?: AttributeDefinitionSumAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
      * Select which fields to find the minimum value
     **/
     _min?: AttributeDefinitionMinAggregateInputType;
@@ -119,6 +183,8 @@ export type AttributeDefinitionGroupByArgs<ExtArgs extends runtime.Types.Extensi
     take?: number;
     skip?: number;
     _count?: AttributeDefinitionCountAggregateInputType | true;
+    _avg?: AttributeDefinitionAvgAggregateInputType;
+    _sum?: AttributeDefinitionSumAggregateInputType;
     _min?: AttributeDefinitionMinAggregateInputType;
     _max?: AttributeDefinitionMaxAggregateInputType;
 };
@@ -128,8 +194,17 @@ export type AttributeDefinitionGroupByOutputType = {
     dataType: string;
     required: boolean;
     temporal: boolean;
+    description: string | null;
+    unit: string | null;
+    regexPattern: string | null;
+    minValue: number | null;
+    maxValue: number | null;
+    defaultValue: runtime.JsonValue | null;
+    allowedValues: runtime.JsonValue | null;
     entityTypeId: string;
     _count: AttributeDefinitionCountAggregateOutputType | null;
+    _avg: AttributeDefinitionAvgAggregateOutputType | null;
+    _sum: AttributeDefinitionSumAggregateOutputType | null;
     _min: AttributeDefinitionMinAggregateOutputType | null;
     _max: AttributeDefinitionMaxAggregateOutputType | null;
 };
@@ -145,6 +220,13 @@ export type AttributeDefinitionWhereInput = {
     dataType?: Prisma.StringFilter<"AttributeDefinition"> | string;
     required?: Prisma.BoolFilter<"AttributeDefinition"> | boolean;
     temporal?: Prisma.BoolFilter<"AttributeDefinition"> | boolean;
+    description?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    unit?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    regexPattern?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    minValue?: Prisma.FloatNullableFilter<"AttributeDefinition"> | number | null;
+    maxValue?: Prisma.FloatNullableFilter<"AttributeDefinition"> | number | null;
+    defaultValue?: Prisma.JsonNullableFilter<"AttributeDefinition">;
+    allowedValues?: Prisma.JsonNullableFilter<"AttributeDefinition">;
     entityTypeId?: Prisma.StringFilter<"AttributeDefinition"> | string;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
 };
@@ -154,6 +236,13 @@ export type AttributeDefinitionOrderByWithRelationInput = {
     dataType?: Prisma.SortOrder;
     required?: Prisma.SortOrder;
     temporal?: Prisma.SortOrder;
+    description?: Prisma.SortOrderInput | Prisma.SortOrder;
+    unit?: Prisma.SortOrderInput | Prisma.SortOrder;
+    regexPattern?: Prisma.SortOrderInput | Prisma.SortOrder;
+    minValue?: Prisma.SortOrderInput | Prisma.SortOrder;
+    maxValue?: Prisma.SortOrderInput | Prisma.SortOrder;
+    defaultValue?: Prisma.SortOrderInput | Prisma.SortOrder;
+    allowedValues?: Prisma.SortOrderInput | Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityType?: Prisma.EntityTypeOrderByWithRelationInput;
 };
@@ -166,6 +255,13 @@ export type AttributeDefinitionWhereUniqueInput = Prisma.AtLeast<{
     dataType?: Prisma.StringFilter<"AttributeDefinition"> | string;
     required?: Prisma.BoolFilter<"AttributeDefinition"> | boolean;
     temporal?: Prisma.BoolFilter<"AttributeDefinition"> | boolean;
+    description?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    unit?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    regexPattern?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    minValue?: Prisma.FloatNullableFilter<"AttributeDefinition"> | number | null;
+    maxValue?: Prisma.FloatNullableFilter<"AttributeDefinition"> | number | null;
+    defaultValue?: Prisma.JsonNullableFilter<"AttributeDefinition">;
+    allowedValues?: Prisma.JsonNullableFilter<"AttributeDefinition">;
     entityTypeId?: Prisma.StringFilter<"AttributeDefinition"> | string;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
 }, "id">;
@@ -175,10 +271,19 @@ export type AttributeDefinitionOrderByWithAggregationInput = {
     dataType?: Prisma.SortOrder;
     required?: Prisma.SortOrder;
     temporal?: Prisma.SortOrder;
+    description?: Prisma.SortOrderInput | Prisma.SortOrder;
+    unit?: Prisma.SortOrderInput | Prisma.SortOrder;
+    regexPattern?: Prisma.SortOrderInput | Prisma.SortOrder;
+    minValue?: Prisma.SortOrderInput | Prisma.SortOrder;
+    maxValue?: Prisma.SortOrderInput | Prisma.SortOrder;
+    defaultValue?: Prisma.SortOrderInput | Prisma.SortOrder;
+    allowedValues?: Prisma.SortOrderInput | Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     _count?: Prisma.AttributeDefinitionCountOrderByAggregateInput;
+    _avg?: Prisma.AttributeDefinitionAvgOrderByAggregateInput;
     _max?: Prisma.AttributeDefinitionMaxOrderByAggregateInput;
     _min?: Prisma.AttributeDefinitionMinOrderByAggregateInput;
+    _sum?: Prisma.AttributeDefinitionSumOrderByAggregateInput;
 };
 export type AttributeDefinitionScalarWhereWithAggregatesInput = {
     AND?: Prisma.AttributeDefinitionScalarWhereWithAggregatesInput | Prisma.AttributeDefinitionScalarWhereWithAggregatesInput[];
@@ -189,6 +294,13 @@ export type AttributeDefinitionScalarWhereWithAggregatesInput = {
     dataType?: Prisma.StringWithAggregatesFilter<"AttributeDefinition"> | string;
     required?: Prisma.BoolWithAggregatesFilter<"AttributeDefinition"> | boolean;
     temporal?: Prisma.BoolWithAggregatesFilter<"AttributeDefinition"> | boolean;
+    description?: Prisma.StringNullableWithAggregatesFilter<"AttributeDefinition"> | string | null;
+    unit?: Prisma.StringNullableWithAggregatesFilter<"AttributeDefinition"> | string | null;
+    regexPattern?: Prisma.StringNullableWithAggregatesFilter<"AttributeDefinition"> | string | null;
+    minValue?: Prisma.FloatNullableWithAggregatesFilter<"AttributeDefinition"> | number | null;
+    maxValue?: Prisma.FloatNullableWithAggregatesFilter<"AttributeDefinition"> | number | null;
+    defaultValue?: Prisma.JsonNullableWithAggregatesFilter<"AttributeDefinition">;
+    allowedValues?: Prisma.JsonNullableWithAggregatesFilter<"AttributeDefinition">;
     entityTypeId?: Prisma.StringWithAggregatesFilter<"AttributeDefinition"> | string;
 };
 export type AttributeDefinitionCreateInput = {
@@ -197,6 +309,13 @@ export type AttributeDefinitionCreateInput = {
     dataType: string;
     required: boolean;
     temporal?: boolean;
+    description?: string | null;
+    unit?: string | null;
+    regexPattern?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutAttributesInput;
 };
 export type AttributeDefinitionUncheckedCreateInput = {
@@ -205,6 +324,13 @@ export type AttributeDefinitionUncheckedCreateInput = {
     dataType: string;
     required: boolean;
     temporal?: boolean;
+    description?: string | null;
+    unit?: string | null;
+    regexPattern?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     entityTypeId: string;
 };
 export type AttributeDefinitionUpdateInput = {
@@ -213,6 +339,13 @@ export type AttributeDefinitionUpdateInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutAttributesNestedInput;
 };
 export type AttributeDefinitionUncheckedUpdateInput = {
@@ -221,6 +354,13 @@ export type AttributeDefinitionUncheckedUpdateInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 export type AttributeDefinitionCreateManyInput = {
@@ -229,6 +369,13 @@ export type AttributeDefinitionCreateManyInput = {
     dataType: string;
     required: boolean;
     temporal?: boolean;
+    description?: string | null;
+    unit?: string | null;
+    regexPattern?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     entityTypeId: string;
 };
 export type AttributeDefinitionUpdateManyMutationInput = {
@@ -237,6 +384,13 @@ export type AttributeDefinitionUpdateManyMutationInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionUncheckedUpdateManyInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -244,6 +398,13 @@ export type AttributeDefinitionUncheckedUpdateManyInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 export type AttributeDefinitionListRelationFilter = {
@@ -260,7 +421,18 @@ export type AttributeDefinitionCountOrderByAggregateInput = {
     dataType?: Prisma.SortOrder;
     required?: Prisma.SortOrder;
     temporal?: Prisma.SortOrder;
+    description?: Prisma.SortOrder;
+    unit?: Prisma.SortOrder;
+    regexPattern?: Prisma.SortOrder;
+    minValue?: Prisma.SortOrder;
+    maxValue?: Prisma.SortOrder;
+    defaultValue?: Prisma.SortOrder;
+    allowedValues?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
+};
+export type AttributeDefinitionAvgOrderByAggregateInput = {
+    minValue?: Prisma.SortOrder;
+    maxValue?: Prisma.SortOrder;
 };
 export type AttributeDefinitionMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -268,6 +440,11 @@ export type AttributeDefinitionMaxOrderByAggregateInput = {
     dataType?: Prisma.SortOrder;
     required?: Prisma.SortOrder;
     temporal?: Prisma.SortOrder;
+    description?: Prisma.SortOrder;
+    unit?: Prisma.SortOrder;
+    regexPattern?: Prisma.SortOrder;
+    minValue?: Prisma.SortOrder;
+    maxValue?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
 };
 export type AttributeDefinitionMinOrderByAggregateInput = {
@@ -276,7 +453,16 @@ export type AttributeDefinitionMinOrderByAggregateInput = {
     dataType?: Prisma.SortOrder;
     required?: Prisma.SortOrder;
     temporal?: Prisma.SortOrder;
+    description?: Prisma.SortOrder;
+    unit?: Prisma.SortOrder;
+    regexPattern?: Prisma.SortOrder;
+    minValue?: Prisma.SortOrder;
+    maxValue?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
+};
+export type AttributeDefinitionSumOrderByAggregateInput = {
+    minValue?: Prisma.SortOrder;
+    maxValue?: Prisma.SortOrder;
 };
 export type AttributeDefinitionCreateNestedManyWithoutEntityTypeInput = {
     create?: Prisma.XOR<Prisma.AttributeDefinitionCreateWithoutEntityTypeInput, Prisma.AttributeDefinitionUncheckedCreateWithoutEntityTypeInput> | Prisma.AttributeDefinitionCreateWithoutEntityTypeInput[] | Prisma.AttributeDefinitionUncheckedCreateWithoutEntityTypeInput[];
@@ -319,12 +505,26 @@ export type AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput =
 export type BoolFieldUpdateOperationsInput = {
     set?: boolean;
 };
+export type NullableFloatFieldUpdateOperationsInput = {
+    set?: number | null;
+    increment?: number;
+    decrement?: number;
+    multiply?: number;
+    divide?: number;
+};
 export type AttributeDefinitionCreateWithoutEntityTypeInput = {
     id?: string;
     name: string;
     dataType: string;
     required: boolean;
     temporal?: boolean;
+    description?: string | null;
+    unit?: string | null;
+    regexPattern?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionUncheckedCreateWithoutEntityTypeInput = {
     id?: string;
@@ -332,6 +532,13 @@ export type AttributeDefinitionUncheckedCreateWithoutEntityTypeInput = {
     dataType: string;
     required: boolean;
     temporal?: boolean;
+    description?: string | null;
+    unit?: string | null;
+    regexPattern?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionCreateOrConnectWithoutEntityTypeInput = {
     where: Prisma.AttributeDefinitionWhereUniqueInput;
@@ -363,6 +570,13 @@ export type AttributeDefinitionScalarWhereInput = {
     dataType?: Prisma.StringFilter<"AttributeDefinition"> | string;
     required?: Prisma.BoolFilter<"AttributeDefinition"> | boolean;
     temporal?: Prisma.BoolFilter<"AttributeDefinition"> | boolean;
+    description?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    unit?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    regexPattern?: Prisma.StringNullableFilter<"AttributeDefinition"> | string | null;
+    minValue?: Prisma.FloatNullableFilter<"AttributeDefinition"> | number | null;
+    maxValue?: Prisma.FloatNullableFilter<"AttributeDefinition"> | number | null;
+    defaultValue?: Prisma.JsonNullableFilter<"AttributeDefinition">;
+    allowedValues?: Prisma.JsonNullableFilter<"AttributeDefinition">;
     entityTypeId?: Prisma.StringFilter<"AttributeDefinition"> | string;
 };
 export type AttributeDefinitionCreateManyEntityTypeInput = {
@@ -371,6 +585,13 @@ export type AttributeDefinitionCreateManyEntityTypeInput = {
     dataType: string;
     required: boolean;
     temporal?: boolean;
+    description?: string | null;
+    unit?: string | null;
+    regexPattern?: string | null;
+    minValue?: number | null;
+    maxValue?: number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -378,6 +599,13 @@ export type AttributeDefinitionUpdateWithoutEntityTypeInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionUncheckedUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -385,6 +613,13 @@ export type AttributeDefinitionUncheckedUpdateWithoutEntityTypeInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -392,6 +627,13 @@ export type AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeInput = {
     dataType?: Prisma.StringFieldUpdateOperationsInput | string;
     required?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     temporal?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    unit?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    regexPattern?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    minValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    maxValue?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    defaultValue?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    allowedValues?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
 };
 export type AttributeDefinitionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -399,6 +641,13 @@ export type AttributeDefinitionSelect<ExtArgs extends runtime.Types.Extensions.I
     dataType?: boolean;
     required?: boolean;
     temporal?: boolean;
+    description?: boolean;
+    unit?: boolean;
+    regexPattern?: boolean;
+    minValue?: boolean;
+    maxValue?: boolean;
+    defaultValue?: boolean;
+    allowedValues?: boolean;
     entityTypeId?: boolean;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["attributeDefinition"]>;
@@ -408,6 +657,13 @@ export type AttributeDefinitionSelectCreateManyAndReturn<ExtArgs extends runtime
     dataType?: boolean;
     required?: boolean;
     temporal?: boolean;
+    description?: boolean;
+    unit?: boolean;
+    regexPattern?: boolean;
+    minValue?: boolean;
+    maxValue?: boolean;
+    defaultValue?: boolean;
+    allowedValues?: boolean;
     entityTypeId?: boolean;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["attributeDefinition"]>;
@@ -417,6 +673,13 @@ export type AttributeDefinitionSelectUpdateManyAndReturn<ExtArgs extends runtime
     dataType?: boolean;
     required?: boolean;
     temporal?: boolean;
+    description?: boolean;
+    unit?: boolean;
+    regexPattern?: boolean;
+    minValue?: boolean;
+    maxValue?: boolean;
+    defaultValue?: boolean;
+    allowedValues?: boolean;
     entityTypeId?: boolean;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["attributeDefinition"]>;
@@ -426,9 +689,16 @@ export type AttributeDefinitionSelectScalar = {
     dataType?: boolean;
     required?: boolean;
     temporal?: boolean;
+    description?: boolean;
+    unit?: boolean;
+    regexPattern?: boolean;
+    minValue?: boolean;
+    maxValue?: boolean;
+    defaultValue?: boolean;
+    allowedValues?: boolean;
     entityTypeId?: boolean;
 };
-export type AttributeDefinitionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "dataType" | "required" | "temporal" | "entityTypeId", ExtArgs["result"]["attributeDefinition"]>;
+export type AttributeDefinitionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "dataType" | "required" | "temporal" | "description" | "unit" | "regexPattern" | "minValue" | "maxValue" | "defaultValue" | "allowedValues" | "entityTypeId", ExtArgs["result"]["attributeDefinition"]>;
 export type AttributeDefinitionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
@@ -449,6 +719,13 @@ export type $AttributeDefinitionPayload<ExtArgs extends runtime.Types.Extensions
         dataType: string;
         required: boolean;
         temporal: boolean;
+        description: string | null;
+        unit: string | null;
+        regexPattern: string | null;
+        minValue: number | null;
+        maxValue: number | null;
+        defaultValue: runtime.JsonValue | null;
+        allowedValues: runtime.JsonValue | null;
         entityTypeId: string;
     }, ExtArgs["result"]["attributeDefinition"]>;
     composites: {};
@@ -810,6 +1087,13 @@ export interface AttributeDefinitionFieldRefs {
     readonly dataType: Prisma.FieldRef<"AttributeDefinition", 'String'>;
     readonly required: Prisma.FieldRef<"AttributeDefinition", 'Boolean'>;
     readonly temporal: Prisma.FieldRef<"AttributeDefinition", 'Boolean'>;
+    readonly description: Prisma.FieldRef<"AttributeDefinition", 'String'>;
+    readonly unit: Prisma.FieldRef<"AttributeDefinition", 'String'>;
+    readonly regexPattern: Prisma.FieldRef<"AttributeDefinition", 'String'>;
+    readonly minValue: Prisma.FieldRef<"AttributeDefinition", 'Float'>;
+    readonly maxValue: Prisma.FieldRef<"AttributeDefinition", 'Float'>;
+    readonly defaultValue: Prisma.FieldRef<"AttributeDefinition", 'Json'>;
+    readonly allowedValues: Prisma.FieldRef<"AttributeDefinition", 'Json'>;
     readonly entityTypeId: Prisma.FieldRef<"AttributeDefinition", 'String'>;
 }
 /**
