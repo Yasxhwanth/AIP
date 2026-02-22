@@ -1,0 +1,99 @@
+﻿=== Phase 5: Enterprise Hardening Test ===\n
+1. Starting hardened server (AUTH_REQUIRED=true, LOG_LEVEL=silent)...
+ Waiting for server to boot...
+\n2. Testing unauthenticated Deep Health Check...
+   Status: 200 (expected 200)
+   Database: connected
+   Headers attached -> X-Correlation-ID: d0b4b3f5-d260-435b-a516-4dd1ed692ff7
+\n3. Testing unauthenticated request to protected route...
+   Status: 401 (expected 401 Unauthorized)
+   Response: {"error":"Authentication required. Provide X-API-Key or Bearer token."}
+\n4. Creating API key via Prisma directly...
+node.exe : Test 
+Failed: Error: SASL: SC
+RAM-SERVER-FIRST-MESSAG
+E: client password 
+must be a string
+At C:\nvm4w\nodejs\npx.
+ps1:16 char:5
++     & 
+"$basedir/node$exe"  "$
+basedir/node_modules/np
+m/bin/npx-cli.js" ...
++     ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Test Failed:    
+ Er...ust be a stri    
+ng:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+    at C:\Users\YASHWAN
+TH\Projects\AIP\node_mo
+dules\pg-pool\index.js:
+45:11
+    at processTicksAndR
+ejections (node:interna
+l/process/task_queues:1
+05:5)
+    at async PrismaPgAd
+apter.performIO (C:\Use
+rs\YASHWANTH\Projects\A
+IP\node_modules\@prisma
+\adapter-pg\dist\index.
+js:652:22)
+    at async PrismaPgAd
+apter.queryRaw (C:\User
+s\YASHWANTH\Projects\AI
+P\node_modules\@prisma\
+adapter-pg\dist\index.j
+s:602:30)
+    at async 
+e.interpretNode (C:\Use
+rs\YASHWANTH\Projects\A
+IP\node_modules\@prisma
+\client-engine-runtime\
+src\interpreter\query-i
+nterpreter.ts:182:26)
+    at async 
+e.interpretNode (C:\Use
+rs\YASHWANTH\Projects\A
+IP\node_modules\@prisma
+\client-engine-runtime\
+src\interpreter\query-i
+nterpreter.ts:209:41)
+    at async 
+e.interpretNode (C:\Use
+rs\YASHWANTH\Projects\A
+IP\node_modules\@prisma
+\client-engine-runtime\
+src\interpreter\query-i
+nterpreter.ts:268:41)
+    at async e.run (C:\
+Users\YASHWANTH\Project
+s\AIP\node_modules\@pri
+sma\client-engine-runti
+me\src\interpreter\quer
+y-interpreter.ts:93:23)
+    at async execute (C
+:\Users\YASHWANTH\Proje
+cts\AIP\node_modules\@p
+risma\client\src\runtim
+e\core\engines\client\L
+ocalExecutor.ts:81:12)
+    at async 
+qt.request (C:\Users\YA
+SHWANTH\Projects\AIP\no
+de_modules\@prisma\clie
+nt\src\runtime\core\eng
+ines\client\ClientEngin
+e.ts:492:22) {
+  clientVersion: 
+'7.4.1'
+}
