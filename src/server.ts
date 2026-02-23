@@ -408,6 +408,123 @@ app.post('/entity-types/:id/instances', async (req, res) => {
   }
 });
 
+// ── Bulk Entity Ingestion ────────────────────────────────────────
+
+app.post('/entity-types/:id/instances/bulk', async (req, res) => {
+  try {
+    const entityType = await prisma.entityType.findUnique({
+      where: { id: req.params.id },
+      include: { attributes: true },
+    });
+
+    if (!entityType) {
+      return res.status(404).json({ error: 'entity type not found' });
+    }
+
+    if (!Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'body must be an array of instances' });
+    }
+
+    const items = req.body as Array<Record<string, unknown>>;
+    const now = new Date();
+    const metaFields = new Set(['logicalId', 'validFrom', 'validTo']);
+    const allowedNames = new Set(entityType.attributes.map((a) => a.name));
+
+    // 1. Validation phase
+    for (const item of items) {
+      const logicalId = item.logicalId as string | undefined;
+      if (!logicalId) return res.status(400).json({ error: 'logicalId is required for all items' });
+
+      for (const attr of entityType.attributes) {
+        if (attr.required && !(attr.name in item)) {
+          return res.status(400).json({ error: `Missing required attribute: '${attr.name}' in item ${logicalId}` });
+        }
+      }
+
+      for (const key of Object.keys(item)) {
+        if (!metaFields.has(key) && !allowedNames.has(key)) {
+          return res.status(400).json({ error: `Unknown attribute: '${key}' in item ${logicalId}. Allowed: ${[...allowedNames].join(', ')}` });
+        }
+      }
+    }
+
+    // 2. Execution phase (in transaction)
+    const results = await prisma.$transaction(async (tx) => {
+      const createdInstances = [];
+
+      for (const item of items) {
+        const logicalId = item.logicalId as string;
+
+        // Extract attributes
+        const attrData: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(item)) {
+          if (!metaFields.has(key)) attrData[key] = value;
+        }
+
+        // Close currently-active row if exists
+        const current = await tx.entityInstance.findFirst({
+          where: { entityTypeId: entityType.id, logicalId, validTo: null },
+        });
+
+        if (current) {
+          await tx.entityInstance.update({
+            where: { id: current.id },
+            data: { validTo: now },
+          });
+        }
+
+        const newInstance = await tx.entityInstance.create({
+          data: {
+            logicalId,
+            entityTypeId: entityType.id,
+            entityVersion: entityType.version,
+            data: attrData as Prisma.InputJsonValue,
+            validFrom: now,
+            validTo: null,
+          },
+        });
+        createdInstances.push(newInstance);
+
+        const idempotencyKey = `EntityBulkStateChanged:${logicalId}:${now.toISOString()}`;
+        await tx.domainEvent.create({
+          data: {
+            idempotencyKey,
+            eventType: 'EntityStateChanged',
+            entityTypeId: entityType.id,
+            logicalId,
+            entityVersion: entityType.version,
+            payload: {
+              previousState: current?.data ?? null,
+              newState: attrData,
+              validFrom: now.toISOString(),
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        await tx.currentEntityState.upsert({
+          where: { logicalId },
+          create: {
+            logicalId,
+            entityTypeId: entityType.id,
+            data: attrData as Prisma.InputJsonValue,
+            updatedAt: now,
+          },
+          update: {
+            data: attrData as Prisma.InputJsonValue,
+            updatedAt: now,
+          },
+        });
+      }
+
+      return { createdInstances };
+    });
+
+    return res.status(201).json({ success: true, count: results.createdInstances.length });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to execute bulk ingestion', details: String(error) });
+  }
+});
+
 app.get('/entity-types/:id/instances', async (req, res) => {
   try {
     const entityType = await prisma.entityType.findUnique({
