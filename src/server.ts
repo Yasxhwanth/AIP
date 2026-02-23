@@ -175,8 +175,8 @@ app.post('/entity-types', async (req, res) => {
     });
 
     return res.status(201).json(created);
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') {
       return res.status(409).json({ error: `Entity type '${name}' already exists.` });
     }
     return res.status(500).json({ error: 'failed to create entity type', details: String(error) });
@@ -211,6 +211,55 @@ app.get('/entity-types/:id', async (req, res) => {
     return res.json(entityType);
   } catch (error) {
     return res.status(500).json({ error: 'failed to fetch entity type', details: String(error) });
+  }
+});
+
+// ── Relationship API ───────────────────────────────────────────────
+
+app.post('/entity-types/:id/outgoing-relationships', async (req, res) => {
+  const sourceEntityTypeId = req.params.id;
+  const { name, targetEntityTypeId } = req.body as { name: string; targetEntityTypeId: string };
+
+  if (!name || !targetEntityTypeId) {
+    return res.status(400).json({ error: 'name and targetEntityTypeId are required' });
+  }
+
+  try {
+    const created = await prisma.relationshipDefinition.create({
+      data: {
+        name,
+        sourceEntityTypeId,
+        targetEntityTypeId,
+      },
+    });
+    return res.status(201).json(created);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to create relationship definition', details: String(error) });
+  }
+});
+
+app.get('/entity-types/:id/outgoing-relationships', async (req, res) => {
+  try {
+    const relationships = await prisma.relationshipDefinition.findMany({
+      where: { sourceEntityTypeId: req.params.id },
+      include: {
+        targetEntityType: {
+          select: { name: true }
+        }
+      }
+    });
+    // Format response to include target entity name directly alongside ID
+    const formatted = relationships.map(rel => ({
+      id: rel.id,
+      name: rel.name,
+      createdAt: rel.createdAt,
+      sourceEntityTypeId: rel.sourceEntityTypeId,
+      targetEntityTypeId: rel.targetEntityTypeId,
+      targetEntityName: rel.targetEntityType.name
+    }));
+    return res.json(formatted);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to fetch relationship definitions', details: String(error) });
   }
 });
 
@@ -558,7 +607,7 @@ app.get('/entity-types/:id/instances/:logicalId/history', async (req, res) => {
     const { validAsOf, transactionAsOf } = req.query;
 
     // Base filter: scope to this entity type + logical entity
-    const where: any = {
+    const where: Record<string, any> = {
       entityTypeId: req.params.id,
       logicalId: req.params.logicalId,
     };
@@ -603,7 +652,7 @@ app.get('/events', async (req, res) => {
   try {
     const { entityTypeId, logicalId, eventType } = req.query;
 
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (entityTypeId) where.entityTypeId = entityTypeId;
     if (logicalId) where.logicalId = logicalId;
     if (eventType) where.eventType = eventType;
@@ -743,7 +792,7 @@ app.get('/relationships', async (req, res) => {
   try {
     const { sourceLogicalId, targetLogicalId, includeInactive } = req.query;
 
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (sourceLogicalId) where.sourceLogicalId = sourceLogicalId;
     if (targetLogicalId) where.targetLogicalId = targetLogicalId;
 
@@ -862,7 +911,7 @@ app.get('/graph/:logicalId/neighbors', async (req, res) => {
     }
 
     // 🕰️ Slow path: Time-aware traversal via Temporal Tables
-    const temporalFilter: any = {};
+    const temporalFilter: Record<string, any> = {};
 
     if (validAsOf) {
       const vt = new Date(validAsOf as string);
@@ -942,8 +991,8 @@ app.post('/policies', async (req, res) => {
     });
 
     return res.status(201).json(policy);
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') {
       return res.status(409).json({ error: 'A policy with this name already exists' });
     }
     return res.status(500).json({ error: 'failed to create policy', details: String(error) });
@@ -978,7 +1027,7 @@ app.get('/alerts', async (req, res) => {
   try {
     const { logicalId, alertType, acknowledged, entityTypeId } = req.query;
 
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (logicalId) where.logicalId = logicalId;
     if (alertType) where.alertType = alertType;
     if (entityTypeId) where.entityTypeId = entityTypeId;
@@ -1008,6 +1057,24 @@ app.put('/alerts/:id/acknowledge', async (req, res) => {
 });
 // ── Time-Series Telemetry ────────────────────────────────────────
 
+const telemetryClients = new Set<{ logicalId: string; res: express.Response }>();
+
+app.get('/telemetry/:logicalId/stream', (req, res) => {
+  const { logicalId } = req.params;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // Establish the SSE connection immediately
+
+  const client = { logicalId, res };
+  telemetryClients.add(client);
+
+  req.on('close', () => {
+    telemetryClients.delete(client);
+  });
+});
+
 app.post('/telemetry', async (req, res) => {
   try {
     const { logicalId, metrics } = req.body;
@@ -1016,15 +1083,25 @@ app.post('/telemetry', async (req, res) => {
       return res.status(400).json({ error: 'logicalId and metrics array are required' });
     }
 
+    const mappedMetrics = metrics.map((m: { metric: string, value: string | number, timestamp?: string | Date }) => ({
+      logicalId,
+      metric: m.metric,
+      value: Number(m.value),
+      timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+    }));
+
     // Fast append-only batch insert
     const created = await prisma.timeseriesMetric.createMany({
-      data: metrics.map((m: any) => ({
-        logicalId,
-        metric: m.metric,
-        value: Number(m.value),
-        timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
-      })),
+      data: mappedMetrics,
     });
+
+    // Broadcast to SSE clients listening for this logicalId
+    const payload = JSON.stringify({ logicalId, metrics: mappedMetrics });
+    for (const client of telemetryClients) {
+      if (client.logicalId === logicalId) {
+        client.res.write(`data: ${payload}\n\n`);
+      }
+    }
 
     return res.status(201).json({ inserted: created.count });
   } catch (error) {
@@ -1037,16 +1114,16 @@ app.get('/telemetry/:logicalId', async (req, res) => {
     const { logicalId } = req.params;
     const { metric, from, to, aggregate } = req.query;
 
-    const where: any = { logicalId };
+    const where: Record<string, any> = { logicalId };
 
     if (metric) {
       where.metric = metric;
     }
 
     if (from || to) {
-      where.timestamp = {};
-      if (from) where.timestamp.gte = new Date(from as string);
-      if (to) where.timestamp.lte = new Date(to as string);
+      where['timestamp'] = {};
+      if (from) where['timestamp'].gte = new Date(from as string);
+      if (to) where['timestamp'].lte = new Date(to as string);
     }
 
     // If an aggregation is requested (e.g., avg, max, min, sum, count)
@@ -1071,7 +1148,7 @@ app.get('/telemetry/:logicalId', async (req, res) => {
         return res.status(400).json({ error: `unsupported aggregation: ${aggregate}` });
       }
 
-      const aggQuery: any = {};
+      const aggQuery: Record<string, unknown> = {};
       aggQuery[`_${aggregate}`] = { value: true };
 
       const result = await prisma.timeseriesMetric.aggregate({
@@ -1128,8 +1205,8 @@ app.post('/data-sources', async (req, res) => {
     });
 
     return res.status(201).json(source);
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') {
       return res.status(409).json({ error: 'A data source with this name already exists' });
     }
     return res.status(500).json({ error: 'failed to create data source', details: String(error) });
@@ -1180,8 +1257,8 @@ app.put('/data-sources/:id', async (req, res) => {
     });
 
     return res.json(source);
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') {
       return res.status(404).json({ error: 'data source not found' });
     }
     return res.status(500).json({ error: 'failed to update data source', details: String(error) });
@@ -1192,11 +1269,11 @@ app.delete('/data-sources/:id', async (req, res) => {
   try {
     await prisma.dataSource.delete({ where: { id: req.params.id } });
     return res.json({ deleted: true });
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') {
       return res.status(404).json({ error: 'data source not found' });
     }
-    if (error?.code === 'P2003') {
+    if ((error as any)?.code === 'P2003') {
       return res.status(409).json({ error: 'Cannot delete: data source has integration jobs. Delete those first.' });
     }
     return res.status(500).json({ error: 'failed to delete data source', details: String(error) });
@@ -1237,8 +1314,8 @@ app.post('/integration-jobs', async (req, res) => {
     });
 
     return res.status(201).json(job);
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') {
       return res.status(409).json({ error: 'An integration job with this name already exists' });
     }
     return res.status(500).json({ error: 'failed to create integration job', details: String(error) });
@@ -1306,8 +1383,8 @@ app.put('/integration-jobs/:id', async (req, res) => {
     });
 
     return res.json(job);
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') {
       return res.status(404).json({ error: 'integration job not found' });
     }
     return res.status(500).json({ error: 'failed to update integration job', details: String(error) });
@@ -1318,8 +1395,8 @@ app.delete('/integration-jobs/:id', async (req, res) => {
   try {
     await prisma.integrationJob.delete({ where: { id: req.params.id } });
     return res.json({ deleted: true });
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') {
       return res.status(404).json({ error: 'integration job not found' });
     }
     return res.status(500).json({ error: 'failed to delete integration job', details: String(error) });
@@ -1385,8 +1462,8 @@ app.post('/computed-metrics', async (req, res) => {
     });
 
     return res.status(201).json(metric);
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') {
       return res.status(409).json({ error: 'A computed metric with this name already exists for this entity type' });
     }
     return res.status(500).json({ error: 'failed to create computed metric', details: String(error) });
@@ -1396,7 +1473,7 @@ app.post('/computed-metrics', async (req, res) => {
 app.get('/computed-metrics', async (req, res) => {
   try {
     const { entityTypeId } = req.query;
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (entityTypeId) where.entityTypeId = entityTypeId;
 
     const metrics = await prisma.computedMetricDefinition.findMany({
@@ -1415,8 +1492,8 @@ app.delete('/computed-metrics/:id', async (req, res) => {
   try {
     await prisma.computedMetricDefinition.delete({ where: { id: req.params.id } });
     return res.json({ deleted: true });
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') {
       return res.status(404).json({ error: 'computed metric not found' });
     }
     return res.status(500).json({ error: 'failed to delete computed metric', details: String(error) });
@@ -1484,13 +1561,13 @@ app.get('/telemetry/:logicalId/rollups', async (req, res) => {
     const { logicalId } = req.params;
     const { metric, windowSize, from, to } = req.query;
 
-    const where: any = { logicalId };
+    const where: Record<string, any> = { logicalId };
     if (metric) where.metric = metric;
     if (windowSize) where.windowSize = windowSize;
     if (from || to) {
-      where.windowStart = {};
-      if (from) where.windowStart.gte = new Date(from as string);
-      if (to) where.windowStart.lte = new Date(to as string);
+      where['windowStart'] = {};
+      if (from) where['windowStart'].gte = new Date(from as string);
+      if (to) where['windowStart'].lte = new Date(to as string);
     }
 
     const rollups = await prisma.telemetryRollup.findMany({
@@ -1530,8 +1607,8 @@ app.post('/models', async (req, res) => {
     });
 
     return res.status(201).json(model);
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') {
       return res.status(409).json({ error: 'A model with this name already exists' });
     }
     return res.status(500).json({ error: 'failed to create model', details: String(error) });
@@ -1662,7 +1739,7 @@ app.post('/models/:id/infer/:logicalId', async (req, res) => {
 app.get('/inference-results', async (req, res) => {
   try {
     const { logicalId, modelVersionId } = req.query;
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (logicalId) where.logicalId = logicalId;
     if (modelVersionId) where.modelVersionId = modelVersionId;
 
@@ -1718,8 +1795,8 @@ app.post('/decision-rules', async (req, res) => {
       },
     });
     return res.status(201).json(rule);
-  } catch (error: any) {
-    if (error?.code === 'P2002') return res.status(409).json({ error: 'Rule with this name already exists' });
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') return res.status(409).json({ error: 'Rule with this name already exists' });
     return res.status(500).json({ error: 'failed to create decision rule', details: String(error) });
   }
 });
@@ -1757,8 +1834,8 @@ app.put('/decision-rules/:id', async (req, res) => {
       },
     });
     return res.json(rule);
-  } catch (error: any) {
-    if (error?.code === 'P2025') return res.status(404).json({ error: 'rule not found' });
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') return res.status(404).json({ error: 'rule not found' });
     return res.status(500).json({ error: 'failed to update rule', details: String(error) });
   }
 });
@@ -1767,8 +1844,8 @@ app.delete('/decision-rules/:id', async (req, res) => {
   try {
     await prisma.decisionRule.delete({ where: { id: req.params.id } });
     return res.json({ deleted: true });
-  } catch (error: any) {
-    if (error?.code === 'P2025') return res.status(404).json({ error: 'rule not found' });
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2025') return res.status(404).json({ error: 'rule not found' });
     return res.status(500).json({ error: 'failed to delete rule', details: String(error) });
   }
 });
@@ -1787,8 +1864,8 @@ app.post('/action-definitions', async (req, res) => {
       data: { name, type, config: config as Prisma.InputJsonValue },
     });
     return res.status(201).json(action);
-  } catch (error: any) {
-    if (error?.code === 'P2002') return res.status(409).json({ error: 'Action with this name already exists' });
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') return res.status(409).json({ error: 'Action with this name already exists' });
     return res.status(500).json({ error: 'failed to create action', details: String(error) });
   }
 });
@@ -1818,8 +1895,8 @@ app.post('/execution-plans', async (req, res) => {
       include: { actionDefinition: { select: { name: true, type: true } } },
     });
     return res.status(201).json(plan);
-  } catch (error: any) {
-    if (error?.code === 'P2002') return res.status(409).json({ error: 'Step order conflict for this rule' });
+  } catch (error: unknown) {
+    if ((error as any)?.code === 'P2002') return res.status(409).json({ error: 'Step order conflict for this rule' });
     return res.status(500).json({ error: 'failed to create execution plan', details: String(error) });
   }
 });
@@ -1876,7 +1953,7 @@ app.post('/decisions/:logicalId/simulate', async (req, res) => {
 app.get('/decision-logs', async (req, res) => {
   try {
     const { logicalId, decisionRuleId, status } = req.query;
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (logicalId) where.logicalId = logicalId;
     if (decisionRuleId) where.decisionRuleId = decisionRuleId;
     if (status) where.status = status;
@@ -1897,12 +1974,10 @@ app.get('/decision-logs', async (req, res) => {
 
 app.use(errorHandler());
 
-// ── Server & Graceful Shutdown ───────────────────────────────────
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
-const PORT = process.env.PORT ?? 3000;
-
-const server = app.listen(PORT, () => {
-  logger.info(`Server listening on http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server listening on http://0.0.0.0:${PORT}`);
 
   // Start the lightweight job scheduler
   startScheduler(prisma);

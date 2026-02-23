@@ -21,6 +21,7 @@ import {
     Loader2
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
+import * as T from '@/lib/types';
 
 const COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500', 'bg-red-500', 'bg-blue-500', 'bg-purple-500'];
 
@@ -36,10 +37,10 @@ export default function GeoExplorer() {
     useEffect(() => {
         async function loadData() {
             try {
-                const types = await ApiClient.get<any[]>('/entity-types');
+                const types = await ApiClient.get<T.EntityType[]>('/entity-types');
 
                 const layerPromises = types.map(async (t, idx) => {
-                    const insts = await ApiClient.get<any[]>(`/entity-types/${t.id}/instances`);
+                    const insts = await ApiClient.get<T.EntityInstance[]>(`/entity-types/${t.id}/instances`);
                     return {
                         id: t.id,
                         name: t.name,

@@ -1,0 +1,17 @@
+﻿src/server.ts(179,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(995,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1181,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1233,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1245,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1248,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1290,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1359,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1371,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1438,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1468,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1583,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1771,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1810,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1820,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1840,16): error TS2339: Property 'code' does not exist on type '{}'.
+src/server.ts(1871,16): error TS2339: Property 'code' does not exist on type '{}'.

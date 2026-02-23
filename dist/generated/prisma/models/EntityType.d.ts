@@ -164,6 +164,10 @@ export type EntityTypeWhereInput = {
     instances?: Prisma.EntityInstanceListRelationFilter;
     outgoingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
     incomingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
+    integrationJobs?: Prisma.IntegrationJobListRelationFilter;
+    computedMetrics?: Prisma.ComputedMetricDefinitionListRelationFilter;
+    modelDefinitions?: Prisma.ModelDefinitionListRelationFilter;
+    decisionRules?: Prisma.DecisionRuleListRelationFilter;
 };
 export type EntityTypeOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
@@ -174,6 +178,10 @@ export type EntityTypeOrderByWithRelationInput = {
     instances?: Prisma.EntityInstanceOrderByRelationAggregateInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionOrderByRelationAggregateInput;
     incomingRelationships?: Prisma.RelationshipDefinitionOrderByRelationAggregateInput;
+    integrationJobs?: Prisma.IntegrationJobOrderByRelationAggregateInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionOrderByRelationAggregateInput;
+    modelDefinitions?: Prisma.ModelDefinitionOrderByRelationAggregateInput;
+    decisionRules?: Prisma.DecisionRuleOrderByRelationAggregateInput;
 };
 export type EntityTypeWhereUniqueInput = Prisma.AtLeast<{
     id?: string;
@@ -188,6 +196,10 @@ export type EntityTypeWhereUniqueInput = Prisma.AtLeast<{
     instances?: Prisma.EntityInstanceListRelationFilter;
     outgoingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
     incomingRelationships?: Prisma.RelationshipDefinitionListRelationFilter;
+    integrationJobs?: Prisma.IntegrationJobListRelationFilter;
+    computedMetrics?: Prisma.ComputedMetricDefinitionListRelationFilter;
+    modelDefinitions?: Prisma.ModelDefinitionListRelationFilter;
+    decisionRules?: Prisma.DecisionRuleListRelationFilter;
 }, "id" | "name_version">;
 export type EntityTypeOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
@@ -218,6 +230,10 @@ export type EntityTypeCreateInput = {
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateInput = {
     id?: string;
@@ -228,6 +244,10 @@ export type EntityTypeUncheckedCreateInput = {
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -238,6 +258,10 @@ export type EntityTypeUpdateInput = {
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -248,6 +272,10 @@ export type EntityTypeUncheckedUpdateInput = {
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeCreateManyInput = {
     id?: string;
@@ -360,6 +388,54 @@ export type EntityTypeUpdateOneRequiredWithoutInstancesNestedInput = {
     connect?: Prisma.EntityTypeWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutInstancesInput, Prisma.EntityTypeUpdateWithoutInstancesInput>, Prisma.EntityTypeUncheckedUpdateWithoutInstancesInput>;
 };
+export type EntityTypeCreateNestedOneWithoutIntegrationJobsInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutIntegrationJobsInput, Prisma.EntityTypeUncheckedCreateWithoutIntegrationJobsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutIntegrationJobsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+};
+export type EntityTypeUpdateOneRequiredWithoutIntegrationJobsNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutIntegrationJobsInput, Prisma.EntityTypeUncheckedCreateWithoutIntegrationJobsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutIntegrationJobsInput;
+    upsert?: Prisma.EntityTypeUpsertWithoutIntegrationJobsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutIntegrationJobsInput, Prisma.EntityTypeUpdateWithoutIntegrationJobsInput>, Prisma.EntityTypeUncheckedUpdateWithoutIntegrationJobsInput>;
+};
+export type EntityTypeCreateNestedOneWithoutComputedMetricsInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutComputedMetricsInput, Prisma.EntityTypeUncheckedCreateWithoutComputedMetricsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutComputedMetricsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+};
+export type EntityTypeUpdateOneRequiredWithoutComputedMetricsNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutComputedMetricsInput, Prisma.EntityTypeUncheckedCreateWithoutComputedMetricsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutComputedMetricsInput;
+    upsert?: Prisma.EntityTypeUpsertWithoutComputedMetricsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutComputedMetricsInput, Prisma.EntityTypeUpdateWithoutComputedMetricsInput>, Prisma.EntityTypeUncheckedUpdateWithoutComputedMetricsInput>;
+};
+export type EntityTypeCreateNestedOneWithoutModelDefinitionsInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutModelDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutModelDefinitionsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutModelDefinitionsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+};
+export type EntityTypeUpdateOneRequiredWithoutModelDefinitionsNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutModelDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutModelDefinitionsInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutModelDefinitionsInput;
+    upsert?: Prisma.EntityTypeUpsertWithoutModelDefinitionsInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutModelDefinitionsInput, Prisma.EntityTypeUpdateWithoutModelDefinitionsInput>, Prisma.EntityTypeUncheckedUpdateWithoutModelDefinitionsInput>;
+};
+export type EntityTypeCreateNestedOneWithoutDecisionRulesInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutDecisionRulesInput, Prisma.EntityTypeUncheckedCreateWithoutDecisionRulesInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutDecisionRulesInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+};
+export type EntityTypeUpdateOneRequiredWithoutDecisionRulesNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityTypeCreateWithoutDecisionRulesInput, Prisma.EntityTypeUncheckedCreateWithoutDecisionRulesInput>;
+    connectOrCreate?: Prisma.EntityTypeCreateOrConnectWithoutDecisionRulesInput;
+    upsert?: Prisma.EntityTypeUpsertWithoutDecisionRulesInput;
+    connect?: Prisma.EntityTypeWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityTypeUpdateToOneWithWhereWithoutDecisionRulesInput, Prisma.EntityTypeUpdateWithoutDecisionRulesInput>, Prisma.EntityTypeUncheckedUpdateWithoutDecisionRulesInput>;
+};
 export type EntityTypeCreateWithoutAttributesInput = {
     id?: string;
     name: string;
@@ -368,6 +444,10 @@ export type EntityTypeCreateWithoutAttributesInput = {
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutAttributesInput = {
     id?: string;
@@ -377,6 +457,10 @@ export type EntityTypeUncheckedCreateWithoutAttributesInput = {
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutAttributesInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -399,6 +483,10 @@ export type EntityTypeUpdateWithoutAttributesInput = {
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutAttributesInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -408,6 +496,10 @@ export type EntityTypeUncheckedUpdateWithoutAttributesInput = {
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeCreateWithoutOutgoingRelationshipsInput = {
     id?: string;
@@ -417,6 +509,10 @@ export type EntityTypeCreateWithoutOutgoingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutOutgoingRelationshipsInput = {
     id?: string;
@@ -426,6 +522,10 @@ export type EntityTypeUncheckedCreateWithoutOutgoingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutOutgoingRelationshipsInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -439,6 +539,10 @@ export type EntityTypeCreateWithoutIncomingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutIncomingRelationshipsInput = {
     id?: string;
@@ -448,6 +552,10 @@ export type EntityTypeUncheckedCreateWithoutIncomingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutIncomingRelationshipsInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -470,6 +578,10 @@ export type EntityTypeUpdateWithoutOutgoingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutOutgoingRelationshipsInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -479,6 +591,10 @@ export type EntityTypeUncheckedUpdateWithoutOutgoingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUpsertWithoutIncomingRelationshipsInput = {
     update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutIncomingRelationshipsInput, Prisma.EntityTypeUncheckedUpdateWithoutIncomingRelationshipsInput>;
@@ -497,6 +613,10 @@ export type EntityTypeUpdateWithoutIncomingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutIncomingRelationshipsInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -506,6 +626,10 @@ export type EntityTypeUncheckedUpdateWithoutIncomingRelationshipsInput = {
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeCreateWithoutInstancesInput = {
     id?: string;
@@ -515,6 +639,10 @@ export type EntityTypeCreateWithoutInstancesInput = {
     attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeUncheckedCreateWithoutInstancesInput = {
     id?: string;
@@ -524,6 +652,10 @@ export type EntityTypeUncheckedCreateWithoutInstancesInput = {
     attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
 };
 export type EntityTypeCreateOrConnectWithoutInstancesInput = {
     where: Prisma.EntityTypeWhereUniqueInput;
@@ -546,6 +678,10 @@ export type EntityTypeUpdateWithoutInstancesInput = {
     attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
 };
 export type EntityTypeUncheckedUpdateWithoutInstancesInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -555,6 +691,270 @@ export type EntityTypeUncheckedUpdateWithoutInstancesInput = {
     attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
     outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
     incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeCreateWithoutIntegrationJobsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutIntegrationJobsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutIntegrationJobsInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutIntegrationJobsInput, Prisma.EntityTypeUncheckedCreateWithoutIntegrationJobsInput>;
+};
+export type EntityTypeUpsertWithoutIntegrationJobsInput = {
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutIntegrationJobsInput, Prisma.EntityTypeUncheckedUpdateWithoutIntegrationJobsInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutIntegrationJobsInput, Prisma.EntityTypeUncheckedCreateWithoutIntegrationJobsInput>;
+    where?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeUpdateToOneWithWhereWithoutIntegrationJobsInput = {
+    where?: Prisma.EntityTypeWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutIntegrationJobsInput, Prisma.EntityTypeUncheckedUpdateWithoutIntegrationJobsInput>;
+};
+export type EntityTypeUpdateWithoutIntegrationJobsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutIntegrationJobsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeCreateWithoutComputedMetricsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutComputedMetricsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutComputedMetricsInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutComputedMetricsInput, Prisma.EntityTypeUncheckedCreateWithoutComputedMetricsInput>;
+};
+export type EntityTypeUpsertWithoutComputedMetricsInput = {
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutComputedMetricsInput, Prisma.EntityTypeUncheckedUpdateWithoutComputedMetricsInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutComputedMetricsInput, Prisma.EntityTypeUncheckedCreateWithoutComputedMetricsInput>;
+    where?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeUpdateToOneWithWhereWithoutComputedMetricsInput = {
+    where?: Prisma.EntityTypeWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutComputedMetricsInput, Prisma.EntityTypeUncheckedUpdateWithoutComputedMetricsInput>;
+};
+export type EntityTypeUpdateWithoutComputedMetricsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutComputedMetricsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeCreateWithoutModelDefinitionsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutModelDefinitionsInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutModelDefinitionsInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutModelDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutModelDefinitionsInput>;
+};
+export type EntityTypeUpsertWithoutModelDefinitionsInput = {
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutModelDefinitionsInput, Prisma.EntityTypeUncheckedUpdateWithoutModelDefinitionsInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutModelDefinitionsInput, Prisma.EntityTypeUncheckedCreateWithoutModelDefinitionsInput>;
+    where?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeUpdateToOneWithWhereWithoutModelDefinitionsInput = {
+    where?: Prisma.EntityTypeWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutModelDefinitionsInput, Prisma.EntityTypeUncheckedUpdateWithoutModelDefinitionsInput>;
+};
+export type EntityTypeUpdateWithoutModelDefinitionsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutModelDefinitionsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    decisionRules?: Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeCreateWithoutDecisionRulesInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeUncheckedCreateWithoutDecisionRulesInput = {
+    id?: string;
+    name: string;
+    version: number;
+    createdAt?: Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    instances?: Prisma.EntityInstanceUncheckedCreateNestedManyWithoutEntityTypeInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutSourceEntityTypeInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutTargetEntityTypeInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedCreateNestedManyWithoutEntityTypeInput;
+};
+export type EntityTypeCreateOrConnectWithoutDecisionRulesInput = {
+    where: Prisma.EntityTypeWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutDecisionRulesInput, Prisma.EntityTypeUncheckedCreateWithoutDecisionRulesInput>;
+};
+export type EntityTypeUpsertWithoutDecisionRulesInput = {
+    update: Prisma.XOR<Prisma.EntityTypeUpdateWithoutDecisionRulesInput, Prisma.EntityTypeUncheckedUpdateWithoutDecisionRulesInput>;
+    create: Prisma.XOR<Prisma.EntityTypeCreateWithoutDecisionRulesInput, Prisma.EntityTypeUncheckedCreateWithoutDecisionRulesInput>;
+    where?: Prisma.EntityTypeWhereInput;
+};
+export type EntityTypeUpdateToOneWithWhereWithoutDecisionRulesInput = {
+    where?: Prisma.EntityTypeWhereInput;
+    data: Prisma.XOR<Prisma.EntityTypeUpdateWithoutDecisionRulesInput, Prisma.EntityTypeUncheckedUpdateWithoutDecisionRulesInput>;
+};
+export type EntityTypeUpdateWithoutDecisionRulesInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUpdateManyWithoutEntityTypeNestedInput;
+};
+export type EntityTypeUncheckedUpdateWithoutDecisionRulesInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    version?: Prisma.IntFieldUpdateOperationsInput | number;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    attributes?: Prisma.AttributeDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    instances?: Prisma.EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    outgoingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeNestedInput;
+    incomingRelationships?: Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeNestedInput;
+    computedMetrics?: Prisma.ComputedMetricDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
+    modelDefinitions?: Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeNestedInput;
 };
 /**
  * Count Type EntityTypeCountOutputType
@@ -564,12 +964,20 @@ export type EntityTypeCountOutputType = {
     instances: number;
     outgoingRelationships: number;
     incomingRelationships: number;
+    integrationJobs: number;
+    computedMetrics: number;
+    modelDefinitions: number;
+    decisionRules: number;
 };
 export type EntityTypeCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     attributes?: boolean | EntityTypeCountOutputTypeCountAttributesArgs;
     instances?: boolean | EntityTypeCountOutputTypeCountInstancesArgs;
     outgoingRelationships?: boolean | EntityTypeCountOutputTypeCountOutgoingRelationshipsArgs;
     incomingRelationships?: boolean | EntityTypeCountOutputTypeCountIncomingRelationshipsArgs;
+    integrationJobs?: boolean | EntityTypeCountOutputTypeCountIntegrationJobsArgs;
+    computedMetrics?: boolean | EntityTypeCountOutputTypeCountComputedMetricsArgs;
+    modelDefinitions?: boolean | EntityTypeCountOutputTypeCountModelDefinitionsArgs;
+    decisionRules?: boolean | EntityTypeCountOutputTypeCountDecisionRulesArgs;
 };
 /**
  * EntityTypeCountOutputType without action
@@ -604,6 +1012,30 @@ export type EntityTypeCountOutputTypeCountOutgoingRelationshipsArgs<ExtArgs exte
 export type EntityTypeCountOutputTypeCountIncomingRelationshipsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     where?: Prisma.RelationshipDefinitionWhereInput;
 };
+/**
+ * EntityTypeCountOutputType without action
+ */
+export type EntityTypeCountOutputTypeCountIntegrationJobsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.IntegrationJobWhereInput;
+};
+/**
+ * EntityTypeCountOutputType without action
+ */
+export type EntityTypeCountOutputTypeCountComputedMetricsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.ComputedMetricDefinitionWhereInput;
+};
+/**
+ * EntityTypeCountOutputType without action
+ */
+export type EntityTypeCountOutputTypeCountModelDefinitionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.ModelDefinitionWhereInput;
+};
+/**
+ * EntityTypeCountOutputType without action
+ */
+export type EntityTypeCountOutputTypeCountDecisionRulesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.DecisionRuleWhereInput;
+};
 export type EntityTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     name?: boolean;
@@ -613,6 +1045,10 @@ export type EntityTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
     instances?: boolean | Prisma.EntityType$instancesArgs<ExtArgs>;
     outgoingRelationships?: boolean | Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs>;
     incomingRelationships?: boolean | Prisma.EntityType$incomingRelationshipsArgs<ExtArgs>;
+    integrationJobs?: boolean | Prisma.EntityType$integrationJobsArgs<ExtArgs>;
+    computedMetrics?: boolean | Prisma.EntityType$computedMetricsArgs<ExtArgs>;
+    modelDefinitions?: boolean | Prisma.EntityType$modelDefinitionsArgs<ExtArgs>;
+    decisionRules?: boolean | Prisma.EntityType$decisionRulesArgs<ExtArgs>;
     _count?: boolean | Prisma.EntityTypeCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["entityType"]>;
 export type EntityTypeSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -639,6 +1075,10 @@ export type EntityTypeInclude<ExtArgs extends runtime.Types.Extensions.InternalA
     instances?: boolean | Prisma.EntityType$instancesArgs<ExtArgs>;
     outgoingRelationships?: boolean | Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs>;
     incomingRelationships?: boolean | Prisma.EntityType$incomingRelationshipsArgs<ExtArgs>;
+    integrationJobs?: boolean | Prisma.EntityType$integrationJobsArgs<ExtArgs>;
+    computedMetrics?: boolean | Prisma.EntityType$computedMetricsArgs<ExtArgs>;
+    modelDefinitions?: boolean | Prisma.EntityType$modelDefinitionsArgs<ExtArgs>;
+    decisionRules?: boolean | Prisma.EntityType$decisionRulesArgs<ExtArgs>;
     _count?: boolean | Prisma.EntityTypeCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type EntityTypeIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {};
@@ -650,6 +1090,10 @@ export type $EntityTypePayload<ExtArgs extends runtime.Types.Extensions.Internal
         instances: Prisma.$EntityInstancePayload<ExtArgs>[];
         outgoingRelationships: Prisma.$RelationshipDefinitionPayload<ExtArgs>[];
         incomingRelationships: Prisma.$RelationshipDefinitionPayload<ExtArgs>[];
+        integrationJobs: Prisma.$IntegrationJobPayload<ExtArgs>[];
+        computedMetrics: Prisma.$ComputedMetricDefinitionPayload<ExtArgs>[];
+        modelDefinitions: Prisma.$ModelDefinitionPayload<ExtArgs>[];
+        decisionRules: Prisma.$DecisionRulePayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: string;
@@ -989,6 +1433,10 @@ export interface Prisma__EntityTypeClient<T, Null = never, ExtArgs extends runti
     instances<T extends Prisma.EntityType$instancesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$instancesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$EntityInstancePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     outgoingRelationships<T extends Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$outgoingRelationshipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RelationshipDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     incomingRelationships<T extends Prisma.EntityType$incomingRelationshipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$incomingRelationshipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RelationshipDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
+    integrationJobs<T extends Prisma.EntityType$integrationJobsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$integrationJobsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$IntegrationJobPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
+    computedMetrics<T extends Prisma.EntityType$computedMetricsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$computedMetricsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ComputedMetricDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
+    modelDefinitions<T extends Prisma.EntityType$modelDefinitionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$modelDefinitionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ModelDefinitionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
+    decisionRules<T extends Prisma.EntityType$decisionRulesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityType$decisionRulesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DecisionRulePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1479,6 +1927,98 @@ export type EntityType$incomingRelationshipsArgs<ExtArgs extends runtime.Types.E
     take?: number;
     skip?: number;
     distinct?: Prisma.RelationshipDefinitionScalarFieldEnum | Prisma.RelationshipDefinitionScalarFieldEnum[];
+};
+/**
+ * EntityType.integrationJobs
+ */
+export type EntityType$integrationJobsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the IntegrationJob
+     */
+    select?: Prisma.IntegrationJobSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the IntegrationJob
+     */
+    omit?: Prisma.IntegrationJobOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.IntegrationJobInclude<ExtArgs> | null;
+    where?: Prisma.IntegrationJobWhereInput;
+    orderBy?: Prisma.IntegrationJobOrderByWithRelationInput | Prisma.IntegrationJobOrderByWithRelationInput[];
+    cursor?: Prisma.IntegrationJobWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.IntegrationJobScalarFieldEnum | Prisma.IntegrationJobScalarFieldEnum[];
+};
+/**
+ * EntityType.computedMetrics
+ */
+export type EntityType$computedMetricsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ComputedMetricDefinition
+     */
+    select?: Prisma.ComputedMetricDefinitionSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ComputedMetricDefinition
+     */
+    omit?: Prisma.ComputedMetricDefinitionOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.ComputedMetricDefinitionInclude<ExtArgs> | null;
+    where?: Prisma.ComputedMetricDefinitionWhereInput;
+    orderBy?: Prisma.ComputedMetricDefinitionOrderByWithRelationInput | Prisma.ComputedMetricDefinitionOrderByWithRelationInput[];
+    cursor?: Prisma.ComputedMetricDefinitionWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.ComputedMetricDefinitionScalarFieldEnum | Prisma.ComputedMetricDefinitionScalarFieldEnum[];
+};
+/**
+ * EntityType.modelDefinitions
+ */
+export type EntityType$modelDefinitionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelDefinition
+     */
+    select?: Prisma.ModelDefinitionSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ModelDefinition
+     */
+    omit?: Prisma.ModelDefinitionOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.ModelDefinitionInclude<ExtArgs> | null;
+    where?: Prisma.ModelDefinitionWhereInput;
+    orderBy?: Prisma.ModelDefinitionOrderByWithRelationInput | Prisma.ModelDefinitionOrderByWithRelationInput[];
+    cursor?: Prisma.ModelDefinitionWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.ModelDefinitionScalarFieldEnum | Prisma.ModelDefinitionScalarFieldEnum[];
+};
+/**
+ * EntityType.decisionRules
+ */
+export type EntityType$decisionRulesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the DecisionRule
+     */
+    select?: Prisma.DecisionRuleSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the DecisionRule
+     */
+    omit?: Prisma.DecisionRuleOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.DecisionRuleInclude<ExtArgs> | null;
+    where?: Prisma.DecisionRuleWhereInput;
+    orderBy?: Prisma.DecisionRuleOrderByWithRelationInput | Prisma.DecisionRuleOrderByWithRelationInput[];
+    cursor?: Prisma.DecisionRuleWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.DecisionRuleScalarFieldEnum | Prisma.DecisionRuleScalarFieldEnum[];
 };
 /**
  * EntityType without action

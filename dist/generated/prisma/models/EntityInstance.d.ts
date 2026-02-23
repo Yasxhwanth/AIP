@@ -20,6 +20,7 @@ export type EntityInstanceSumAggregateOutputType = {
 };
 export type EntityInstanceMinAggregateOutputType = {
     id: string | null;
+    logicalId: string | null;
     entityTypeId: string | null;
     entityVersion: number | null;
     validFrom: Date | null;
@@ -28,6 +29,7 @@ export type EntityInstanceMinAggregateOutputType = {
 };
 export type EntityInstanceMaxAggregateOutputType = {
     id: string | null;
+    logicalId: string | null;
     entityTypeId: string | null;
     entityVersion: number | null;
     validFrom: Date | null;
@@ -36,6 +38,7 @@ export type EntityInstanceMaxAggregateOutputType = {
 };
 export type EntityInstanceCountAggregateOutputType = {
     id: number;
+    logicalId: number;
     entityTypeId: number;
     entityVersion: number;
     data: number;
@@ -52,6 +55,7 @@ export type EntityInstanceSumAggregateInputType = {
 };
 export type EntityInstanceMinAggregateInputType = {
     id?: true;
+    logicalId?: true;
     entityTypeId?: true;
     entityVersion?: true;
     validFrom?: true;
@@ -60,6 +64,7 @@ export type EntityInstanceMinAggregateInputType = {
 };
 export type EntityInstanceMaxAggregateInputType = {
     id?: true;
+    logicalId?: true;
     entityTypeId?: true;
     entityVersion?: true;
     validFrom?: true;
@@ -68,6 +73,7 @@ export type EntityInstanceMaxAggregateInputType = {
 };
 export type EntityInstanceCountAggregateInputType = {
     id?: true;
+    logicalId?: true;
     entityTypeId?: true;
     entityVersion?: true;
     data?: true;
@@ -154,6 +160,7 @@ export type EntityInstanceGroupByArgs<ExtArgs extends runtime.Types.Extensions.I
 };
 export type EntityInstanceGroupByOutputType = {
     id: string;
+    logicalId: string;
     entityTypeId: string;
     entityVersion: number;
     data: runtime.JsonValue;
@@ -174,6 +181,7 @@ export type EntityInstanceWhereInput = {
     OR?: Prisma.EntityInstanceWhereInput[];
     NOT?: Prisma.EntityInstanceWhereInput | Prisma.EntityInstanceWhereInput[];
     id?: Prisma.StringFilter<"EntityInstance"> | string;
+    logicalId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityTypeId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntFilter<"EntityInstance"> | number;
     data?: Prisma.JsonFilter<"EntityInstance">;
@@ -184,6 +192,7 @@ export type EntityInstanceWhereInput = {
 };
 export type EntityInstanceOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
+    logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
@@ -197,6 +206,7 @@ export type EntityInstanceWhereUniqueInput = Prisma.AtLeast<{
     AND?: Prisma.EntityInstanceWhereInput | Prisma.EntityInstanceWhereInput[];
     OR?: Prisma.EntityInstanceWhereInput[];
     NOT?: Prisma.EntityInstanceWhereInput | Prisma.EntityInstanceWhereInput[];
+    logicalId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityTypeId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntFilter<"EntityInstance"> | number;
     data?: Prisma.JsonFilter<"EntityInstance">;
@@ -207,6 +217,7 @@ export type EntityInstanceWhereUniqueInput = Prisma.AtLeast<{
 }, "id">;
 export type EntityInstanceOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
+    logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
@@ -224,6 +235,7 @@ export type EntityInstanceScalarWhereWithAggregatesInput = {
     OR?: Prisma.EntityInstanceScalarWhereWithAggregatesInput[];
     NOT?: Prisma.EntityInstanceScalarWhereWithAggregatesInput | Prisma.EntityInstanceScalarWhereWithAggregatesInput[];
     id?: Prisma.StringWithAggregatesFilter<"EntityInstance"> | string;
+    logicalId?: Prisma.StringWithAggregatesFilter<"EntityInstance"> | string;
     entityTypeId?: Prisma.StringWithAggregatesFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntWithAggregatesFilter<"EntityInstance"> | number;
     data?: Prisma.JsonWithAggregatesFilter<"EntityInstance">;
@@ -233,6 +245,7 @@ export type EntityInstanceScalarWhereWithAggregatesInput = {
 };
 export type EntityInstanceCreateInput = {
     id?: string;
+    logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom: Date | string;
@@ -242,6 +255,7 @@ export type EntityInstanceCreateInput = {
 };
 export type EntityInstanceUncheckedCreateInput = {
     id?: string;
+    logicalId: string;
     entityTypeId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
@@ -251,6 +265,7 @@ export type EntityInstanceUncheckedCreateInput = {
 };
 export type EntityInstanceUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -260,6 +275,7 @@ export type EntityInstanceUpdateInput = {
 };
 export type EntityInstanceUncheckedUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
@@ -269,6 +285,7 @@ export type EntityInstanceUncheckedUpdateInput = {
 };
 export type EntityInstanceCreateManyInput = {
     id?: string;
+    logicalId: string;
     entityTypeId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
@@ -278,6 +295,7 @@ export type EntityInstanceCreateManyInput = {
 };
 export type EntityInstanceUpdateManyMutationInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -286,6 +304,7 @@ export type EntityInstanceUpdateManyMutationInput = {
 };
 export type EntityInstanceUncheckedUpdateManyInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
@@ -303,6 +322,7 @@ export type EntityInstanceOrderByRelationAggregateInput = {
 };
 export type EntityInstanceCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
+    logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
@@ -315,6 +335,7 @@ export type EntityInstanceAvgOrderByAggregateInput = {
 };
 export type EntityInstanceMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
+    logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
@@ -323,6 +344,7 @@ export type EntityInstanceMaxOrderByAggregateInput = {
 };
 export type EntityInstanceMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
+    logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
@@ -370,11 +392,9 @@ export type EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput = {
     updateMany?: Prisma.EntityInstanceUpdateManyWithWhereWithoutEntityTypeInput | Prisma.EntityInstanceUpdateManyWithWhereWithoutEntityTypeInput[];
     deleteMany?: Prisma.EntityInstanceScalarWhereInput | Prisma.EntityInstanceScalarWhereInput[];
 };
-export type NullableDateTimeFieldUpdateOperationsInput = {
-    set?: Date | string | null;
-};
 export type EntityInstanceCreateWithoutEntityTypeInput = {
     id?: string;
+    logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom: Date | string;
@@ -383,6 +403,7 @@ export type EntityInstanceCreateWithoutEntityTypeInput = {
 };
 export type EntityInstanceUncheckedCreateWithoutEntityTypeInput = {
     id?: string;
+    logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom: Date | string;
@@ -415,6 +436,7 @@ export type EntityInstanceScalarWhereInput = {
     OR?: Prisma.EntityInstanceScalarWhereInput[];
     NOT?: Prisma.EntityInstanceScalarWhereInput | Prisma.EntityInstanceScalarWhereInput[];
     id?: Prisma.StringFilter<"EntityInstance"> | string;
+    logicalId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityTypeId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntFilter<"EntityInstance"> | number;
     data?: Prisma.JsonFilter<"EntityInstance">;
@@ -424,6 +446,7 @@ export type EntityInstanceScalarWhereInput = {
 };
 export type EntityInstanceCreateManyEntityTypeInput = {
     id?: string;
+    logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom: Date | string;
@@ -432,6 +455,7 @@ export type EntityInstanceCreateManyEntityTypeInput = {
 };
 export type EntityInstanceUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -440,6 +464,7 @@ export type EntityInstanceUpdateWithoutEntityTypeInput = {
 };
 export type EntityInstanceUncheckedUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -448,6 +473,7 @@ export type EntityInstanceUncheckedUpdateWithoutEntityTypeInput = {
 };
 export type EntityInstanceUncheckedUpdateManyWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -456,6 +482,7 @@ export type EntityInstanceUncheckedUpdateManyWithoutEntityTypeInput = {
 };
 export type EntityInstanceSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
+    logicalId?: boolean;
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
@@ -466,6 +493,7 @@ export type EntityInstanceSelect<ExtArgs extends runtime.Types.Extensions.Intern
 }, ExtArgs["result"]["entityInstance"]>;
 export type EntityInstanceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
+    logicalId?: boolean;
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
@@ -476,6 +504,7 @@ export type EntityInstanceSelectCreateManyAndReturn<ExtArgs extends runtime.Type
 }, ExtArgs["result"]["entityInstance"]>;
 export type EntityInstanceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
+    logicalId?: boolean;
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
@@ -486,6 +515,7 @@ export type EntityInstanceSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
 }, ExtArgs["result"]["entityInstance"]>;
 export type EntityInstanceSelectScalar = {
     id?: boolean;
+    logicalId?: boolean;
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
@@ -493,7 +523,7 @@ export type EntityInstanceSelectScalar = {
     validTo?: boolean;
     transactionTime?: boolean;
 };
-export type EntityInstanceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "entityTypeId" | "entityVersion" | "data" | "validFrom" | "validTo" | "transactionTime", ExtArgs["result"]["entityInstance"]>;
+export type EntityInstanceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "logicalId" | "entityTypeId" | "entityVersion" | "data" | "validFrom" | "validTo" | "transactionTime", ExtArgs["result"]["entityInstance"]>;
 export type EntityInstanceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
@@ -510,6 +540,7 @@ export type $EntityInstancePayload<ExtArgs extends runtime.Types.Extensions.Inte
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: string;
+        logicalId: string;
         entityTypeId: string;
         entityVersion: number;
         data: runtime.JsonValue;
@@ -872,6 +903,7 @@ export interface Prisma__EntityInstanceClient<T, Null = never, ExtArgs extends r
  */
 export interface EntityInstanceFieldRefs {
     readonly id: Prisma.FieldRef<"EntityInstance", 'String'>;
+    readonly logicalId: Prisma.FieldRef<"EntityInstance", 'String'>;
     readonly entityTypeId: Prisma.FieldRef<"EntityInstance", 'String'>;
     readonly entityVersion: Prisma.FieldRef<"EntityInstance", 'Int'>;
     readonly data: Prisma.FieldRef<"EntityInstance", 'Json'>;

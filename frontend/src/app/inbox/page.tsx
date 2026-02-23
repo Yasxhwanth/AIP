@@ -15,9 +15,10 @@ import {
     Check
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
+import * as T from '@/lib/types';
 
 export default function DecisionInbox() {
-    const [inboxItems, setInboxItems] = useState<any[]>([]);
+    const [inboxItems, setInboxItems] = useState<T.DecisionLog[]>([]);
     const [selectedItem, setSelectedItem] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -25,7 +26,7 @@ export default function DecisionInbox() {
         async function loadInbox() {
             try {
                 // Fetch live decision logs from the backend
-                const data = await ApiClient.get<any[]>('/decision-logs?status=PENDING');
+                const data = await ApiClient.get<T.DecisionLog[]>('/decision-logs?status=PENDING');
                 setInboxItems(data);
                 if (data.length > 0) {
                     setSelectedItem(data[0]);

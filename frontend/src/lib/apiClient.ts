@@ -1,16 +1,57 @@
 // C3 AIP - Enterprise Frontend API Client
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-// We simulate an authenticated enterprise environment by pre-supplying a mock token,
-// but in reality, this would be fetched from a secure local storage or session cookie.
-// Since the Express backend only expects API Keys right now (or headers), we configure it here.
-const DEFAULT_HEADERS = {
-    'Content-Type': 'application/json',
-    // In a real environment, this would be `Authorization: Bearer ${token}`
-    // Looking at the Express backend auth, it uses `x-api-key` or `Authorization: Bearer <jwt>`.
-    // We'll let the user provide a token via an environment variable if needed, or bypass for local dev.
-};
+let sessionToken: string | null = null;
+if (typeof window !== 'undefined') {
+    sessionToken = sessionStorage.getItem('aip_token');
+}
+
+async function getHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+    };
+
+    // 1. Bearer Token (Highest Priority)
+    if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+        return headers;
+    }
+
+    // 2. Explicit API Key defined in Frontend
+    const envApiKey = process.env.NEXT_PUBLIC_API_KEY;
+    if (envApiKey) {
+        headers['x-api-key'] = envApiKey;
+        return headers;
+    }
+
+    // 3. Fallback Auth Bootstrap (Development Sandbox)
+    // If no explicit keys exist, we fetch a temporary developer token from the backend
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/auth/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' },
+            body: JSON.stringify({ userId: 'dev-user', role: 'admin' })
+        });
+        if (response.ok) {
+            const data = await response.json();
+            if (data.token) {
+                sessionToken = data.token;
+                if (typeof window !== 'undefined') {
+                    sessionStorage.setItem('aip_token', data.token);
+                }
+                headers['Authorization'] = `Bearer ${sessionToken}`;
+                return headers;
+            }
+        }
+    } catch {
+        // Fallback silently if auth endpoint unreachable
+    }
+
+    // 4. Ultimate Fallback for Local Dev Server without auth requirements setup
+    headers['x-api-key'] = 'test-api-key';
+    return headers;
+}
 
 export class ApiClient {
 
@@ -23,9 +64,11 @@ export class ApiClient {
             });
         }
 
+        const headers = await getHeaders();
+
         const response = await fetch(url.toString(), {
             method: 'GET',
-            headers: DEFAULT_HEADERS,
+            headers,
             cache: 'no-store'
         });
 
@@ -39,10 +82,11 @@ export class ApiClient {
 
     static async post<T>(endpoint: string, data: any): Promise<T> {
         const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+        const headers = await getHeaders();
 
         const response = await fetch(url, {
             method: 'POST',
-            headers: DEFAULT_HEADERS,
+            headers,
             body: JSON.stringify(data),
             cache: 'no-store'
         });
@@ -57,10 +101,11 @@ export class ApiClient {
 
     static async put<T>(endpoint: string, data: any): Promise<T> {
         const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+        const headers = await getHeaders();
 
         const response = await fetch(url, {
             method: 'PUT',
-            headers: DEFAULT_HEADERS,
+            headers,
             body: JSON.stringify(data),
             cache: 'no-store'
         });
@@ -75,10 +120,11 @@ export class ApiClient {
 
     static async delete<T>(endpoint: string): Promise<T> {
         const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+        const headers = await getHeaders();
 
         const response = await fetch(url, {
             method: 'DELETE',
-            headers: DEFAULT_HEADERS,
+            headers,
             cache: 'no-store'
         });
 

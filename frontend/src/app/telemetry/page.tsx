@@ -8,8 +8,7 @@ import {
     ChevronDown,
     Box,
     CornerDownRight,
-    LineChart,
-    BarChart2,
+    LineChart as LineChartIcon,
     AlertOctagon,
     Clock,
     Download,
@@ -19,7 +18,24 @@ import {
     Settings,
     Loader2
 } from "lucide-react";
-import { ApiClient } from "@/lib/apiClient";
+import { ApiClient, API_BASE_URL } from "@/lib/apiClient";
+import * as T from '@/lib/types';
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    Legend
+} from 'recharts';
+
+interface ChartPoint {
+    time: string;
+    timestamp: number;
+    [key: string]: any;
+}
 
 export default function TelemetryDashboard() {
     const [isLive, setIsLive] = useState(true);
@@ -30,15 +46,17 @@ export default function TelemetryDashboard() {
     const [loadingAssets, setLoadingAssets] = useState(true);
 
     // Telemetry Data
-    const [rollups, setRollups] = useState<any[]>([]);
+    const [chartData, setChartData] = useState<ChartPoint[]>([]);
+    const [activeMetrics, setActiveMetrics] = useState<string[]>([]);
     const [loadingRollups, setLoadingRollups] = useState(false);
 
+    // Fetch Topology
     useEffect(() => {
         async function fetchTopology() {
             try {
-                const types = await ApiClient.get<any[]>('/entity-types');
+                const types = await ApiClient.get<T.EntityType[]>('/entity-types');
                 const treePromises = types.map(async (t) => {
-                    const insts = await ApiClient.get<any[]>(`/entity-types/${t.id}/instances`);
+                    const insts = await ApiClient.get<T.EntityInstance[]>(`/entity-types/${t.id}/instances`);
                     return {
                         id: t.id,
                         name: t.name,
@@ -67,59 +85,82 @@ export default function TelemetryDashboard() {
         fetchTopology();
     }, []);
 
+    // Fetch Historical Data and setup SSE
     useEffect(() => {
         if (!selectedAsset) return;
 
-        async function fetchTelemetry() {
+        let sse: EventSource | null = null;
+        const metricsSet = new Set<string>();
+
+        async function fetchHistorical() {
             setLoadingRollups(true);
             try {
-                // Fetch up to 500 recent rollups for this logical ID
-                const data = await ApiClient.get<any[]>(`/telemetry/${selectedAsset}/rollups`);
-                setRollups(data);
+                const raw = await ApiClient.get<T.TimeseriesMetric[]>(`/telemetry/${selectedAsset}`);
+
+                const grouped = raw.reduce((acc: any, point: any) => {
+                    metricsSet.add(point.metric);
+                    const timeKey = new Date(point.timestamp).toLocaleTimeString();
+                    if (!acc[timeKey]) acc[timeKey] = { time: timeKey, timestamp: new Date(point.timestamp).getTime() };
+                    acc[timeKey][point.metric] = point.value;
+                    return acc;
+                }, {});
+
+                const sorted = (Object.values(grouped) as ChartPoint[]).sort((a: ChartPoint, b: ChartPoint) => a.timestamp - b.timestamp);
+                setChartData(sorted.slice(-100));
+                setActiveMetrics(Array.from(metricsSet));
             } catch (err) {
-                console.error("Failed to fetch telemetry", err);
+                console.error("Failed to fetch historical telemetry", err);
             } finally {
                 setLoadingRollups(false);
             }
         }
 
-        fetchTelemetry();
+        fetchHistorical();
 
-        // If live, poll every 5 seconds
-        let interval: NodeJS.Timeout;
         if (isLive) {
-            interval = setInterval(fetchTelemetry, 5000);
-        }
-        return () => clearInterval(interval);
+            sse = new EventSource(`${API_BASE_URL}/telemetry/${selectedAsset}/stream`);
+            sse.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const newMetrics = data.metrics;
+                if (!newMetrics || newMetrics.length === 0) return;
 
+                const timeKey = new Date(newMetrics[0].timestamp).toLocaleTimeString();
+                const timestamp = new Date(newMetrics[0].timestamp).getTime();
+                const newPoint: ChartPoint = { time: timeKey, timestamp };
+
+                newMetrics.forEach((m: any) => {
+                    newPoint[m.metric] = m.value;
+                    metricsSet.add(m.metric);
+                });
+
+                setActiveMetrics(Array.from(metricsSet));
+                setChartData(prev => [...prev.slice(-99), newPoint]);
+            };
+            sse.onerror = (err) => {
+                console.error("SSE Error", err);
+            };
+        }
+
+        return () => {
+            if (sse) {
+                sse.close();
+            }
+        };
     }, [selectedAsset, isLive]);
 
-    // Extract unique metrics and their latest values for KPIs
-    const metricsByName = rollups.reduce((acc, r) => {
-        if (!acc[r.metric]) acc[r.metric] = [];
-        acc[r.metric].push(r);
-        return acc;
-    }, {} as Record<string, any[]>);
-
-    const activeMetrics = Object.keys(metricsByName);
+    // Compute KPIs dynamically based on last 2 points
     const kpis = activeMetrics.slice(0, 3).map(m => {
-        const sorted = metricsByName[m].sort((a: any, b: any) => new Date(b.windowStart).getTime() - new Date(a.windowStart).getTime());
+        const lastTwo = chartData.filter(d => d[m] !== undefined).slice(-2);
+        const val = lastTwo.length > 0 ? lastTwo[lastTwo.length - 1][m] : 0;
+        const prev = lastTwo.length > 1 ? lastTwo[lastTwo.length - 2][m] : val;
         return {
             name: m,
-            val: sorted[0]?.avgValue?.toFixed(2) || "0.00",
-            trend: sorted.length > 1 ? (sorted[0].avgValue > sorted[1].avgValue ? '↑' : '↓') : '-'
+            val: val.toFixed(2),
+            trend: val > prev ? '↑' : val < prev ? '↓' : '-'
         };
     });
 
-    // Detect pseudo-anomalies (values above certain arbitrary threshold just for UX demonstration)
-    const recentAnomalies = rollups.filter(r => r.maxValue && r.maxValue > 100).slice(0, 5).map((r, i) => ({
-        id: i,
-        time: new Date(r.windowStart).toLocaleTimeString(),
-        metric: r.metric,
-        severity: r.maxValue > 500 ? 'high' : 'medium',
-        val: r.maxValue.toFixed(2),
-        threshold: "100.0"
-    }));
+    const colors = ["#ea580c", "#2563eb", "#16a34a", "#9333ea"];
 
     return (
         <div className="h-full w-full flex flex-col bg-white text-slate-900 border-t border-slate-200">
@@ -145,7 +186,7 @@ export default function TelemetryDashboard() {
                             }`}
                     >
                         {isLive ? <PauseCircle className="w-3.5 h-3.5" /> : <PlayCircle className="w-3.5 h-3.5" />}
-                        {isLive ? 'Live Updates (1s)' : 'Paused'}
+                        {isLive ? 'Live Updates' : 'Paused'}
                     </button>
                     <button className="w-7 h-7 flex items-center justify-center bg-white border border-slate-300 text-slate-600 rounded hover:bg-slate-50 transition-colors shadow-sm">
                         <Download className="w-3.5 h-3.5" />
@@ -234,9 +275,9 @@ export default function TelemetryDashboard() {
                             <div className="border border-slate-200 rounded px-3 py-2 bg-slate-50 flex flex-col justify-center">
                                 <div className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-1">Status</div>
                                 <div className="flex items-center gap-1.5">
-                                    <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${rollups.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
-                                    <span className={`text-sm font-bold ${rollups.length > 0 ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                        {rollups.length > 0 ? 'RECEIVING' : 'IDLE'}
+                                    <span className={`w-2.5 h-2.5 rounded-full ${isLive ? 'animate-pulse bg-emerald-500' : 'bg-slate-400'}`}></span>
+                                    <span className={`text-sm font-bold ${isLive ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                        {isLive ? 'STREAMING' : 'OFFLINE'}
                                     </span>
                                 </div>
                             </div>
@@ -245,11 +286,11 @@ export default function TelemetryDashboard() {
 
                     {/* Main Chart Area */}
                     <div className="flex-1 bg-slate-50/50 p-4 flex flex-col gap-4 overflow-y-auto">
-                        <div className="bg-white border border-slate-200 rounded shadow-sm flex flex-col p-4 flex-1 min-h-[300px]">
+                        <div className="bg-white border border-slate-200 rounded shadow-sm flex flex-col p-4 flex-1 min-h-[400px]">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                                    <LineChart className="w-4 h-4 text-orange-600" /> Multivariate Timeseries
-                                    <span className="text-[10px] font-normal text-slate-400 ml-2">({rollups.length} points)</span>
+                                    <LineChartIcon className="w-4 h-4 text-orange-600" /> Multivariate Timeseries
+                                    <span className="text-[10px] font-normal text-slate-400 ml-2">({chartData.length} points)</span>
                                 </h3>
                                 <div className="flex items-center gap-2">
                                     <button className="text-slate-400 hover:text-slate-700 transition-colors"><Maximize2 className="w-4 h-4" /></button>
@@ -258,71 +299,64 @@ export default function TelemetryDashboard() {
                             </div>
 
                             {/* Chart Canvas */}
-                            <div className="flex-1 w-full border border-slate-100 rounded relative overflow-hidden bg-[linear-gradient(rgba(0,0,0,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.03)_1px,transparent_1px)] bg-[size:20px_20px] flex items-center justify-center">
-                                {rollups.length === 0 ? (
-                                    <div className="text-xs text-slate-500 bg-white/80 p-3 rounded shadow-sm border border-slate-200">
-                                        No telemetry rollups found for this asset in Postgres.
-                                        <br />Use the API to ingest records to see chart lines.
+                            <div className="flex-1 w-full bg-white flex items-center justify-center p-2 relative h-full">
+                                {chartData.length === 0 && !loadingRollups ? (
+                                    <div className="text-xs text-slate-500 bg-white/80 p-3 rounded shadow-sm border border-slate-200 text-center">
+                                        No telemetry records found for this asset.
                                     </div>
                                 ) : (
-                                    <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-                                        {/* Pure mock visualization since we lack a charting library, but scaled to indicate data is present */}
-                                        <polyline points="0,80 20,75 40,82 60,70 80,78 100,65" fill="none" stroke="#2563eb" strokeWidth="1.5" />
-                                        <polyline points="0,50 20,55 40,45 60,60 80,40 100,50" fill="none" stroke="#ea580c" strokeWidth="1.5" />
-                                        <line x1="85" y1="0" x2="85" y2="100" stroke="#94a3b8" strokeWidth="0.5" strokeDasharray="2,2" />
-                                        <circle cx="85" cy="45" r="2" fill="#ea580c" />
-                                    </svg>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis
+                                                dataKey="time"
+                                                tick={{ fontSize: 10, fill: '#64748b' }}
+                                                axisLine={{ stroke: '#cbd5e1' }}
+                                                tickLine={false}
+                                                minTickGap={30}
+                                            />
+                                            <YAxis
+                                                tick={{ fontSize: 10, fill: '#64748b' }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                            />
+                                            <Tooltip
+                                                contentStyle={{ borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                                            />
+                                            <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} iconType="circle" />
+                                            {activeMetrics.map((m, idx) => (
+                                                <Line
+                                                    key={m}
+                                                    type="monotone"
+                                                    dataKey={m}
+                                                    stroke={colors[idx % colors.length]}
+                                                    strokeWidth={2}
+                                                    dot={false}
+                                                    activeDot={{ r: 4, strokeWidth: 0 }}
+                                                    isAnimationActive={false}
+                                                />
+                                            ))}
+                                        </LineChart>
+                                    </ResponsiveContainer>
                                 )}
-                            </div>
-
-                            <div className="flex items-center gap-4 mt-3">
-                                {activeMetrics.map((m, i) => (
-                                    <div key={m} className="flex items-center gap-1.5">
-                                        <div className={`w-3 h-0.5 ${i === 0 ? 'bg-orange-600' : 'bg-blue-600'}`}></div>
-                                        <span className="text-[10px] font-mono text-slate-600">{m}</span>
-                                    </div>
-                                ))}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Right Pane: Anomalies & Alerts */}
+                {/* Right Pane: Details & Anomalies */}
                 <div className="w-72 border-l border-slate-200 bg-slate-50 flex flex-col shrink-0">
                     <div className="p-3 border-b border-slate-200 font-semibold text-[10px] text-slate-500 flex items-center gap-1.5 uppercase tracking-wider bg-slate-100">
                         <AlertOctagon className="w-3.5 h-3.5" />
-                        Active Spikes
+                        Live Streaming Status
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                        {recentAnomalies.length === 0 ? (
-                            <div className="p-4 text-center text-slate-400 text-xs border border-dashed border-slate-300 rounded bg-slate-50/50">
-                                No anomalous rollups detected in current window.
-                            </div>
-                        ) : recentAnomalies.map(anomaly => (
-                            <div key={anomaly.id} className="bg-white border border-slate-200 rounded shadow-sm p-3 relative overflow-hidden group hover:border-orange-300 transition-colors cursor-pointer">
-                                <div className={`absolute top-0 left-0 w-1 h-full ${anomaly.severity === 'high' ? 'bg-red-500' : 'bg-orange-400'}`}></div>
-
-                                <div className="flex justify-between items-start mb-1.5 pl-2">
-                                    <span className="font-mono text-xs font-bold text-slate-800">{anomaly.metric}</span>
-                                    <span className="flex items-center gap-1 text-[10px] text-slate-400 font-mono"><Clock className="w-3 h-3" /> {anomaly.time}</span>
-                                </div>
-
-                                <div className="flex gap-2 text-xs pl-2">
-                                    <div className="flex-1 bg-slate-50 border border-slate-100 p-1.5 rounded">
-                                        <div className="text-[9px] text-slate-400 uppercase">Max Val</div>
-                                        <div className="font-mono font-bold text-red-600">{anomaly.val}</div>
-                                    </div>
-                                    <div className="flex-1 bg-slate-50 border border-slate-100 p-1.5 rounded">
-                                        <div className="text-[9px] text-slate-400 uppercase">Threshold</div>
-                                        <div className="font-mono font-semibold text-slate-600">{anomaly.threshold}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div className="text-xs text-slate-600 leading-relaxed border border-slate-200 p-3 rounded bg-white shadow-sm">
+                            Real-time Server-Sent Events (SSE) connected to port 3001. Chart animates live as metrics are ingested into POST /telemetry.
+                        </div>
                     </div>
                 </div>
-
             </div>
         </div>
     );

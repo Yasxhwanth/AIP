@@ -1,0 +1,336 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.upsertEntityInstance = upsertEntityInstance;
+exports.executeJob = executeJob;
+exports.startScheduler = startScheduler;
+const policy_engine_1 = require("./policy-engine");
+const connectors = {
+    /**
+     * REST_API — Fetch records from an HTTP endpoint.
+     * connectionConfig: { url, headers?, method?, responsePath? }
+     */
+    REST_API: async (config) => {
+        if (!config.url)
+            throw new Error('REST_API connector requires a url in connectionConfig');
+        const resp = await fetch(config.url, {
+            method: config.method ?? 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(config.headers ?? {}),
+            },
+            body: config.method === 'POST' && config.body ? JSON.stringify(config.body) : null,
+        });
+        if (!resp.ok) {
+            throw new Error(`REST_API fetch failed: ${resp.status} ${resp.statusText}`);
+        }
+        let data = await resp.json();
+        // Drill into the response if a responsePath is specified
+        if (config.responsePath) {
+            for (const key of config.responsePath.split('.')) {
+                data = data?.[key];
+            }
+        }
+        if (!Array.isArray(data)) {
+            throw new Error('REST_API connector: response is not an array (use responsePath to drill in)');
+        }
+        return data;
+    },
+    /**
+     * JSON_UPLOAD — Accept raw records passed inline in the request body.
+     */
+    JSON_UPLOAD: async (_config, inlineData) => {
+        if (!inlineData || !Array.isArray(inlineData)) {
+            throw new Error('JSON_UPLOAD connector: inline data[] is required');
+        }
+        return inlineData;
+    },
+    /**
+     * CSV_UPLOAD — Accept CSV text passed inline, parse into records.
+     */
+    CSV_UPLOAD: async (_config, inlineData) => {
+        if (!inlineData || !Array.isArray(inlineData)) {
+            throw new Error('CSV_UPLOAD connector: inline data[] is required (pre-parsed rows)');
+        }
+        return inlineData;
+    },
+};
+// ── Transform Engine ─────────────────────────────────────────────
+/**
+ * Maps raw external records to ontology-shaped payloads using fieldMapping.
+ *
+ * fieldMapping = { "temp": "temperature", "loc": "location" }
+ *   → input  { temp: 72.5, loc: "Building A", sensorId: "s1" }
+ *   → output { temperature: 72.5, location: "Building A" }
+ *
+ * Fields not in the mapping are dropped (except logicalIdField which is extracted separately).
+ */
+function transformRecord(record, fieldMapping) {
+    const mapped = {};
+    for (const [externalField, ontologyAttribute] of Object.entries(fieldMapping)) {
+        if (externalField in record) {
+            mapped[ontologyAttribute] = record[externalField];
+        }
+    }
+    return mapped;
+}
+// ── Entity Upsert (reusable ingest path) ─────────────────────────
+/**
+ * Upserts a single entity instance using the same bi-temporal logic
+ * as the POST /entity-types/:id/instances endpoint.
+ *
+ * Returns { success: true } on success, { success: false, error } on failure.
+ */
+async function upsertEntityInstance(entityType, logicalId, attrData, prisma) {
+    const now = new Date();
+    try {
+        const { eventId, previousState } = await prisma.$transaction(async (tx) => {
+            // Fetch the currently-active row
+            const current = await tx.entityInstance.findFirst({
+                where: {
+                    entityTypeId: entityType.id,
+                    logicalId,
+                    validTo: null,
+                },
+            });
+            // Close the currently-active row (if any)
+            if (current) {
+                await tx.entityInstance.update({
+                    where: { id: current.id },
+                    data: { validTo: now },
+                });
+            }
+            // Insert new active row
+            await tx.entityInstance.create({
+                data: {
+                    logicalId,
+                    entityTypeId: entityType.id,
+                    entityVersion: entityType.version,
+                    data: attrData,
+                    validFrom: now,
+                    validTo: null,
+                },
+            });
+            // Emit domain event
+            const idempotencyKey = `EntityStateChanged:${logicalId}:${now.toISOString()}`;
+            const domainEvent = await tx.domainEvent.create({
+                data: {
+                    idempotencyKey,
+                    eventType: 'EntityStateChanged',
+                    entityTypeId: entityType.id,
+                    logicalId,
+                    entityVersion: entityType.version,
+                    payload: {
+                        previousState: current?.data ?? null,
+                        newState: attrData,
+                        validFrom: now.toISOString(),
+                    },
+                },
+            });
+            // CQRS: Upsert read model projection
+            await tx.currentEntityState.upsert({
+                where: { logicalId },
+                create: {
+                    logicalId,
+                    entityTypeId: entityType.id,
+                    data: attrData,
+                    updatedAt: now,
+                },
+                update: {
+                    data: attrData,
+                    updatedAt: now,
+                },
+            });
+            return {
+                eventId: domainEvent.id,
+                previousState: current?.data ?? null,
+            };
+        });
+        // Fire-and-forget: evaluate policies
+        (0, policy_engine_1.evaluatePolicies)({
+            eventId,
+            eventType: 'EntityStateChanged',
+            entityTypeId: entityType.id,
+            logicalId,
+            entityVersion: entityType.version,
+            payload: {
+                previousState,
+                newState: attrData,
+                validFrom: now.toISOString(),
+            },
+        }, prisma);
+        return { success: true };
+    }
+    catch (error) {
+        return { success: false, error: String(error) };
+    }
+}
+// ── Job Execution Engine ─────────────────────────────────────────
+/**
+ * Executes a single integration job:
+ * 1. Creates a JobExecution record (PENDING → RUNNING)
+ * 2. Calls the appropriate connector to fetch records
+ * 3. Transforms each record using fieldMapping
+ * 4. Upserts each record as an entity instance
+ * 5. Updates the JobExecution with results
+ */
+async function executeJob(jobId, prisma, inlineData) {
+    // Load the job with its data source and target entity type
+    const job = await prisma.integrationJob.findUnique({
+        where: { id: jobId },
+        include: {
+            dataSource: true,
+            targetEntityType: { include: { attributes: true } },
+        },
+    });
+    if (!job)
+        throw new Error(`Integration job '${jobId}' not found`);
+    if (!job.enabled)
+        throw new Error(`Integration job '${job.name}' is disabled`);
+    if (!job.dataSource.enabled)
+        throw new Error(`Data source '${job.dataSource.name}' is disabled`);
+    // Create execution record
+    const execution = await prisma.jobExecution.create({
+        data: {
+            integrationJobId: jobId,
+            status: 'RUNNING',
+        },
+    });
+    let recordsProcessed = 0;
+    let recordsFailed = 0;
+    try {
+        // Step 1: Fetch records via connector
+        const connectorFn = connectors[job.dataSource.type];
+        if (!connectorFn) {
+            throw new Error(`Unsupported data source type: '${job.dataSource.type}'`);
+        }
+        const connectionConfig = job.dataSource.connectionConfig;
+        const rawRecords = await connectorFn(connectionConfig, inlineData);
+        // Step 2: Transform + Ingest each record
+        const fieldMapping = job.fieldMapping;
+        const entityType = {
+            id: job.targetEntityType.id,
+            version: job.targetEntityType.version,
+            name: job.targetEntityType.name,
+        };
+        for (const raw of rawRecords) {
+            const logicalId = raw[job.logicalIdField];
+            if (!logicalId || typeof logicalId !== 'string') {
+                recordsFailed++;
+                // eslint-disable-next-line no-console
+                console.warn(`[DataIntegration] Skipping record: missing or invalid logicalIdField '${job.logicalIdField}'`, raw);
+                continue;
+            }
+            const mapped = transformRecord(raw, fieldMapping);
+            const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma);
+            if (result.success) {
+                recordsProcessed++;
+            }
+            else {
+                recordsFailed++;
+                // eslint-disable-next-line no-console
+                console.warn(`[DataIntegration] Failed to ingest record ${logicalId}:`, result.error);
+            }
+        }
+        // Mark execution as completed
+        await prisma.jobExecution.update({
+            where: { id: execution.id },
+            data: {
+                status: 'COMPLETED',
+                recordsProcessed,
+                recordsFailed,
+                completedAt: new Date(),
+            },
+        });
+        return {
+            executionId: execution.id,
+            status: 'COMPLETED',
+            recordsProcessed,
+            recordsFailed,
+        };
+    }
+    catch (error) {
+        // Mark execution as failed
+        await prisma.jobExecution.update({
+            where: { id: execution.id },
+            data: {
+                status: 'FAILED',
+                recordsProcessed,
+                recordsFailed,
+                error: String(error),
+                completedAt: new Date(),
+            },
+        });
+        return {
+            executionId: execution.id,
+            status: 'FAILED',
+            recordsProcessed,
+            recordsFailed,
+            error: String(error),
+        };
+    }
+}
+// ── Simple Scheduler ─────────────────────────────────────────────
+/**
+ * A lightweight interval-based scheduler.
+ * Checks every 60 seconds for jobs with a `schedule` field.
+ * Supports simple interval patterns: "every:Xs", "every:Xm", "every:Xh"
+ * (e.g., "every:30s", "every:5m", "every:1h")
+ */
+const lastRunMap = new Map(); // jobId → last run timestamp (ms)
+function parseScheduleMs(schedule) {
+    const match = schedule.match(/^every:(\d+)(s|m|h)$/);
+    if (!match)
+        return null;
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+    switch (unit) {
+        case 's': return value * 1000;
+        case 'm': return value * 60 * 1000;
+        case 'h': return value * 60 * 60 * 1000;
+        default: return null;
+    }
+}
+function startScheduler(prisma) {
+    const TICK_INTERVAL = 60000; // check every 60 seconds
+    setInterval(async () => {
+        try {
+            const jobs = await prisma.integrationJob.findMany({
+                where: {
+                    enabled: true,
+                    schedule: { not: null },
+                    dataSource: { enabled: true },
+                },
+                include: { dataSource: true },
+            });
+            const now = Date.now();
+            for (const job of jobs) {
+                if (!job.schedule)
+                    continue;
+                const intervalMs = parseScheduleMs(job.schedule);
+                if (!intervalMs) {
+                    // eslint-disable-next-line no-console
+                    console.warn(`[Scheduler] Invalid schedule format for job '${job.name}': ${job.schedule}`);
+                    continue;
+                }
+                const lastRun = lastRunMap.get(job.id) ?? 0;
+                if (now - lastRun >= intervalMs) {
+                    lastRunMap.set(job.id, now);
+                    // eslint-disable-next-line no-console
+                    console.log(`[Scheduler] Running scheduled job '${job.name}'`);
+                    // Fire-and-forget
+                    executeJob(job.id, prisma).catch((err) => {
+                        // eslint-disable-next-line no-console
+                        console.error(`[Scheduler] Job '${job.name}' failed:`, err);
+                    });
+                }
+            }
+        }
+        catch (error) {
+            // eslint-disable-next-line no-console
+            console.error('[Scheduler] Tick error:', error);
+        }
+    }, TICK_INTERVAL);
+    // eslint-disable-next-line no-console
+    console.log(`[Scheduler] Started — checking every ${TICK_INTERVAL / 1000}s for scheduled jobs`);
+}
+//# sourceMappingURL=data-integration.js.map

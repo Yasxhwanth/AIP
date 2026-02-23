@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.JsonNullValueFilter = exports.QueryMode = exports.JsonNullValueInput = exports.SortOrder = exports.EntityInstanceScalarFieldEnum = exports.RelationshipDefinitionScalarFieldEnum = exports.AttributeDefinitionScalarFieldEnum = exports.EntityTypeScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.NullsOrder = exports.JsonNullValueFilter = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.ApiKeyScalarFieldEnum = exports.DecisionLogScalarFieldEnum = exports.ExecutionPlanScalarFieldEnum = exports.ActionDefinitionScalarFieldEnum = exports.DecisionRuleScalarFieldEnum = exports.InferenceResultScalarFieldEnum = exports.ModelVersionScalarFieldEnum = exports.ModelDefinitionScalarFieldEnum = exports.TelemetryRollupScalarFieldEnum = exports.ComputedMetricDefinitionScalarFieldEnum = exports.JobExecutionScalarFieldEnum = exports.IntegrationJobScalarFieldEnum = exports.DataSourceScalarFieldEnum = exports.TimeseriesMetricScalarFieldEnum = exports.CurrentGraphScalarFieldEnum = exports.CurrentEntityStateScalarFieldEnum = exports.AlertScalarFieldEnum = exports.PolicyDefinitionScalarFieldEnum = exports.DomainEventScalarFieldEnum = exports.EntityInstanceScalarFieldEnum = exports.RelationshipInstanceScalarFieldEnum = exports.RelationshipDefinitionScalarFieldEnum = exports.AttributeDefinitionScalarFieldEnum = exports.EntityTypeScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -78,7 +78,27 @@ exports.ModelName = {
     EntityType: 'EntityType',
     AttributeDefinition: 'AttributeDefinition',
     RelationshipDefinition: 'RelationshipDefinition',
-    EntityInstance: 'EntityInstance'
+    RelationshipInstance: 'RelationshipInstance',
+    EntityInstance: 'EntityInstance',
+    DomainEvent: 'DomainEvent',
+    PolicyDefinition: 'PolicyDefinition',
+    Alert: 'Alert',
+    CurrentEntityState: 'CurrentEntityState',
+    CurrentGraph: 'CurrentGraph',
+    TimeseriesMetric: 'TimeseriesMetric',
+    DataSource: 'DataSource',
+    IntegrationJob: 'IntegrationJob',
+    JobExecution: 'JobExecution',
+    ComputedMetricDefinition: 'ComputedMetricDefinition',
+    TelemetryRollup: 'TelemetryRollup',
+    ModelDefinition: 'ModelDefinition',
+    ModelVersion: 'ModelVersion',
+    InferenceResult: 'InferenceResult',
+    DecisionRule: 'DecisionRule',
+    ActionDefinition: 'ActionDefinition',
+    ExecutionPlan: 'ExecutionPlan',
+    DecisionLog: 'DecisionLog',
+    ApiKey: 'ApiKey'
 };
 /*
  * Enums
@@ -110,8 +130,19 @@ exports.RelationshipDefinitionScalarFieldEnum = {
     sourceEntityTypeId: 'sourceEntityTypeId',
     targetEntityTypeId: 'targetEntityTypeId'
 };
+exports.RelationshipInstanceScalarFieldEnum = {
+    id: 'id',
+    relationshipDefinitionId: 'relationshipDefinitionId',
+    sourceLogicalId: 'sourceLogicalId',
+    targetLogicalId: 'targetLogicalId',
+    properties: 'properties',
+    validFrom: 'validFrom',
+    validTo: 'validTo',
+    transactionTime: 'transactionTime'
+};
 exports.EntityInstanceScalarFieldEnum = {
     id: 'id',
+    logicalId: 'logicalId',
     entityTypeId: 'entityTypeId',
     entityVersion: 'entityVersion',
     data: 'data',
@@ -119,9 +150,197 @@ exports.EntityInstanceScalarFieldEnum = {
     validTo: 'validTo',
     transactionTime: 'transactionTime'
 };
+exports.DomainEventScalarFieldEnum = {
+    id: 'id',
+    idempotencyKey: 'idempotencyKey',
+    eventType: 'eventType',
+    entityTypeId: 'entityTypeId',
+    logicalId: 'logicalId',
+    entityVersion: 'entityVersion',
+    payload: 'payload',
+    occurredAt: 'occurredAt'
+};
+exports.PolicyDefinitionScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
+    entityTypeId: 'entityTypeId',
+    eventType: 'eventType',
+    condition: 'condition',
+    actionType: 'actionType',
+    actionConfig: 'actionConfig',
+    version: 'version',
+    enabled: 'enabled',
+    createdAt: 'createdAt'
+};
+exports.AlertScalarFieldEnum = {
+    id: 'id',
+    alertType: 'alertType',
+    severity: 'severity',
+    policyId: 'policyId',
+    policyVersion: 'policyVersion',
+    eventId: 'eventId',
+    entityTypeId: 'entityTypeId',
+    logicalId: 'logicalId',
+    payload: 'payload',
+    evaluationTrace: 'evaluationTrace',
+    acknowledged: 'acknowledged',
+    createdAt: 'createdAt'
+};
+exports.CurrentEntityStateScalarFieldEnum = {
+    logicalId: 'logicalId',
+    entityTypeId: 'entityTypeId',
+    data: 'data',
+    updatedAt: 'updatedAt'
+};
+exports.CurrentGraphScalarFieldEnum = {
+    id: 'id',
+    relationshipDefinitionId: 'relationshipDefinitionId',
+    relationshipName: 'relationshipName',
+    sourceLogicalId: 'sourceLogicalId',
+    targetLogicalId: 'targetLogicalId',
+    properties: 'properties'
+};
+exports.TimeseriesMetricScalarFieldEnum = {
+    id: 'id',
+    logicalId: 'logicalId',
+    metric: 'metric',
+    value: 'value',
+    timestamp: 'timestamp'
+};
+exports.DataSourceScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    type: 'type',
+    connectionConfig: 'connectionConfig',
+    enabled: 'enabled',
+    createdAt: 'createdAt'
+};
+exports.IntegrationJobScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    dataSourceId: 'dataSourceId',
+    targetEntityTypeId: 'targetEntityTypeId',
+    fieldMapping: 'fieldMapping',
+    logicalIdField: 'logicalIdField',
+    schedule: 'schedule',
+    enabled: 'enabled',
+    createdAt: 'createdAt'
+};
+exports.JobExecutionScalarFieldEnum = {
+    id: 'id',
+    integrationJobId: 'integrationJobId',
+    status: 'status',
+    recordsProcessed: 'recordsProcessed',
+    recordsFailed: 'recordsFailed',
+    error: 'error',
+    startedAt: 'startedAt',
+    completedAt: 'completedAt'
+};
+exports.ComputedMetricDefinitionScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    entityTypeId: 'entityTypeId',
+    expression: 'expression',
+    unit: 'unit',
+    enabled: 'enabled',
+    createdAt: 'createdAt'
+};
+exports.TelemetryRollupScalarFieldEnum = {
+    id: 'id',
+    logicalId: 'logicalId',
+    metric: 'metric',
+    windowSize: 'windowSize',
+    windowStart: 'windowStart',
+    avg: 'avg',
+    min: 'min',
+    max: 'max',
+    sum: 'sum',
+    count: 'count'
+};
+exports.ModelDefinitionScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    entityTypeId: 'entityTypeId',
+    description: 'description',
+    inputFields: 'inputFields',
+    outputField: 'outputField',
+    createdAt: 'createdAt'
+};
+exports.ModelVersionScalarFieldEnum = {
+    id: 'id',
+    modelDefinitionId: 'modelDefinitionId',
+    version: 'version',
+    status: 'status',
+    strategy: 'strategy',
+    hyperparameters: 'hyperparameters',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.InferenceResultScalarFieldEnum = {
+    id: 'id',
+    modelVersionId: 'modelVersionId',
+    logicalId: 'logicalId',
+    input: 'input',
+    output: 'output',
+    confidence: 'confidence',
+    createdAt: 'createdAt'
+};
+exports.DecisionRuleScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    entityTypeId: 'entityTypeId',
+    conditions: 'conditions',
+    logicOperator: 'logicOperator',
+    priority: 'priority',
+    autoExecute: 'autoExecute',
+    confidenceThreshold: 'confidenceThreshold',
+    enabled: 'enabled',
+    createdAt: 'createdAt'
+};
+exports.ActionDefinitionScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    type: 'type',
+    config: 'config',
+    createdAt: 'createdAt'
+};
+exports.ExecutionPlanScalarFieldEnum = {
+    id: 'id',
+    decisionRuleId: 'decisionRuleId',
+    actionDefinitionId: 'actionDefinitionId',
+    stepOrder: 'stepOrder',
+    continueOnFailure: 'continueOnFailure'
+};
+exports.DecisionLogScalarFieldEnum = {
+    id: 'id',
+    decisionRuleId: 'decisionRuleId',
+    logicalId: 'logicalId',
+    triggerType: 'triggerType',
+    triggerData: 'triggerData',
+    conditionResults: 'conditionResults',
+    decision: 'decision',
+    executionResults: 'executionResults',
+    status: 'status',
+    createdAt: 'createdAt'
+};
+exports.ApiKeyScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    keyHash: 'keyHash',
+    role: 'role',
+    rateLimit: 'rateLimit',
+    enabled: 'enabled',
+    lastUsedAt: 'lastUsedAt',
+    createdAt: 'createdAt'
+};
 exports.SortOrder = {
     asc: 'asc',
     desc: 'desc'
+};
+exports.NullableJsonNullValueInput = {
+    DbNull: exports.DbNull,
+    JsonNull: exports.JsonNull
 };
 exports.JsonNullValueInput = {
     JsonNull: exports.JsonNull

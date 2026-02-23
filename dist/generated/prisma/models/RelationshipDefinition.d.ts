@@ -140,6 +140,7 @@ export type RelationshipDefinitionWhereInput = {
     targetEntityTypeId?: Prisma.StringFilter<"RelationshipDefinition"> | string;
     sourceEntityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     targetEntityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
+    instances?: Prisma.RelationshipInstanceListRelationFilter;
 };
 export type RelationshipDefinitionOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
@@ -149,6 +150,7 @@ export type RelationshipDefinitionOrderByWithRelationInput = {
     targetEntityTypeId?: Prisma.SortOrder;
     sourceEntityType?: Prisma.EntityTypeOrderByWithRelationInput;
     targetEntityType?: Prisma.EntityTypeOrderByWithRelationInput;
+    instances?: Prisma.RelationshipInstanceOrderByRelationAggregateInput;
 };
 export type RelationshipDefinitionWhereUniqueInput = Prisma.AtLeast<{
     id?: string;
@@ -161,6 +163,7 @@ export type RelationshipDefinitionWhereUniqueInput = Prisma.AtLeast<{
     targetEntityTypeId?: Prisma.StringFilter<"RelationshipDefinition"> | string;
     sourceEntityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     targetEntityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
+    instances?: Prisma.RelationshipInstanceListRelationFilter;
 }, "id">;
 export type RelationshipDefinitionOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
@@ -188,6 +191,7 @@ export type RelationshipDefinitionCreateInput = {
     createdAt?: Date | string;
     sourceEntityType: Prisma.EntityTypeCreateNestedOneWithoutOutgoingRelationshipsInput;
     targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIncomingRelationshipsInput;
+    instances?: Prisma.RelationshipInstanceCreateNestedManyWithoutRelationshipDefInput;
 };
 export type RelationshipDefinitionUncheckedCreateInput = {
     id?: string;
@@ -195,6 +199,7 @@ export type RelationshipDefinitionUncheckedCreateInput = {
     createdAt?: Date | string;
     sourceEntityTypeId: string;
     targetEntityTypeId: string;
+    instances?: Prisma.RelationshipInstanceUncheckedCreateNestedManyWithoutRelationshipDefInput;
 };
 export type RelationshipDefinitionUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -202,6 +207,7 @@ export type RelationshipDefinitionUpdateInput = {
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     sourceEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutOutgoingRelationshipsNestedInput;
     targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIncomingRelationshipsNestedInput;
+    instances?: Prisma.RelationshipInstanceUpdateManyWithoutRelationshipDefNestedInput;
 };
 export type RelationshipDefinitionUncheckedUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -209,6 +215,7 @@ export type RelationshipDefinitionUncheckedUpdateInput = {
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     sourceEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     targetEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    instances?: Prisma.RelationshipInstanceUncheckedUpdateManyWithoutRelationshipDefNestedInput;
 };
 export type RelationshipDefinitionCreateManyInput = {
     id?: string;
@@ -257,6 +264,10 @@ export type RelationshipDefinitionMinOrderByAggregateInput = {
     createdAt?: Prisma.SortOrder;
     sourceEntityTypeId?: Prisma.SortOrder;
     targetEntityTypeId?: Prisma.SortOrder;
+};
+export type RelationshipDefinitionScalarRelationFilter = {
+    is?: Prisma.RelationshipDefinitionWhereInput;
+    isNot?: Prisma.RelationshipDefinitionWhereInput;
 };
 export type RelationshipDefinitionCreateNestedManyWithoutSourceEntityTypeInput = {
     create?: Prisma.XOR<Prisma.RelationshipDefinitionCreateWithoutSourceEntityTypeInput, Prisma.RelationshipDefinitionUncheckedCreateWithoutSourceEntityTypeInput> | Prisma.RelationshipDefinitionCreateWithoutSourceEntityTypeInput[] | Prisma.RelationshipDefinitionUncheckedCreateWithoutSourceEntityTypeInput[];
@@ -334,17 +345,31 @@ export type RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeNest
     updateMany?: Prisma.RelationshipDefinitionUpdateManyWithWhereWithoutTargetEntityTypeInput | Prisma.RelationshipDefinitionUpdateManyWithWhereWithoutTargetEntityTypeInput[];
     deleteMany?: Prisma.RelationshipDefinitionScalarWhereInput | Prisma.RelationshipDefinitionScalarWhereInput[];
 };
+export type RelationshipDefinitionCreateNestedOneWithoutInstancesInput = {
+    create?: Prisma.XOR<Prisma.RelationshipDefinitionCreateWithoutInstancesInput, Prisma.RelationshipDefinitionUncheckedCreateWithoutInstancesInput>;
+    connectOrCreate?: Prisma.RelationshipDefinitionCreateOrConnectWithoutInstancesInput;
+    connect?: Prisma.RelationshipDefinitionWhereUniqueInput;
+};
+export type RelationshipDefinitionUpdateOneRequiredWithoutInstancesNestedInput = {
+    create?: Prisma.XOR<Prisma.RelationshipDefinitionCreateWithoutInstancesInput, Prisma.RelationshipDefinitionUncheckedCreateWithoutInstancesInput>;
+    connectOrCreate?: Prisma.RelationshipDefinitionCreateOrConnectWithoutInstancesInput;
+    upsert?: Prisma.RelationshipDefinitionUpsertWithoutInstancesInput;
+    connect?: Prisma.RelationshipDefinitionWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.RelationshipDefinitionUpdateToOneWithWhereWithoutInstancesInput, Prisma.RelationshipDefinitionUpdateWithoutInstancesInput>, Prisma.RelationshipDefinitionUncheckedUpdateWithoutInstancesInput>;
+};
 export type RelationshipDefinitionCreateWithoutSourceEntityTypeInput = {
     id?: string;
     name: string;
     createdAt?: Date | string;
     targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIncomingRelationshipsInput;
+    instances?: Prisma.RelationshipInstanceCreateNestedManyWithoutRelationshipDefInput;
 };
 export type RelationshipDefinitionUncheckedCreateWithoutSourceEntityTypeInput = {
     id?: string;
     name: string;
     createdAt?: Date | string;
     targetEntityTypeId: string;
+    instances?: Prisma.RelationshipInstanceUncheckedCreateNestedManyWithoutRelationshipDefInput;
 };
 export type RelationshipDefinitionCreateOrConnectWithoutSourceEntityTypeInput = {
     where: Prisma.RelationshipDefinitionWhereUniqueInput;
@@ -359,12 +384,14 @@ export type RelationshipDefinitionCreateWithoutTargetEntityTypeInput = {
     name: string;
     createdAt?: Date | string;
     sourceEntityType: Prisma.EntityTypeCreateNestedOneWithoutOutgoingRelationshipsInput;
+    instances?: Prisma.RelationshipInstanceCreateNestedManyWithoutRelationshipDefInput;
 };
 export type RelationshipDefinitionUncheckedCreateWithoutTargetEntityTypeInput = {
     id?: string;
     name: string;
     createdAt?: Date | string;
     sourceEntityTypeId: string;
+    instances?: Prisma.RelationshipInstanceUncheckedCreateNestedManyWithoutRelationshipDefInput;
 };
 export type RelationshipDefinitionCreateOrConnectWithoutTargetEntityTypeInput = {
     where: Prisma.RelationshipDefinitionWhereUniqueInput;
@@ -410,6 +437,47 @@ export type RelationshipDefinitionUpdateManyWithWhereWithoutTargetEntityTypeInpu
     where: Prisma.RelationshipDefinitionScalarWhereInput;
     data: Prisma.XOR<Prisma.RelationshipDefinitionUpdateManyMutationInput, Prisma.RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeInput>;
 };
+export type RelationshipDefinitionCreateWithoutInstancesInput = {
+    id?: string;
+    name: string;
+    createdAt?: Date | string;
+    sourceEntityType: Prisma.EntityTypeCreateNestedOneWithoutOutgoingRelationshipsInput;
+    targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIncomingRelationshipsInput;
+};
+export type RelationshipDefinitionUncheckedCreateWithoutInstancesInput = {
+    id?: string;
+    name: string;
+    createdAt?: Date | string;
+    sourceEntityTypeId: string;
+    targetEntityTypeId: string;
+};
+export type RelationshipDefinitionCreateOrConnectWithoutInstancesInput = {
+    where: Prisma.RelationshipDefinitionWhereUniqueInput;
+    create: Prisma.XOR<Prisma.RelationshipDefinitionCreateWithoutInstancesInput, Prisma.RelationshipDefinitionUncheckedCreateWithoutInstancesInput>;
+};
+export type RelationshipDefinitionUpsertWithoutInstancesInput = {
+    update: Prisma.XOR<Prisma.RelationshipDefinitionUpdateWithoutInstancesInput, Prisma.RelationshipDefinitionUncheckedUpdateWithoutInstancesInput>;
+    create: Prisma.XOR<Prisma.RelationshipDefinitionCreateWithoutInstancesInput, Prisma.RelationshipDefinitionUncheckedCreateWithoutInstancesInput>;
+    where?: Prisma.RelationshipDefinitionWhereInput;
+};
+export type RelationshipDefinitionUpdateToOneWithWhereWithoutInstancesInput = {
+    where?: Prisma.RelationshipDefinitionWhereInput;
+    data: Prisma.XOR<Prisma.RelationshipDefinitionUpdateWithoutInstancesInput, Prisma.RelationshipDefinitionUncheckedUpdateWithoutInstancesInput>;
+};
+export type RelationshipDefinitionUpdateWithoutInstancesInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    sourceEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutOutgoingRelationshipsNestedInput;
+    targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIncomingRelationshipsNestedInput;
+};
+export type RelationshipDefinitionUncheckedUpdateWithoutInstancesInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    sourceEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    targetEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+};
 export type RelationshipDefinitionCreateManySourceEntityTypeInput = {
     id?: string;
     name: string;
@@ -427,12 +495,14 @@ export type RelationshipDefinitionUpdateWithoutSourceEntityTypeInput = {
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIncomingRelationshipsNestedInput;
+    instances?: Prisma.RelationshipInstanceUpdateManyWithoutRelationshipDefNestedInput;
 };
 export type RelationshipDefinitionUncheckedUpdateWithoutSourceEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     targetEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    instances?: Prisma.RelationshipInstanceUncheckedUpdateManyWithoutRelationshipDefNestedInput;
 };
 export type RelationshipDefinitionUncheckedUpdateManyWithoutSourceEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -445,18 +515,44 @@ export type RelationshipDefinitionUpdateWithoutTargetEntityTypeInput = {
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     sourceEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutOutgoingRelationshipsNestedInput;
+    instances?: Prisma.RelationshipInstanceUpdateManyWithoutRelationshipDefNestedInput;
 };
 export type RelationshipDefinitionUncheckedUpdateWithoutTargetEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     sourceEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    instances?: Prisma.RelationshipInstanceUncheckedUpdateManyWithoutRelationshipDefNestedInput;
 };
 export type RelationshipDefinitionUncheckedUpdateManyWithoutTargetEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     sourceEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+};
+/**
+ * Count Type RelationshipDefinitionCountOutputType
+ */
+export type RelationshipDefinitionCountOutputType = {
+    instances: number;
+};
+export type RelationshipDefinitionCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    instances?: boolean | RelationshipDefinitionCountOutputTypeCountInstancesArgs;
+};
+/**
+ * RelationshipDefinitionCountOutputType without action
+ */
+export type RelationshipDefinitionCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RelationshipDefinitionCountOutputType
+     */
+    select?: Prisma.RelationshipDefinitionCountOutputTypeSelect<ExtArgs> | null;
+};
+/**
+ * RelationshipDefinitionCountOutputType without action
+ */
+export type RelationshipDefinitionCountOutputTypeCountInstancesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.RelationshipInstanceWhereInput;
 };
 export type RelationshipDefinitionSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -466,6 +562,8 @@ export type RelationshipDefinitionSelect<ExtArgs extends runtime.Types.Extension
     targetEntityTypeId?: boolean;
     sourceEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+    instances?: boolean | Prisma.RelationshipDefinition$instancesArgs<ExtArgs>;
+    _count?: boolean | Prisma.RelationshipDefinitionCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["relationshipDefinition"]>;
 export type RelationshipDefinitionSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -496,6 +594,8 @@ export type RelationshipDefinitionOmit<ExtArgs extends runtime.Types.Extensions.
 export type RelationshipDefinitionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     sourceEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+    instances?: boolean | Prisma.RelationshipDefinition$instancesArgs<ExtArgs>;
+    _count?: boolean | Prisma.RelationshipDefinitionCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type RelationshipDefinitionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     sourceEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
@@ -510,6 +610,7 @@ export type $RelationshipDefinitionPayload<ExtArgs extends runtime.Types.Extensi
     objects: {
         sourceEntityType: Prisma.$EntityTypePayload<ExtArgs>;
         targetEntityType: Prisma.$EntityTypePayload<ExtArgs>;
+        instances: Prisma.$RelationshipInstancePayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: string;
@@ -848,6 +949,7 @@ export interface Prisma__RelationshipDefinitionClient<T, Null = never, ExtArgs e
     readonly [Symbol.toStringTag]: "PrismaPromise";
     sourceEntityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     targetEntityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
+    instances<T extends Prisma.RelationshipDefinition$instancesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.RelationshipDefinition$instancesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RelationshipInstancePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1255,6 +1357,29 @@ export type RelationshipDefinitionDeleteManyArgs<ExtArgs extends runtime.Types.E
      * Limit how many RelationshipDefinitions to delete.
      */
     limit?: number;
+};
+/**
+ * RelationshipDefinition.instances
+ */
+export type RelationshipDefinition$instancesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RelationshipInstance
+     */
+    select?: Prisma.RelationshipInstanceSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the RelationshipInstance
+     */
+    omit?: Prisma.RelationshipInstanceOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.RelationshipInstanceInclude<ExtArgs> | null;
+    where?: Prisma.RelationshipInstanceWhereInput;
+    orderBy?: Prisma.RelationshipInstanceOrderByWithRelationInput | Prisma.RelationshipInstanceOrderByWithRelationInput[];
+    cursor?: Prisma.RelationshipInstanceWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.RelationshipInstanceScalarFieldEnum | Prisma.RelationshipInstanceScalarFieldEnum[];
 };
 /**
  * RelationshipDefinition without action

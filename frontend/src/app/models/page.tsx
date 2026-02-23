@@ -17,17 +17,18 @@ import {
     Loader2
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
+import * as T from '@/lib/types';
 
 export default function ModelRegistry() {
-    const [models, setModels] = useState<any[]>([]);
+    const [models, setModels] = useState<T.ModelDefinition[]>([]);
     const [selectedModel, setSelectedModel] = useState<any>(null);
-    const [versions, setVersions] = useState<any[]>([]);
+    const [versions, setVersions] = useState<T.ModelVersion[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function fetchModels() {
             try {
-                const data = await ApiClient.get<any[]>('/models');
+                const data = await ApiClient.get<T.ModelDefinition[]>('/models');
                 setModels(data);
                 if (data.length > 0) {
                     setSelectedModel(data[0]);
@@ -45,7 +46,7 @@ export default function ModelRegistry() {
         if (!selectedModel) return;
         async function fetchVersions() {
             try {
-                const data = await ApiClient.get<any[]>(`/models/${selectedModel.id}/versions`);
+                const data = await ApiClient.get<T.ModelVersion[]>(`/models/${selectedModel.id}/versions`);
                 setVersions(data);
             } catch (err) {
                 console.error("Failed to fetch model versions", err);

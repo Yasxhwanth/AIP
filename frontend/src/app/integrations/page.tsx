@@ -19,22 +19,23 @@ import {
     Clock
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
+import * as T from '@/lib/types';
 
 export default function IntegrationsPipeline() {
     const [selectedJob, setSelectedJob] = useState<any>(null);
 
-    const [dataSources, setDataSources] = useState<any[]>([]);
-    const [jobs, setJobs] = useState<any[]>([]);
-    const [entityTypes, setEntityTypes] = useState<any[]>([]);
+    const [dataSources, setDataSources] = useState<T.DataSource[]>([]);
+    const [jobs, setJobs] = useState<T.IntegrationJob[]>([]);
+    const [entityTypes, setEntityTypes] = useState<T.EntityType[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function fetchPipelineData() {
             try {
                 const [dsData, jobData, etData] = await Promise.all([
-                    ApiClient.get<any[]>('/data-sources'),
-                    ApiClient.get<any[]>('/integration-jobs'),
-                    ApiClient.get<any[]>('/entity-types')
+                    ApiClient.get<T.DataSource[]>('/data-sources'),
+                    ApiClient.get<T.IntegrationJob[]>('/integration-jobs'),
+                    ApiClient.get<T.EntityType[]>('/entity-types')
                 ]);
                 setDataSources(dsData);
                 setJobs(jobData);
@@ -51,7 +52,7 @@ export default function IntegrationsPipeline() {
     }, []);
 
     const getSourceForJob = (job: any) => dataSources.find(ds => ds.id === job.dataSourceId);
-    const getDestForJob = (job: any) => entityTypes.find(et => et.id === job.entityTypeId);
+    const getDestForJob = (job: any) => entityTypes.find(et => et.id === job.targetEntityTypeId);
 
     return (
         <div className="h-full w-full flex flex-col bg-slate-100 text-slate-900 border-t border-slate-200 overflow-hidden">
@@ -261,7 +262,7 @@ export default function IntegrationsPipeline() {
                                 <div>
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Target Entity Type</label>
                                     <div className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded px-2 py-2 font-mono truncate">
-                                        {getDestForJob(selectedJob)?.name || selectedJob.entityTypeId}
+                                        {getDestForJob(selectedJob)?.name || selectedJob.targetEntityTypeId}
                                     </div>
                                 </div>
 

@@ -30,6 +30,7 @@ import {
     BarChart3
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
+import * as T from '@/lib/types';
 import Papa from "papaparse";
 
 
@@ -552,14 +553,14 @@ function DataPreviewView({ fileName, headers, data, totalRows, onBack, onMap }: 
 // ----------------------------------------------------------------------------
 
 function SchemaMappingWizard({ fileName, csvHeaders, csvData, onBack, onComplete }: { fileName: string, csvHeaders: string[], csvData: any[], onBack: () => void, onComplete: () => void }) {
-    const [entityTypes, setEntityTypes] = useState<any[]>([]);
+    const [entityTypes, setEntityTypes] = useState<T.EntityType[]>([]);
     const [selectedTypeId, setSelectedTypeId] = useState<string>('');
     const [mappings, setMappings] = useState<Record<string, string>>({});
     const [isImporting, setIsImporting] = useState(false);
 
     // Auto-map headers to properties if exact names match
     useEffect(() => {
-        ApiClient.get<any[]>('/entity-types').then(types => {
+        ApiClient.get<T.EntityType[]>('/entity-types').then(types => {
             setEntityTypes(types);
             if (types.length > 0) {
                 setSelectedTypeId(types[0].id);
@@ -606,7 +607,7 @@ function SchemaMappingWizard({ fileName, csvHeaders, csvData, onBack, onComplete
                             const attrDef = selectedType.attributes.find((a: any) => a.name === ontologyProp);
                             // Super basic type conversion logic for the demo backend
                             let val = row[csvCol];
-                            if (attrDef?.baseType === 'INTEGER' || attrDef?.baseType === 'DOUBLE') {
+                            if (attrDef?.dataType === 'INTEGER' || attrDef?.dataType === 'DOUBLE') {
                                 val = Number(val);
                             }
                             mappedRow[ontologyProp] = val;
@@ -708,7 +709,7 @@ function SchemaMappingWizard({ fileName, csvHeaders, csvData, onBack, onComplete
                                         <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
                                             {prop.name} {prop.required && <span className="text-red-500">*</span>}
                                         </span>
-                                        <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 border border-slate-200 rounded shadow-sm">{prop.baseType}</span>
+                                        <span className="text-[10px] font-mono text-slate-500 bg-white px-1.5 py-0.5 border border-slate-200 rounded shadow-sm">{prop.dataType}</span>
                                     </div>
                                 ))}
                             </div>
@@ -760,7 +761,7 @@ function SchemaMappingWizard({ fileName, csvHeaders, csvData, onBack, onComplete
                                                         >
                                                             <option value="" className="text-slate-400 font-normal">-- Ignore --</option>
                                                             {selectedType?.attributes.map((p: any) => (
-                                                                <option key={p.name} value={p.name}>{p.name} ({p.baseType})</option>
+                                                                <option key={p.name} value={p.name}>{p.name} ({p.dataType})</option>
                                                             ))}
                                                         </select>
                                                         <ChevronRight className="absolute right-12 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={14} />
