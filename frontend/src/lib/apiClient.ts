@@ -7,10 +7,19 @@ if (typeof window !== 'undefined') {
     sessionToken = sessionStorage.getItem('aip_token');
 }
 
+let activeProjectId: string | null = null;
+if (typeof window !== 'undefined') {
+    activeProjectId = localStorage.getItem('aip_active_project_id');
+}
+
 async function getHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json'
     };
+
+    if (activeProjectId) {
+        headers['X-Project-Id'] = activeProjectId;
+    }
 
     // 1. Bearer Token (Highest Priority)
     if (sessionToken) {
@@ -54,6 +63,9 @@ async function getHeaders(): Promise<Record<string, string>> {
 }
 
 export class ApiClient {
+    static setProjectId(id: string) {
+        activeProjectId = id;
+    }
 
     static async get<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
         const url = new URL(endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`);
