@@ -13,6 +13,22 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Core Organization ──────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  entityTypes      EntityType[]
+  dataSources      DataSource[]
+  integrationJobs  IntegrationJob[]
+  decisionRules    DecisionRule[]
+  modelDefinitions ModelDefinition[]
+  dashboards       Dashboard[]
+}
+
 model EntityType {
   id        String   @id @default(uuid())
   name      String
@@ -21,14 +37,18 @@ model EntityType {
 
   attributes            AttributeDefinition[]
   instances             EntityInstance[]
-  outgoingRelationships RelationshipDefinition[] @relation("RelationshipSource")
-  incomingRelationships RelationshipDefinition[] @relation("RelationshipTarget")
+  outgoingRelationships RelationshipDefinition[]   @relation("RelationshipSource")
+  incomingRelationships RelationshipDefinition[]   @relation("RelationshipTarget")
   integrationJobs       IntegrationJob[]
   computedMetrics       ComputedMetricDefinition[]
   modelDefinitions      ModelDefinition[]
   decisionRules         DecisionRule[]
 
-  @@unique([name, version])
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name, version])
+  @@index([projectId])
 }
 
 model AttributeDefinition {
@@ -60,7 +80,7 @@ model RelationshipDefinition {
 }
 
 model RelationshipInstance {
-  id                       String   @id @default(uuid())
+  id                       String @id @default(uuid())
   relationshipDefinitionId String
   sourceLogicalId          String
   targetLogicalId          String
@@ -68,7 +88,7 @@ model RelationshipInstance {
 
   validFrom       DateTime
   validTo         DateTime?
-  transactionTime DateTime @default(now())
+  transactionTime DateTime  @default(now())
 
   relationshipDef RelationshipDefinition @relation(fields: [relationshipDefinitionId], references: [id])
 
@@ -78,7 +98,7 @@ model RelationshipInstance {
 }
 
 model EntityInstance {
-  id            String   @id @default(uuid())
+  id            String @id @default(uuid())
   logicalId     String
   entityTypeId  String
   entityVersion Int
@@ -86,7 +106,7 @@ model EntityInstance {
 
   validFrom       DateTime
   validTo         DateTime?
-  transactionTime DateTime @default(now())
+  transactionTime DateTime  @default(now())
 
   entityType EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
 
@@ -95,14 +115,14 @@ model EntityInstance {
 }
 
 model DomainEvent {
-  id              String   @id @default(uuid())
-  idempotencyKey  String?  @unique
-  eventType       String
-  entityTypeId    String
-  logicalId       String
-  entityVersion   Int
-  payload         Json
-  occurredAt      DateTime @default(now())
+  id             String   @id @default(uuid())
+  idempotencyKey String?  @unique
+  eventType      String
+  entityTypeId   String
+  logicalId      String
+  entityVersion  Int
+  payload        Json
+  occurredAt     DateTime @default(now())
 
   @@index([entityTypeId, logicalId])
   @@index([eventType])
@@ -115,9 +135,9 @@ model PolicyDefinition {
   description  String?
   entityTypeId String
   eventType    String   @default("EntityStateChanged")
-  condition    Json     // { "field": "temperature", "operator": ">", "value": 100 }
+  condition    Json // { "field": "temperature", "operator": ">", "value": 100 }
   actionType   String   @default("EmitAlert")
-  actionConfig Json?    // { "alertType": "HighTemperatureAlert", "severity": "critical" }
+  actionConfig Json? // { "alertType": "HighTemperatureAlert", "severity": "critical" }
   version      Int      @default(1)
   enabled      Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -156,9 +176,8 @@ model CurrentEntityState {
   @@index([entityTypeId])
 }
 
-
 model CurrentGraph {
-  id                       String  @id @default(uuid())
+  id                       String @id @default(uuid())
   relationshipDefinitionId String
   relationshipName         String
   sourceLogicalId          String
@@ -174,8 +193,8 @@ model CurrentGraph {
 
 model TimeseriesMetric {
   id        String   @id @default(uuid())
-  logicalId String   // The entity this metric belongs to
-  metric    String   // e.g., "temperature", "pressure"
+  logicalId String // The entity this metric belongs to
+  metric    String // e.g., "temperature", "pressure"
   value     Float
   timestamp DateTime @default(now())
 
@@ -188,12 +207,17 @@ model TimeseriesMetric {
 model DataSource {
   id               String   @id @default(uuid())
   name             String   @unique
-  type             String   // REST_API, JSON_UPLOAD, CSV_UPLOAD
-  connectionConfig Json     // { url, headers, auth, ... }
+  type             String // REST_API, JSON_UPLOAD, CSV_UPLOAD
+  connectionConfig Json // { url, headers, auth, ... }
   enabled          Boolean  @default(true)
   createdAt        DateTime @default(now())
 
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   integrationJobs IntegrationJob[]
+
+  @@index([projectId])
 }
 
 model IntegrationJob {
@@ -201,29 +225,33 @@ model IntegrationJob {
   name               String   @unique
   dataSourceId       String
   targetEntityTypeId String
-  fieldMapping       Json     // { "external_field": "ontology_attribute", ... }
-  logicalIdField     String   // Which external field becomes logicalId
-  schedule           String?  // Cron expression for polling (null = manual only)
+  fieldMapping       Json // { "external_field": "ontology_attribute", ... }
+  logicalIdField     String // Which external field becomes logicalId
+  schedule           String? // Cron expression for polling (null = manual only)
   enabled            Boolean  @default(true)
   createdAt          DateTime @default(now())
 
-  dataSource       DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Restrict)
-  targetEntityType EntityType @relation(fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  dataSource       DataSource     @relation(fields: [dataSourceId], references: [id], onDelete: Restrict)
+  targetEntityType EntityType     @relation(fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
   executions       JobExecution[]
 
+  @@index([projectId])
   @@index([dataSourceId])
   @@index([targetEntityTypeId])
 }
 
 model JobExecution {
-  id                String    @id @default(uuid())
-  integrationJobId  String
-  status            String    @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
-  recordsProcessed  Int       @default(0)
-  recordsFailed     Int       @default(0)
-  error             String?
-  startedAt         DateTime  @default(now())
-  completedAt       DateTime?
+  id               String    @id @default(uuid())
+  integrationJobId String
+  status           String    @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
+  recordsProcessed Int       @default(0)
+  recordsFailed    Int       @default(0)
+  error            String?
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
 
   integrationJob IntegrationJob @relation(fields: [integrationJobId], references: [id], onDelete: Cascade)
 
@@ -236,8 +264,8 @@ model ComputedMetricDefinition {
   id           String   @id @default(uuid())
   name         String
   entityTypeId String
-  expression   String   // e.g., "output / input * 100"
-  unit         String?  // e.g., "%", "kW"
+  expression   String // e.g., "output / input * 100"
+  unit         String? // e.g., "%", "kW"
   enabled      Boolean  @default(true)
   createdAt    DateTime @default(now())
 
@@ -251,7 +279,7 @@ model TelemetryRollup {
   id          String   @id @default(uuid())
   logicalId   String
   metric      String
-  windowSize  String   // "5m", "1h", "1d"
+  windowSize  String // "5m", "1h", "1d"
   windowStart DateTime
   avg         Float
   min         Float
@@ -270,25 +298,29 @@ model ModelDefinition {
   name         String   @unique
   entityTypeId String
   description  String?
-  inputFields  Json     // ["temperature", "pressure", "vibration"]
-  outputField  String   // e.g., "anomalyScore"
+  inputFields  Json // ["temperature", "pressure", "vibration"]
+  outputField  String // e.g., "anomalyScore"
   createdAt    DateTime @default(now())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   entityType EntityType     @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
   versions   ModelVersion[]
 
+  @@index([projectId])
   @@index([entityTypeId])
 }
 
 model ModelVersion {
-  id                  String   @id @default(uuid())
-  modelDefinitionId   String
-  version             Int
-  status              String   @default("DRAFT") // DRAFT, STAGING, PRODUCTION, RETIRED
-  strategy            String   // THRESHOLD, ANOMALY_ZSCORE, LINEAR_REGRESSION, CUSTOM
-  hyperparameters     Json     // Strategy-specific config
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                String   @id @default(uuid())
+  modelDefinitionId String
+  version           Int
+  status            String   @default("DRAFT") // DRAFT, STAGING, PRODUCTION, RETIRED
+  strategy          String // THRESHOLD, ANOMALY_ZSCORE, LINEAR_REGRESSION, CUSTOM
+  hyperparameters   Json // Strategy-specific config
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   modelDefinition  ModelDefinition   @relation(fields: [modelDefinitionId], references: [id], onDelete: Cascade)
   inferenceResults InferenceResult[]
@@ -298,13 +330,13 @@ model ModelVersion {
 }
 
 model InferenceResult {
-  id              String   @id @default(uuid())
-  modelVersionId  String
-  logicalId       String
-  input           Json
-  output          Json
-  confidence      Float?
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  modelVersionId String
+  logicalId      String
+  input          Json
+  output         Json
+  confidence     Float?
+  createdAt      DateTime @default(now())
 
   modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Cascade)
 
@@ -315,29 +347,33 @@ model InferenceResult {
 // ── Decision & Execution Engine ───────────────────────────────
 
 model DecisionRule {
-  id                   String   @id @default(uuid())
-  name                 String   @unique
-  entityTypeId         String
-  conditions           Json     // [{ field, operator, value }]
-  logicOperator        String   @default("AND") // AND | OR
-  priority             Int      @default(100)    // lower = higher priority
-  autoExecute          Boolean  @default(false)  // true = skip approval
-  confidenceThreshold  Float?   // only fire if inference confidence >= this
-  enabled              Boolean  @default(true)
-  createdAt            DateTime @default(now())
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  entityTypeId        String
+  conditions          Json // [{ field, operator, value }]
+  logicOperator       String   @default("AND") // AND | OR
+  priority            Int      @default(100) // lower = higher priority
+  autoExecute         Boolean  @default(false) // true = skip approval
+  confidenceThreshold Float? // only fire if inference confidence >= this
+  enabled             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   entityType     EntityType      @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
   executionPlans ExecutionPlan[]
   decisionLogs   DecisionLog[]
 
+  @@index([projectId])
   @@index([entityTypeId, enabled])
 }
 
 model ActionDefinition {
   id        String   @id @default(uuid())
   name      String   @unique
-  type      String   // WEBHOOK, UPDATE_ENTITY, CREATE_ALERT, RUN_INFERENCE, LOG_ONLY
-  config    Json     // type-specific: { url, headers, fields, severity, ... }
+  type      String // WEBHOOK, UPDATE_ENTITY, CREATE_ALERT, RUN_INFERENCE, LOG_ONLY
+  config    Json // type-specific: { url, headers, fields, severity, ... }
   createdAt DateTime @default(now())
 
   executionPlans ExecutionPlan[]
@@ -361,11 +397,11 @@ model DecisionLog {
   id               String   @id @default(uuid())
   decisionRuleId   String
   logicalId        String
-  triggerType      String   // INFERENCE, STATE_CHANGE, MANUAL, SIMULATION
-  triggerData      Json     // snapshot of input data
-  conditionResults Json     // per-condition evaluation details
-  decision         String   // EXECUTE, PENDING_APPROVAL, SKIPPED, SIMULATED
-  executionResults Json?    // per-step action results
+  triggerType      String // INFERENCE, STATE_CHANGE, MANUAL, SIMULATION
+  triggerData      Json // snapshot of input data
+  conditionResults Json // per-condition evaluation details
+  decision         String // EXECUTE, PENDING_APPROVAL, SKIPPED, SIMULATED
+  executionResults Json? // per-step action results
   status           String   @default("PENDING") // COMPLETED, FAILED, PENDING, SIMULATED
   createdAt        DateTime @default(now())
 
@@ -380,10 +416,42 @@ model DecisionLog {
 model ApiKey {
   id         String    @id @default(uuid())
   name       String
-  keyHash    String    @unique    // SHA-256 hash
+  keyHash    String    @unique // SHA-256 hash
   role       String    @default("VIEWER") // ADMIN, OPERATOR, VIEWER
-  rateLimit  Int       @default(100)      // requests per minute
+  rateLimit  Int       @default(100) // requests per minute
   enabled    Boolean   @default(true)
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
+}
+
+// ── UI Dashboard Builder ─────────────────────────────────────────
+
+model Dashboard {
+  id        String   @id @default(uuid())
+  projectId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  widgets DashboardWidget[]
+
+  @@index([projectId])
+}
+
+model DashboardWidget {
+  id          String @id @default(uuid())
+  dashboardId String
+  type        String // e.g., "TELEMETRY", "MAP", "ONTOLOGY_GRAPH", "DATA_INTEGRATION"
+  configData  Json // Widget specific config (e.g. which entity or metric to show)
+
+  // React-Grid-Layout properties
+  x Int // Grid X position
+  y Int // Grid Y position
+  w Int // Grid width
+  h Int // Grid height
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardId])
 }

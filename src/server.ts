@@ -42,6 +42,54 @@ app.use(requestLogger());
 app.use(apiKeyAuth(prisma));
 app.use(createRateLimiter());
 
+
+// ── Projects & Dashboards ────────────────────────────────────────
+
+app.post('/projects', async (req, res) => {
+  try {
+    const project = await prisma.project.create({ data: { name: req.body.name || 'New Project', description: req.body.description } });
+    return res.status(201).json(project);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/projects', async (req, res) => {
+  try {
+    const projects = await prisma.project.findMany({ orderBy: { createdAt: 'desc' } });
+    return res.json(projects);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/dashboards', async (req, res) => {
+  try {
+    const dashboard = await prisma.dashboard.create({
+      data: { name: req.body.name, projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID }
+    });
+    return res.status(201).json(dashboard);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/dashboards', async (req, res) => {
+  try {
+    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    const dashboards = await prisma.dashboard.findMany({
+      where: { projectId },
+      include: { widgets: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(dashboards);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── End Projects & Dashboards ────────────────────────────────────
+
 // ── Health Checks (no auth) ──────────────────────────────────────
 
 app.get('/api/v1/health', (_req, res) => {
@@ -158,6 +206,7 @@ app.post('/entity-types', async (req, res) => {
   try {
     const created = await prisma.entityType.create({
       data: {
+        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
         name,
         version: 1,
         attributes: {
@@ -288,6 +337,7 @@ app.put('/entity-types/:id', async (req, res) => {
     // Insert-only versioning: create a new EntityType row + new AttributeDefinition rows.
     const createdVersion = await prisma.entityType.create({
       data: {
+        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
         name: existing.name,
         version: newVersion,
         attributes: {
@@ -1198,6 +1248,7 @@ app.post('/data-sources', async (req, res) => {
 
     const source = await prisma.dataSource.create({
       data: {
+        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
         name,
         type,
         connectionConfig: connectionConfig ?? ({} as Prisma.InputJsonValue),
@@ -1303,6 +1354,7 @@ app.post('/integration-jobs', async (req, res) => {
 
     const job = await prisma.integrationJob.create({
       data: {
+        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
         name,
         dataSourceId,
         targetEntityTypeId,
@@ -1597,6 +1649,7 @@ app.post('/models', async (req, res) => {
 
     const model = await prisma.modelDefinition.create({
       data: {
+        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
         name,
         entityTypeId,
         description: description ?? null,
@@ -1785,6 +1838,7 @@ app.post('/decision-rules', async (req, res) => {
     }
     const rule = await prisma.decisionRule.create({
       data: {
+        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
         name,
         entityTypeId,
         conditions: conditions as Prisma.InputJsonValue,
@@ -1970,14 +2024,53 @@ app.get('/decision-logs', async (req, res) => {
   }
 });
 
+app.post('/decision-logs/:id/execute', async (req, res) => {
+  try {
+    const log = await prisma.decisionLog.findUnique({
+      where: { id: req.params.id },
+      include: { decisionRule: true }
+    });
+
+    if (!log) return res.status(404).json({ error: 'decision log not found' });
+    if (log.status !== 'PENDING') return res.status(400).json({ error: `Cannot execute log with status ${log.status}` });
+
+    // Mark it as executed. In a full system, we might orchestrate Action Definitions here.
+    // However, Phase 5 requested a "mock" execute state transition:
+    const updated = await prisma.decisionLog.update({
+      where: { id: req.params.id },
+      data: { status: 'COMPLETED' }
+    });
+
+    return res.json({ success: true, executedLog: updated });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to execute logic', details: String(error) });
+  }
+});
+
 // ── Error Handler ────────────────────────────────────────────────
 
 app.use(errorHandler());
 
+
+// ── Server & Graceful Shutdown ───────────────────────────────────
+
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
   logger.info(`Server listening on http://0.0.0.0:${PORT}`);
+
+  try {
+    let proj = await prisma.project.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!proj) {
+      proj = await prisma.project.create({
+        data: { name: 'Default Workspace', description: 'Auto-generated default workspace' }
+      });
+      logger.info(`Created default project: ${proj.id}`);
+    }
+    (global as any).DEFAULT_PROJECT_ID = proj.id;
+  } catch (err) {
+    logger.error({ err }, 'Failed to create default project');
+  }
 
   // Start the lightweight job scheduler
   startScheduler(prisma);
