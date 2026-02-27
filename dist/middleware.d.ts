@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodSchema } from 'zod';
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 import logger from './logger';
 export interface AuthContext {
     apiKeyId: string;
     apiKeyName: string;
     role: string;
+    projectId?: string | null;
 }
 declare global {
     namespace Express {

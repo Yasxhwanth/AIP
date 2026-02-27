@@ -2,16 +2,19 @@ import 'dotenv/config';
 import express from 'express';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, Prisma } from './generated/prisma/client';
+import { PrismaClient, Prisma } from './generated/prisma';
 import { evaluatePolicies } from './policy-engine';
 import { executeJob, startScheduler } from './data-integration';
 import { SchemaInferenceService } from './schema-inference-service';
-import { RelationshipDerivationService } from './relationship-derivation-service';
+import { RelationshipDerivationService, startConfidenceDecayScheduler } from './relationship-derivation-service';
 import { evaluateComputedMetrics } from './computed-metrics';
 import { computeRollups, computeAllRecentRollups, startRollupScheduler } from './rollup-engine';
+import { Orchestrator } from './orchestrator';
 import { runInference, runInferenceByModel, runAllModelsForEntity } from './inference-engine';
 import { executeDecision, evaluateAllRules } from './decision-engine';
 import { IdentityService } from './identity-service';
+import { LineageService } from './lineage-service';
+import { AbacEngine } from './abac-engine';
 import helmet from 'helmet';
 import cors from 'cors';
 import logger from './logger';
@@ -35,6 +38,7 @@ const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 const app = express();
+const lineageSvc = new LineageService(prisma);
 
 // ── Enterprise Middleware ─────────────────────────────────────────
 app.use(helmet());
@@ -437,10 +441,27 @@ app.put('/entity-types/:id', async (req, res) => {
   try {
     const existing = await prisma.entityType.findUnique({
       where: { id: req.params.id },
+      include: { attributes: true },
     });
 
     if (!existing) {
       return res.status(404).json({ error: 'entity type not found' });
+    }
+
+    // Data Contract Enforcement: Check lineage graph for downstream dependencies
+    const impacts = await lineageSvc.simulateBreakingChange('EntityType', existing.id);
+    if (!impacts.allow) {
+      const oldAttrNames = existing.attributes.map((a) => a.name);
+      const newAttrNames = attributes.map((a) => a.name);
+      const removed = oldAttrNames.filter((n) => !newAttrNames.includes(n));
+
+      if (removed.length > 0) {
+        return res.status(409).json({
+          error: 'Contract Violation: Downstream models/rules rely on this EntityType schema. Removing attributes is a breaking change.',
+          removedAttributes: removed,
+          impactedConsumers: impacts.impactedConsumers,
+        });
+      }
     }
 
     const highestVersion = await prisma.entityType.findFirst({
@@ -1516,6 +1537,14 @@ app.post('/integration-jobs', async (req, res) => {
       include: { dataSource: true, targetEntityType: true },
     });
 
+    await lineageSvc.registerEdge({
+      sourceType: 'DataSource',
+      sourceId: dataSourceId,
+      targetType: 'EntityType',
+      targetId: targetEntityTypeId,
+      transformation: `IntegrationJob:${job.id}`,
+    });
+
     return res.status(201).json(job);
   } catch (error: unknown) {
     if ((error as any)?.code === 'P2002') {
@@ -1612,12 +1641,24 @@ app.post('/integration-jobs/:id/execute', async (req, res) => {
   try {
     const { data } = req.body ?? {};
 
-    const result = await executeJob(req.params.id, prisma, data);
+    const result = await executeJob(req.params.id, prisma, undefined, data);
     const statusCode = result.status === 'COMPLETED' ? 200 : 500;
 
     return res.status(statusCode).json(result);
   } catch (error) {
     return res.status(500).json({ error: 'failed to execute job', details: String(error) });
+  }
+});
+
+// ── Data Lineage & Provenance ────────────────────────────────────────
+
+app.get('/api/v1/lineage/:type/:id/trace', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const trace = await lineageSvc.getFullUpstreamTrace(type, id);
+    return res.json(trace);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to fetch lineage trace', details: String(error) });
   }
 });
 
@@ -1628,7 +1669,7 @@ app.get('/integration-jobs/:id/executions', async (req, res) => {
       return res.status(404).json({ error: 'integration job not found' });
     }
 
-    const executions = await prisma.jobExecution.findMany({
+    const executions = await prisma.jobQueue.findMany({
       where: { integrationJobId: req.params.id },
       orderBy: { startedAt: 'desc' },
     });
@@ -1636,6 +1677,47 @@ app.get('/integration-jobs/:id/executions', async (req, res) => {
     return res.json(executions);
   } catch (error) {
     return res.status(500).json({ error: 'failed to list executions', details: String(error) });
+  }
+});
+
+// ── Orchestration & Job Queue ──────────────────────────────────────
+
+app.get('/api/v1/orchestration/jobs', async (req, res) => {
+  try {
+    const jobs = await prisma.jobQueue.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return res.json(jobs);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to list orchestration jobs', details: String(error) });
+  }
+});
+
+app.post('/api/v1/orchestration/jobs/:id/replay', async (req, res) => {
+  try {
+    const job = await prisma.jobQueue.findUnique({ where: { id: req.params.id } });
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (job.status !== 'FAILED' && job.status !== 'DEAD_LETTER') {
+      return res.status(400).json({ error: 'Job is not in a replayable state' });
+    }
+
+    const replayedJob = await prisma.jobQueue.update({
+      where: { id: job.id },
+      data: {
+        status: 'QUEUED',
+        attempts: 0,
+        nextAttemptAt: new Date(),
+        lastError: null,
+      }
+    });
+
+    return res.json(replayedJob);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to replay job', details: String(error) });
   }
 });
 
@@ -2370,12 +2452,27 @@ app.post('/api/v1/identity/candidates/:id/merge', async (req, res) => {
 app.post('/api/v1/identity/candidates/:id/reject', async (req, res) => {
   try {
     const reviewerName = req.auth?.apiKeyName ?? 'system';
-    await (prisma as any).matchCandidate.update({
+    const candidate = await (prisma as any).matchCandidate.update({
       where: { id: req.params.id },
       data: {
         status: 'REJECTED',
         reviewedBy: reviewerName,
         reviewedAt: new Date(),
+      }
+    });
+
+    // Active Learning: Record human decision
+    await (prisma as any).matchResolutionHistory.create({
+      data: {
+        matchCandidateId: candidate.id,
+        logicalIdA: candidate.logicalIdA,
+        logicalIdB: candidate.logicalIdB,
+        entityTypeId: candidate.entityTypeId,
+        scoreOverall: candidate.scoreOverall,
+        scoreBreakdown: candidate.scoreBreakdown,
+        matchReasons: candidate.matchReasons,
+        resolution: 'REJECTED',
+        resolvedBy: reviewerName,
       }
     });
 
@@ -2392,6 +2489,95 @@ app.post('/api/v1/identity/candidates/:id/reject', async (req, res) => {
 
     return res.json({ success: true });
   } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// Bulk Merge Candidates
+app.post('/api/v1/identity/merge-batch', async (req, res) => {
+  try {
+    const { candidateIds } = req.body;
+    if (!Array.isArray(candidateIds)) return res.status(400).json({ error: 'candidateIds must be an array' });
+
+    const reviewerName = req.auth?.apiKeyName ?? 'system';
+    const results = [];
+
+    for (const id of candidateIds) {
+      try {
+        await IdentityService.mergeEntities(id, reviewerName, prisma as any);
+
+        await (prisma as any).auditLog.create({
+          data: {
+            actor: reviewerName,
+            actorRole: req.auth?.role ?? 'UNKNOWN',
+            action: 'MERGE_CANDIDATE_BATCH',
+            resourceType: 'MatchCandidate',
+            resourceId: id,
+            metadata: { correlationId: req.correlationId, batch: true },
+          }
+        });
+        results.push({ id, status: 'success' });
+      } catch (e: any) {
+        results.push({ id, status: 'error', error: e.message });
+      }
+    }
+
+    return res.json({ success: true, results });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// Rollback a Merge (Un-merge)
+app.post('/api/v1/identity/rollback/:candidateId', async (req, res) => {
+  try {
+    const candidateId = req.params.candidateId;
+    const reviewerName = req.auth?.apiKeyName ?? 'system';
+
+    const p = prisma as any;
+    const candidate = await p.matchCandidate.findUnique({ where: { id: candidateId } });
+    if (!candidate || candidate.status !== 'MERGED') {
+      return res.status(400).json({ error: 'Candidate not found or not MERGED' });
+    }
+
+    // Simplistic rollback for demo: Mark candidate back to PENDING and record history.
+    await p.matchCandidate.update({
+      where: { id: candidateId },
+      data: {
+        status: 'PENDING',
+        reviewedBy: null,
+        reviewedAt: null,
+        mergedIntoId: null
+      }
+    });
+
+    await p.matchResolutionHistory.create({
+      data: {
+        matchCandidateId: candidate.id,
+        logicalIdA: candidate.logicalIdA,
+        logicalIdB: candidate.logicalIdB,
+        entityTypeId: candidate.entityTypeId,
+        scoreOverall: candidate.scoreOverall,
+        scoreBreakdown: candidate.scoreBreakdown,
+        matchReasons: candidate.matchReasons,
+        resolution: 'ROLLBACK',
+        resolvedBy: reviewerName,
+      }
+    });
+
+    await p.auditLog.create({
+      data: {
+        actor: reviewerName,
+        actorRole: req.auth?.role ?? 'UNKNOWN',
+        action: 'ROLLBACK_MERGE',
+        resourceType: 'MatchCandidate',
+        resourceId: candidateId,
+        metadata: { correlationId: req.correlationId },
+      }
+    });
+
+    return res.json({ success: true, message: 'Merge rolled back to pending state' });
+  } catch (err: any) {
     return res.status(500).json({ error: String(err) });
   }
 });
@@ -2429,6 +2615,352 @@ app.get('/api/v1/audit', async (req, res) => {
       take: parseInt(limit as string) || 100,
     });
     return res.json(logs);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── ABAC Policy Simulation API ─────────────────────────────────────
+
+app.post('/api/v1/policy/simulate', async (req, res) => {
+  try {
+    const { action, resource } = req.body;
+    if (!action || !resource || !resource.type) {
+      return res.status(400).json({ error: 'Missing required fields: action, resource.type' });
+    }
+
+    // Determine actor from auth, fallback to what's provided in body for pure simulation
+    const actor = req.body.actor || {
+      apiKeyId: req.auth?.apiKeyId ?? 'sim-key',
+      apiKeyName: req.auth?.apiKeyName ?? 'sim-user',
+      role: req.auth?.role ?? 'VIEWER',
+      clearanceLevel: req.body.actor?.clearanceLevel ?? 1 // default mock
+    };
+
+    const engine = new AbacEngine(prisma as any);
+    const result = await engine.evaluate(actor, action, resource);
+
+    return res.json({
+      actor,
+      action,
+      resource,
+      evaluation: result
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Model Monitoring & Management API ──────────────────────────────
+
+// Update a Model Version Status (e.g. to SHADOW or PRODUCTION)
+app.put('/api/v1/models/:modelId/versions/:versionId/status', async (req, res) => {
+  try {
+    const { versionId } = req.params;
+    const { status } = req.body;
+
+    if (!status || !['DRAFT', 'STAGING', 'PRODUCTION', 'RETIRED', 'SHADOW'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const updatedVersion = await (prisma as any).modelVersion.update({
+      where: { id: versionId },
+      data: { status }
+    });
+
+    // Audit log
+    await (prisma as any).auditLog.create({
+      data: {
+        actor: req.auth?.apiKeyName ?? 'system',
+        actorRole: req.auth?.role ?? 'UNKNOWN',
+        action: 'UPDATE_MODEL_STATUS',
+        resourceType: 'ModelVersion',
+        resourceId: versionId,
+        metadata: { newStatus: status, modelId: req.params.modelId },
+      }
+    });
+
+    return res.json(updatedVersion);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Model Monitoring API ──────────────────────────────────────────
+
+// Fetch Latency Metrics for a Model Version
+app.get('/api/v1/models/:modelId/versions/:versionId/metrics/latency', async (req, res) => {
+  try {
+    const { versionId } = req.params;
+    const { limit = '24' } = req.query; // Default to last 24 periods (2 hours if 5m windows)
+
+    const metrics = await (prisma as any).modelLatencyMetric.findMany({
+      where: { modelVersionId: versionId },
+      orderBy: { windowStart: 'asc' },
+      take: parseInt(limit as string, 10),
+    });
+
+    return res.json(metrics);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Model Counterfactual Simulator API ────────────────────────────
+
+import { simulateInference } from './inference-engine';
+
+/**
+ * Run a "What-If" scenario through a specific Model Version.
+ * Skips telemetry reporting and DB persistence.
+ */
+app.post('/api/v1/decisions/simulate', async (req, res) => {
+  try {
+    const { modelVersionId, simulatedInputs } = req.body;
+
+    if (!modelVersionId || !simulatedInputs) {
+      return res.status(400).json({ error: 'Missing modelVersionId or simulatedInputs' });
+    }
+
+    const result = await simulateInference(modelVersionId, simulatedInputs, prisma as any);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Legal Hold & Data Retention APIs ───────────────────────────────
+
+app.put('/api/v1/governance/legal-hold/:logicalId', async (req, res) => {
+  try {
+    const { enabled, reason } = req.body;
+    if (enabled === undefined) return res.status(400).json({ error: 'Must provide enabled boolean' });
+
+    const logicalId = req.params.logicalId;
+
+    // Check if entity exists
+    const entity = await prisma.currentEntityState.findUnique({
+      where: { logicalId }
+    });
+
+    if (!entity) return res.status(404).json({ error: 'Entity not found' });
+
+    await prisma.currentEntityState.update({
+      where: { logicalId },
+      data: { legalHold: Boolean(enabled) }
+    });
+
+    const reviewerName = req.auth?.apiKeyName ?? 'system';
+    await (prisma as any).auditLog.create({
+      data: {
+        actor: reviewerName,
+        actorRole: req.auth?.role ?? 'UNKNOWN',
+        action: enabled ? 'ENABLE_LEGAL_HOLD' : 'DISABLE_LEGAL_HOLD',
+        resourceType: 'CurrentEntityState',
+        resourceId: logicalId,
+        metadata: { correlationId: req.correlationId, reason },
+      }
+    });
+
+    return res.json({ success: true, logicalId, legalHold: Boolean(enabled) });
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// Delete endpoint demonstrating Legal Hold enforcement
+app.delete('/api/v1/entities/:logicalId', async (req, res) => {
+  try {
+    const logicalId = req.params.logicalId;
+    const entity = await prisma.currentEntityState.findUnique({ where: { logicalId } });
+    if (!entity) return res.status(404).json({ error: 'Entity not found' });
+
+    if (entity.legalHold) {
+      // Governance constraint
+      await (prisma as any).auditLog.create({
+        data: {
+          actor: req.auth?.apiKeyName ?? 'system',
+          actorRole: req.auth?.role ?? 'UNKNOWN',
+          action: 'BLOCKED_DELETE',
+          resourceType: 'CurrentEntityState',
+          resourceId: logicalId,
+          metadata: { correlationId: req.correlationId, reason: 'LEGAL_HOLD_ACTIVE' },
+        }
+      });
+      return res.status(403).json({ error: 'Deletion blocked: Entity is under Active Legal Hold.' });
+    }
+
+    await prisma.currentEntityState.delete({ where: { logicalId } });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Data Sources API ─────────────────────────────────────────────────
+
+app.get('/api/v1/data-sources', async (req, res) => {
+  try {
+    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    const sources = await prisma.dataSource.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(sources);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/v1/data-sources', async (req, res) => {
+  try {
+    const { name, type, config } = req.body;
+    const projectId = (req.body.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+
+    if (!name || !type || !config) {
+      return res.status(400).json({ error: 'name, type, and config are required' });
+    }
+
+    const newSource = await prisma.dataSource.create({
+      data: {
+        projectId,
+        name,
+        type,
+        connectionConfig: config
+      }
+    });
+    return res.json(newSource);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Pipelines API ────────────────────────────────────────────────────
+
+app.get('/api/v1/pipelines', async (req, res) => {
+  try {
+    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    const pipelines = await prisma.pipeline.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(pipelines);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/v1/pipelines', async (req, res) => {
+  try {
+    const { name, description, nodes, edges } = req.body;
+    const projectId = (req.body.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const newPipeline = await prisma.pipeline.create({
+      data: {
+        projectId,
+        name,
+        description: description || '',
+        nodes: nodes || [],
+        edges: edges || [],
+      },
+    });
+    return res.json(newPipeline);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.put('/api/v1/pipelines/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { name, description, nodes, edges, enabled } = req.body;
+    const updated = await prisma.pipeline.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(nodes !== undefined && { nodes }),
+        ...(edges !== undefined && { edges }),
+        ...(enabled !== undefined && { enabled }),
+      }
+    });
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Dashboards & App Builder API ─────────────────────────────────────
+
+app.get('/api/v1/dashboards', async (req, res) => {
+  try {
+    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    const dashboards = await prisma.dashboard.findMany({
+      where: { projectId },
+      include: { widgets: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(dashboards);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/v1/dashboards', async (req, res) => {
+  try {
+    const { name, widgets } = req.body;
+    const projectId = (req.body.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const newDash = await prisma.dashboard.create({
+      data: {
+        projectId,
+        name,
+        widgets: {
+          create: widgets || []
+        }
+      },
+      include: { widgets: true }
+    });
+    return res.json(newDash);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.put('/api/v1/dashboards/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { name, widgets } = req.body;
+
+    // To update widgets, easiest is delete all and recreate
+    const updated = await prisma.$transaction(async (tx: any) => {
+      if (name) {
+        await tx.dashboard.update({ where: { id }, data: { name } });
+      }
+      if (widgets && Array.isArray(widgets)) {
+        await tx.dashboardWidget.deleteMany({ where: { dashboardId: id } });
+        if (widgets.length > 0) {
+          await tx.dashboardWidget.createMany({
+            data: widgets.map(w => ({
+              dashboardId: id,
+              type: w.type,
+              configData: w.configData,
+              x: w.x,
+              y: w.y,
+              w: w.w,
+              h: w.h
+            }))
+          });
+        }
+      }
+      return tx.dashboard.findUnique({ where: { id }, include: { widgets: true } });
+    });
+
+    return res.json(updated);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
@@ -2496,6 +3028,9 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
 
   // Start the telemetry rollup scheduler
   startRollupScheduler(prisma);
+
+  // Start the relationship confidence decay scheduler
+  startConfidenceDecayScheduler(prisma);
 });
 
 // Graceful shutdown handler

@@ -184,7 +184,7 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
  * 4. Upserts each record as an entity instance
  * 5. Updates the JobExecution with results
  */
-async function executeJob(jobId, prisma, inlineData) {
+async function executeJob(jobId, prisma, queueId, inlineData) {
     // Load the job with its data source and target entity type
     const job = await prisma.integrationJob.findUnique({
         where: { id: jobId },
@@ -199,13 +199,6 @@ async function executeJob(jobId, prisma, inlineData) {
         throw new Error(`Integration job '${job.name}' is disabled`);
     if (!job.dataSource.enabled)
         throw new Error(`Data source '${job.dataSource.name}' is disabled`);
-    // Create execution record
-    const execution = await prisma.jobExecution.create({
-        data: {
-            integrationJobId: jobId,
-            status: 'RUNNING',
-        },
-    });
     let recordsProcessed = 0;
     let recordsFailed = 0;
     try {
@@ -258,37 +251,16 @@ async function executeJob(jobId, prisma, inlineData) {
                 console.warn(`[DataIntegration] Failed to ingest record ${logicalId}:`, result.error);
             }
         }
-        // Mark execution as completed
-        await prisma.jobExecution.update({
-            where: { id: execution.id },
-            data: {
-                status: 'COMPLETED',
-                recordsProcessed,
-                recordsFailed,
-                completedAt: new Date(),
-            },
-        });
+        // Orchestrator handles marking completion on the JobQueue object.
         return {
-            executionId: execution.id,
             status: 'COMPLETED',
             recordsProcessed,
             recordsFailed,
         };
     }
     catch (error) {
-        // Mark execution as failed
-        await prisma.jobExecution.update({
-            where: { id: execution.id },
-            data: {
-                status: 'FAILED',
-                recordsProcessed,
-                recordsFailed,
-                error: String(error),
-                completedAt: new Date(),
-            },
-        });
+        // Orchestrator will handle the failure update to JobQueue
         return {
-            executionId: execution.id,
             status: 'FAILED',
             recordsProcessed,
             recordsFailed,
@@ -296,7 +268,7 @@ async function executeJob(jobId, prisma, inlineData) {
         };
     }
 }
-// ── Simple Scheduler ─────────────────────────────────────────────
+// ── Simple Scheduler (Upgraded to enqueue jobs instead of run) ────
 /**
  * A lightweight interval-based scheduler.
  * Checks every 60 seconds for jobs with a `schedule` field.
@@ -344,10 +316,16 @@ function startScheduler(prisma) {
                     lastRunMap.set(job.id, now);
                     // eslint-disable-next-line no-console
                     console.log(`[Scheduler] Running scheduled job '${job.name}'`);
-                    // Fire-and-forget
-                    executeJob(job.id, prisma).catch((err) => {
-                        // eslint-disable-next-line no-console
-                        console.error(`[Scheduler] Job '${job.name}' failed:`, err);
+                    // Push a new job onto the Orchestrator Queue
+                    prisma.jobQueue.create({
+                        data: {
+                            jobType: 'INTEGRATION_SYNC',
+                            integrationJobId: job.id,
+                            payload: { autoScheduled: true },
+                            priority: 5, // normal priority for scheduled runs
+                        }
+                    }).catch((err) => {
+                        console.error(`[Scheduler] Job enqueue failed:`, err);
                     });
                 }
             }

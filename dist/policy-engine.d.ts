@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 interface DomainEventPayload {
     previousState: Record<string, unknown> | null;
     newState: Record<string, unknown>;

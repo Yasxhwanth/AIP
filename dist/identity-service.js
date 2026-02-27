@@ -245,6 +245,20 @@ class IdentityService {
                 mergedIntoId: candidate.logicalIdA
             }
         });
+        // Active Learning: Record human decision
+        await p.matchResolutionHistory.create({
+            data: {
+                matchCandidateId: candidate.id,
+                logicalIdA: candidate.logicalIdA,
+                logicalIdB: candidate.logicalIdB,
+                entityTypeId: candidate.entityTypeId,
+                scoreOverall: candidate.scoreOverall,
+                scoreBreakdown: candidate.scoreBreakdown,
+                matchReasons: candidate.matchReasons,
+                resolution: 'MERGED',
+                resolvedBy: reviewerName,
+            }
+        });
     }
 }
 exports.IdentityService = IdentityService;

@@ -14,9 +14,10 @@ import {
     LogOut,
     Globe,
     Activity,
-    Search,
     Inbox,
     GitMerge,
+    LayoutDashboard,
+    Search
 } from "lucide-react";
 
 // Hide sidebar completely on these routes (geo is fullscreen map)
@@ -39,6 +40,7 @@ const TOP_NAV: NavItem[] = [
 const MID_NAV: NavItem[] = [
     { href: '/files', icon: <Folder className="w-[18px] h-[18px]" />, label: 'Files' },
     { href: '/ontology', icon: <Network className="w-[18px] h-[18px]" />, label: 'Ontology' },
+    { href: '/apps', icon: <LayoutDashboard className="w-[18px] h-[18px]" />, label: 'App Builder' },
     { href: '/models', icon: <BrainCircuit className="w-[18px] h-[18px]" />, label: 'AI Models' },
     { href: '/integrations', icon: <BarChart3 className="w-[18px] h-[18px]" />, label: 'Integrations' },
     { href: '/telemetry', icon: <Activity className="w-[18px] h-[18px]" />, label: 'Telemetry' },

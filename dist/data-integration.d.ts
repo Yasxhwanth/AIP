@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 /**
  * Upserts a single entity instance using the same bi-temporal logic
  * as the POST /entity-types/:id/instances endpoint.
@@ -26,8 +26,7 @@ export declare function upsertEntityInstance(entityType: {
  * 4. Upserts each record as an entity instance
  * 5. Updates the JobExecution with results
  */
-export declare function executeJob(jobId: string, prisma: PrismaClient, inlineData?: unknown[]): Promise<{
-    executionId: string;
+export declare function executeJob(jobId: string, prisma: PrismaClient, queueId?: string, inlineData?: unknown[]): Promise<{
     status: string;
     recordsProcessed: number;
     recordsFailed: number;

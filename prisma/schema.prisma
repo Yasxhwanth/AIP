@@ -28,6 +28,7 @@ model Project {
   modelDefinitions ModelDefinition[]
   dashboards       Dashboard[]
   pipelines        Pipeline[]
+  apiKeys          ApiKey[]
 }
 
 model EntityType {
@@ -159,6 +160,27 @@ model MatchCandidate {
   @@index([logicalIdB])
 }
 
+model MatchResolutionHistory {
+  id               String   @id @default(uuid())
+  matchCandidateId String   @unique
+  logicalIdA       String
+  logicalIdB       String
+  entityTypeId     String
+  
+  // The state of the candidate when the decision was made
+  scoreOverall     Float
+  scoreBreakdown   Json
+  matchReasons     Json
+
+  // The decision made by human/system
+  resolution       String   // MERGED | REJECTED
+  resolvedBy       String
+  resolvedAt       DateTime @default(now())
+
+  @@index([entityTypeId, resolution])
+  @@index([resolvedAt])
+}
+
 // ── Audit Log ─────────────────────────────────────────────────────
 
 model AuditLog {
@@ -192,6 +214,22 @@ model ProvenanceRecord {
   @@index([entityInstanceId, attributeName])
 }
 
+// ── Epic 2: Data Lineage & Contracts ──────────────────────────────
+model LineageEdge {
+  id               String   @id @default(uuid())
+  sourceType       String   // e.g. "IntegrationJob", "PipelineNode", "ModelDefinition"
+  sourceId         String   // ID of the upstream source
+  targetType       String   // e.g. "EntityType", "Field", "ConsumerApp"
+  targetId         String   // ID of the downstream consumer/field
+  transformation   String?  // Description of what changed the data (e.g. "mapped via fieldMapping")
+  
+  createdAt        DateTime @default(now())
+
+  @@unique([sourceType, sourceId, targetType, targetId])
+  @@index([sourceType, sourceId])
+  @@index([targetType, targetId])
+}
+
 model DomainEvent {
   id             String   @id @default(uuid())
   idempotencyKey String?  @unique
@@ -223,6 +261,22 @@ model PolicyDefinition {
   @@index([entityTypeId, eventType])
 }
 
+// ── Epic 4: Governance & Compliance ───────────────────────────────
+
+model AbacPolicy {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  action       String   // e.g. "READ", "WRITE", "DELETE", "*"
+  resourceType String   // e.g. "EntityType", "MatchCandidate", "*"
+  effect       String   @default("ALLOW") // "ALLOW" or "DENY"
+  condition    Json?    // ABAC rule definition (e.g. { "req.user.clearance": ">=", "resource.classification" })
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([action, resourceType])
+}
+
 model Alert {
   id              String   @id @default(uuid())
   alertType       String
@@ -249,6 +303,7 @@ model CurrentEntityState {
   logicalId    String   @id
   entityTypeId String
   data         Json
+  legalHold    Boolean  @default(false)
   updatedAt    DateTime
 
   entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Cascade)
@@ -263,6 +318,12 @@ model CurrentGraph {
   sourceLogicalId          String
   targetLogicalId          String
   properties               Json?
+
+  // Probabilistic Relationship Decay
+  confidence               Float    @default(1.0) // Current computed or asserted confidence (0.0-1.0)
+  baseConfidence           Float    @default(1.0) // Initial confidence at inference time
+  decayRate                Float    @default(0.0) // e.g. 0.05 (5%) decay per day. 0 = no decay
+  lastObservedAt           DateTime @default(now())
 
   @@unique([relationshipDefinitionId, sourceLogicalId, targetLogicalId])
   @@index([sourceLogicalId])
@@ -331,25 +392,66 @@ model IntegrationJob {
 
   dataSource       DataSource     @relation(fields: [dataSourceId], references: [id], onDelete: Restrict)
   targetEntityType EntityType     @relation(fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
-  executions       JobExecution[]
+  executions       JobQueue[]
 
   @@index([projectId])
   @@index([dataSourceId])
   @@index([targetEntityTypeId])
 }
 
-model JobExecution {
+// ── Epic 1: Orchestration & Reliability Queue ─────────────────────
+
+model JobWorker {
+  id             String   @id @default(uuid())
+  hostname       String
+  pid            Int
+  status         String   @default("ACTIVE") // ACTIVE, DRAINING, OFFLINE
+  lastHeartbeat  DateTime @default(now())
+  startedAt      DateTime @default(now())
+
+  @@index([status, lastHeartbeat(sort: Desc)])
+}
+
+model JobQueue {
   id               String    @id @default(uuid())
-  integrationJobId String
-  status           String    @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
+  jobType          String    // e.g., "INTEGRATION_SYNC", "SCHEMA_INFERENCE", "BACKFILL"
+  status           String    @default("QUEUED") // QUEUED, RUNNING, COMPLETED, FAILED, DEAD_LETTER
+  priority         Int       @default(0) // Higher number = higher priority
+  
+  // Payload & Idempotency
+  payload          Json      // The actual instructions/data for the job
+  idempotencyKey   String?   @unique
+  
+  // Execution tracking
+  startedAt        DateTime?
+  completedAt      DateTime?
+  lockedAt         DateTime?
+  lockedByWorkerId String?   // References JobWorker.id
+  
+  // Retry & DLQ Semantics
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(3)
+  nextAttemptAt    DateTime? 
+  lastError        String?
+  
+  // Metrics (mapped from old JobExecution)
   recordsProcessed Int       @default(0)
   recordsFailed    Int       @default(0)
-  error            String?
-  startedAt        DateTime  @default(now())
-  completedAt      DateTime?
+  
+  // Optional References to parent definitions
+  integrationJobId String?
+  integrationJob   IntegrationJob? @relation(fields: [integrationJobId], references: [id], onDelete: Cascade)
+  
+  // Parent/Child DAG dependencies
+  parentJobId      String?
+  parentJob        JobQueue?  @relation("JobDependencies", fields: [parentJobId], references: [id])
+  childJobs        JobQueue[] @relation("JobDependencies")
 
-  integrationJob IntegrationJob @relation(fields: [integrationJobId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
+  @@index([status, nextAttemptAt])
+  @@index([jobType, status])
   @@index([integrationJobId, startedAt(sort: Desc)])
 }
 
@@ -411,7 +513,7 @@ model ModelVersion {
   id                String   @id @default(uuid())
   modelDefinitionId String
   version           Int
-  status            String   @default("DRAFT") // DRAFT, STAGING, PRODUCTION, RETIRED
+  status            String   @default("DRAFT") // DRAFT, STAGING, PRODUCTION, RETIRED, SHADOW
   strategy          String // THRESHOLD, ANOMALY_ZSCORE, LINEAR_REGRESSION, CUSTOM
   hyperparameters   Json // Strategy-specific config
   createdAt         DateTime @default(now())
@@ -419,9 +521,47 @@ model ModelVersion {
 
   modelDefinition  ModelDefinition   @relation(fields: [modelDefinitionId], references: [id], onDelete: Cascade)
   inferenceResults InferenceResult[]
+  driftMetrics     ModelDriftMetric[]
+  latencyMetrics   ModelLatencyMetric[]
 
   @@unique([modelDefinitionId, version])
   @@index([modelDefinitionId, status])
+}
+
+model ModelDriftMetric {
+  id             String   @id @default(uuid())
+  modelVersionId String
+  featureName    String   // which input feature drifted
+  metricType     String   // JENSEN_SHANNON, KS_STATISTIC, WASSERSTEIN
+  value          Float    // the calculated drift score
+  referenceStart DateTime // the time window of the baseline data
+  referenceEnd   DateTime
+  currentStart   DateTime // the time window of the evaluated data
+  currentEnd     DateTime
+  createdAt      DateTime @default(now())
+
+  modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Cascade)
+
+  @@index([modelVersionId, featureName, createdAt(sort: Desc)])
+}
+
+model ModelLatencyMetric {
+  id             String   @id @default(uuid())
+  modelVersionId String
+  windowStart    DateTime // the start of the bucket (e.g., 5 min window)
+  windowSize     String   // "5m", "1h"
+  p50            Float    // median latency in ms
+  p90            Float
+  p95            Float
+  p99            Float
+  avg            Float
+  requestCount   Int
+  errorCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Cascade)
+
+  @@index([modelVersionId, windowStart(sort: Desc)])
 }
 
 model InferenceResult {
@@ -517,6 +657,11 @@ model ApiKey {
   enabled    Boolean   @default(true)
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
+  
+  projectId  String?   // For tenant isolation
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
 }
 
 // ── UI Dashboard Builder ─────────────────────────────────────────

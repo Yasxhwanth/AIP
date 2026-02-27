@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 /**
  * Computes rollups for a specific logicalId + metric over a time range.
  * Buckets raw TimeseriesMetric rows into windows and upserts TelemetryRollup.

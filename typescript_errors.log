@@ -1,0 +1,7 @@
+src/orchestrator.ts(101,13): error TS2375: Type '{ jobType: string; payload: any; priority: number; idempotencyKey: string | undefined; integrationJobId: string | undefined; }' is not assignable to type '(Without<JobQueueCreateInput, JobQueueUncheckedCreateInput> & JobQueueUncheckedCreateInput) | (Without<...> & JobQueueCreateInput)' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type '{ jobType: string; payload: any; priority: number; idempotencyKey: string | undefined; integrationJobId: string | undefined; }' is not assignable to type 'Without<JobQueueUncheckedCreateInput, JobQueueCreateInput> & JobQueueCreateInput' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Type '{ jobType: string; payload: any; priority: number; idempotencyKey: string | undefined; integrationJobId: string | undefined; }' is not assignable to type 'Without<JobQueueUncheckedCreateInput, JobQueueCreateInput>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Types of property 'integrationJobId' are incompatible.
+        Type 'string | undefined' is not assignable to type 'never'.
+          Type 'undefined' is not assignable to type 'never'.
+src/server.ts(1632,37): error TS2339: Property 'jobExecution' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.

@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 interface ConditionResult {
     field: string;
     operator: string;

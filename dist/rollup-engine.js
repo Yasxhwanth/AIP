@@ -114,20 +114,21 @@ async function computeAllRecentRollups(windowSize, lookbackMs, prisma) {
 function startRollupScheduler(prisma) {
     const INTERVAL = 5 * 60 * 1000; // every 5 minutes
     const LOOKBACK = 10 * 60 * 1000; // look back 10 minutes
-    setInterval(async () => {
-        try {
-            const result = await computeAllRecentRollups('5m', LOOKBACK, prisma);
-            if (result.totalBuckets > 0) {
-                // eslint-disable-next-line no-console
-                console.log(`[RollupScheduler] Computed ${result.totalBuckets} buckets across ${result.combinationsProcessed} metric combos`);
-            }
-        }
-        catch (error) {
-            // eslint-disable-next-line no-console
-            console.error('[RollupScheduler] Error:', error);
-        }
+    setInterval(() => {
+        const idempotencyKey = `TELEMETRY_ROLLUP_${Math.floor(Date.now() / INTERVAL)}`;
+        prisma.jobQueue.upsert({
+            where: { idempotencyKey },
+            create: {
+                jobType: 'TELEMETRY_ROLLUP_TRIGGER',
+                payload: { windowSize: '5m', lookbackMs: LOOKBACK },
+                idempotencyKey,
+                priority: 1, // lower priority than data ingest
+            },
+            update: {} // do nothing if it already exists
+        }).catch((err) => {
+            console.error('[RollupScheduler] Failed to enqueue rollup job:', err);
+        });
     }, INTERVAL);
-    // eslint-disable-next-line no-console
-    console.log(`[RollupScheduler] Started — computing 5m rollups every ${INTERVAL / 1000}s`);
+    console.log(`[RollupScheduler] Started — enqueueing 5m rollup jobs every ${INTERVAL / 1000}s`);
 }
 //# sourceMappingURL=rollup-engine.js.map

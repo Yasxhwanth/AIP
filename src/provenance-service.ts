@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 
 /**
  * ProvenanceService handles the recording of lineage for every attribute in the ontology.

@@ -14,7 +14,8 @@ import {
     Box,
     Cpu,
     DownloadCloud,
-    Loader2
+    Loader2,
+    BarChart3
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
 import * as T from '@/lib/types';
@@ -24,6 +25,8 @@ export default function ModelRegistry() {
     const [selectedModel, setSelectedModel] = useState<any>(null);
     const [versions, setVersions] = useState<T.ModelVersion[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'overview' | 'monitoring'>('overview');
+    const [latencyMetrics, setLatencyMetrics] = useState<any[]>([]);
 
     useEffect(() => {
         async function fetchModels() {
@@ -46,6 +49,7 @@ export default function ModelRegistry() {
         if (!selectedModel) return;
         async function fetchVersions() {
             try {
+                // Models API is loaded under the generic generic root
                 const data = await ApiClient.get<T.ModelVersion[]>(`/models/${selectedModel.id}/versions`);
                 setVersions(data);
             } catch (err) {
@@ -56,6 +60,31 @@ export default function ModelRegistry() {
     }, [selectedModel]);
 
     const activeVersion = versions.length > 0 ? versions[0] : null;
+
+    const updateModelStatus = async (status: string) => {
+        if (!selectedModel || !activeVersion) return;
+        try {
+            await ApiClient.put(`/api/v1/models/${selectedModel.id}/versions/${activeVersion.id}/status`, { status });
+            // Refresh
+            const data = await ApiClient.get<T.ModelVersion[]>(`/models/${selectedModel.id}/versions`);
+            setVersions(data);
+        } catch (err) {
+            console.error("Failed to update status", err);
+        }
+    };
+
+    useEffect(() => {
+        if (!activeVersion || !activeVersion.id || activeTab !== 'monitoring') return;
+        async function fetchMetrics() {
+            try {
+                const data = await ApiClient.get<any[]>(`/api/v1/models/${selectedModel?.id}/versions/${activeVersion.id}/metrics/latency`);
+                setLatencyMetrics(data);
+            } catch (err) {
+                console.error("Failed to fetch latency metrics", err);
+            }
+        }
+        fetchMetrics();
+    }, [activeVersion, activeTab, selectedModel]);
 
     return (
         <div className="h-full w-full flex flex-col bg-slate-50 text-slate-900 border-t border-slate-200 overflow-hidden">
@@ -123,9 +152,11 @@ export default function ModelRegistry() {
                                             {model.name}
                                         </span>
                                         {isDeployed ? (
-                                            <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-1 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
+                                            <div title="Production" className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-1 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
+                                        ) : latestVer?.status === 'SHADOW' ? (
+                                            <div title="Shadow Mode" className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></div>
                                         ) : (
-                                            <div className="w-2 h-2 rounded-full bg-slate-400 shrink-0 mt-1"></div>
+                                            <div title={latestVer?.status || 'Draft'} className="w-2 h-2 rounded-full bg-slate-400 shrink-0 mt-1"></div>
                                         )}
                                     </div>
 
@@ -162,6 +193,17 @@ export default function ModelRegistry() {
                                 </div>
 
                                 <div className="flex gap-2">
+                                    <div className="relative group">
+                                        <button className="px-3 py-1.5 border border-slate-300 rounded text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 shadow-sm flex items-center gap-1.5 min-w-[140px] justify-between">
+                                            Status: {activeVersion?.status} <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
+                                        </button>
+                                        <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-slate-200 rounded shadow-lg py-1 hidden group-hover:block z-50">
+                                            <button onClick={() => updateModelStatus('DRAFT')} className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900">Set DRAFT</button>
+                                            <button onClick={() => updateModelStatus('SHADOW')} className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-amber-600 hover:bg-slate-50 hover:text-amber-700">Set SHADOW</button>
+                                            <button onClick={() => updateModelStatus('PRODUCTION')} className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-emerald-600 hover:bg-slate-50 hover:text-emerald-700">Set PRODUCTION</button>
+                                            <button onClick={() => updateModelStatus('RETIRED')} className="w-full text-left px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-slate-50 hover:text-rose-700">Set RETIRED</button>
+                                        </div>
+                                    </div>
                                     <button className="px-3 py-1.5 border border-slate-300 rounded text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 shadow-sm flex items-center gap-1.5">
                                         <RotateCcw className="w-3.5 h-3.5" /> Retrain
                                     </button>
@@ -171,68 +213,121 @@ export default function ModelRegistry() {
                                 </div>
                             </div>
 
+                            <div className="px-6 flex gap-6 border-b border-slate-200 mt-2">
+                                <button
+                                    onClick={() => setActiveTab('overview')}
+                                    className={`pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center gap-2 ${activeTab === 'overview' ? 'text-purple-700 border-purple-600' : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'}`}
+                                >
+                                    Overview
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('monitoring')}
+                                    className={`pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 ${activeTab === 'monitoring' ? 'text-purple-700 border-purple-600' : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'}`}
+                                >
+                                    <Activity className="w-4 h-4" /> Monitoring
+                                </button>
+                            </div>
+
                             <div className="p-6 space-y-6">
-                                {/* KPI Grid */}
-                                <div className="grid grid-cols-4 gap-4">
-                                    <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
-                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                                            <Activity className="w-3.5 h-3.5" /> Bound Entity Type
-                                        </div>
-                                        <div className="text-lg font-mono font-bold text-slate-800 limit-lines-1 truncate">{selectedModel.entityType?.name}</div>
-                                        <div className="text-[10px] text-slate-400 font-medium mt-1">ID: {selectedModel.entityType?.id?.substring(0, 8)}...</div>
-                                    </div>
-
-                                    <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
-                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                                            <Clock className="w-3.5 h-3.5" /> Target Predict Field
-                                        </div>
-                                        <div className="text-lg font-mono font-bold text-slate-800">{selectedModel.outputField}</div>
-                                    </div>
-
-                                    <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
-                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                                            <Box className="w-3.5 h-3.5" /> ML Strategy
-                                        </div>
-                                        <div className="text-lg font-mono font-bold text-slate-800 mt-1 truncate">{activeVersion?.strategy || 'N/A'}</div>
-                                    </div>
-
-                                    <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
-                                        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
-                                            <Cpu className="w-3.5 h-3.5" /> Active Version
-                                        </div>
-                                        <div className="text-lg font-mono font-bold text-slate-800 mt-1">v{activeVersion?.version || '0'}</div>
-                                    </div>
-                                </div>
-
-                                {/* Performance Charts & Features */}
-                                <div className="grid grid-cols-2 gap-6">
-                                    {/* Feature Mapping */}
-                                    <div className="bg-white border border-slate-200 rounded shadow-sm p-4 min-h-64 flex flex-col">
-                                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4">Input Vector Schema</h3>
-                                        <div className="flex-1 flex flex-col pt-2 gap-3 overflow-y-auto">
-                                            {selectedModel.inputFields && Object.keys(selectedModel.inputFields).map((field, idx) => (
-                                                <div key={idx} className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
-                                                    <span className="text-xs font-mono font-bold text-slate-700">{field}</span>
-                                                    <span className="text-[10px] text-slate-500 uppercase">{selectedModel.inputFields[field]}</span>
+                                {activeTab === 'overview' ? (
+                                    <>
+                                        {/* KPI Grid */}
+                                        <div className="grid grid-cols-4 gap-4">
+                                            <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                                    <Activity className="w-3.5 h-3.5" /> Bound Entity Type
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                                <div className="text-lg font-mono font-bold text-slate-800 limit-lines-1 truncate">{selectedModel.entityType?.name}</div>
+                                                <div className="text-[10px] text-slate-400 font-medium mt-1">ID: {selectedModel.entityType?.id?.substring(0, 8)}...</div>
+                                            </div>
 
-                                    {/* Hyperparameters Config */}
-                                    <div className="bg-white border border-slate-200 rounded shadow-sm p-4 min-h-64 flex flex-col relative overflow-hidden">
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Hyperparameters</h3>
+                                            <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5" /> Target Predict Field
+                                                </div>
+                                                <div className="text-lg font-mono font-bold text-slate-800">{selectedModel.outputField}</div>
+                                            </div>
+
+                                            <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                                    <Box className="w-3.5 h-3.5" /> ML Strategy
+                                                </div>
+                                                <div className="text-lg font-mono font-bold text-slate-800 mt-1 truncate">{activeVersion?.strategy || 'N/A'}</div>
+                                            </div>
+
+                                            <div className="bg-white border border-slate-200 rounded shadow-sm p-4">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                                                    <Cpu className="w-3.5 h-3.5" /> Active Version
+                                                </div>
+                                                <div className="text-lg font-mono font-bold text-slate-800 mt-1">v{activeVersion?.version || '0'}</div>
+                                            </div>
                                         </div>
-                                        <div className="flex-1 bg-slate-900 rounded p-3 overflow-y-auto">
-                                            <pre className="text-[11px] font-mono text-emerald-400">
-                                                {activeVersion?.hyperparameters
-                                                    ? JSON.stringify(activeVersion.hyperparameters, null, 2)
-                                                    : '// No hyperparameters set'}
-                                            </pre>
+
+                                        {/* Performance Charts & Features */}
+                                        <div className="grid grid-cols-2 gap-6">
+                                            {/* Feature Mapping */}
+                                            <div className="bg-white border border-slate-200 rounded shadow-sm p-4 min-h-64 flex flex-col">
+                                                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4">Input Vector Schema</h3>
+                                                <div className="flex-1 flex flex-col pt-2 gap-3 overflow-y-auto">
+                                                    {selectedModel.inputFields && Object.keys(selectedModel.inputFields).map((field, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
+                                                            <span className="text-xs font-mono font-bold text-slate-700">{field}</span>
+                                                            <span className="text-[10px] text-slate-500 uppercase">{selectedModel.inputFields[field]}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Hyperparameters Config */}
+                                            <div className="bg-white border border-slate-200 rounded shadow-sm p-4 min-h-64 flex flex-col relative overflow-hidden">
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Hyperparameters</h3>
+                                                </div>
+                                                <div className="flex-1 bg-slate-900 rounded p-3 overflow-y-auto">
+                                                    <pre className="text-[11px] font-mono text-emerald-400">
+                                                        {activeVersion?.hyperparameters
+                                                            ? JSON.stringify(activeVersion.hyperparameters, null, 2)
+                                                            : '// No hyperparameters set'}
+                                                    </pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col gap-6">
+                                        <div className="bg-white border border-slate-200 rounded shadow-sm p-5">
+                                            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-purple-600" /> Inference Latency (P99 & P50)</h3>
+                                            {latencyMetrics.length === 0 ? (
+                                                <div className="h-48 flex items-center justify-center text-slate-400 text-sm border-2 border-dashed border-slate-100 rounded">
+                                                    No inference execution data available for this version.
+                                                </div>
+                                            ) : (
+                                                <div className="h-48 flex items-end gap-2 border-b border-l border-slate-200 p-4 pt-10 relative">
+                                                    {latencyMetrics.map((m, i) => {
+                                                        const p99Height = Math.min((m.p99 / 200) * 100, 100);
+                                                        const p50Height = Math.min((m.p50 / 200) * 100, 100);
+                                                        return (
+                                                            <div key={i} className="flex-1 flex flex-col justify-end group relative h-full">
+                                                                <div className="absolute hidden group-hover:block bottom-full mb-2 bg-slate-800 text-white text-[10px] p-2 rounded shadow-lg whitespace-nowrap z-20">
+                                                                    <p>Time: {new Date(m.windowStart).toLocaleTimeString()}</p>
+                                                                    <p>P99: {Math.round(m.p99)}ms</p>
+                                                                    <p>P50: {Math.round(m.p50)}ms</p>
+                                                                    <p>Reqs: {m.requestCount}</p>
+                                                                </div>
+                                                                <div className="w-full bg-purple-200 rounded-t relative" style={{ height: `${p99Height}%` }}>
+                                                                    <div className="absolute bottom-0 w-full bg-purple-600 rounded-t" style={{ height: `${(p50Height / p99Height) * 100}%` }}></div>
+                                                                </div>
+                                                                <div className="text-[8px] text-slate-400 text-center mt-1 truncate absolute top-full w-full pt-1">
+                                                                    {new Date(m.windowStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </>
                     )}
@@ -277,7 +372,7 @@ export default function ModelRegistry() {
                                 <div className="relative pl-3 border-l-2 border-slate-200 space-y-4">
                                     {versions.map(v => (
                                         <div key={v.id} className="relative">
-                                            <div className={`absolute -left-[17px] top-1 w-2.5 h-2.5 border-2 border-white rounded-full ${v.status === 'DEPLOYED' ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
+                                            <div className={`absolute -left-[17px] top-1 w-2.5 h-2.5 border-2 border-white rounded-full ${v.status === 'DEPLOYED' || v.status === 'PRODUCTION' ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
                                             <div className="text-xs font-bold text-slate-700">Version {v.version} ({v.status})</div>
                                             <div className="text-[10px] text-slate-500 font-mono">{new Date(v.createdAt).toISOString()}</div>
                                         </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import ReactFlow, {
     Background,
     Controls,
@@ -15,7 +15,8 @@ import ReactFlow, {
     Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Database, Filter, Layers, Share2, Play } from 'lucide-react';
+import { Database, Filter, Layers, Share2, Play, Plus, Loader2 } from 'lucide-react';
+import { ApiClient } from '@/lib/apiClient';
 
 // ── Custom Node Components ───────────────────────────────────────
 
@@ -64,35 +65,91 @@ const nodeTypes = {
 
 // ── Main Component ───────────────────────────────────────────────
 
-const initialNodes: Node[] = [
-    {
-        id: '1',
-        type: 'source',
-        data: { label: 'OpenSky live', type: 'REST_API' },
-        position: { x: 100, y: 100 }
-    },
-    {
-        id: '2',
-        type: 'transform',
-        data: { label: 'Filter Military', op: 'WHERE isMilitary = true' },
-        position: { x: 400, y: 100 }
-    },
-    {
-        id: '3',
-        type: 'ontology',
-        data: { label: 'Aircraft Registry', entityType: 'Aircraft' },
-        position: { x: 700, y: 100 }
-    },
-];
-
-const initialEdges: Edge[] = [
-    { id: 'e1-2', source: '1', target: '2' },
-    { id: 'e2-3', source: '2', target: '3' },
-];
+const initialNodes: Node[] = [];
+const initialEdges: Edge[] = [];
 
 export const PipelineEditor: React.FC = () => {
     const [nodes, setNodes] = useState<Node[]>(initialNodes);
     const [edges, setEdges] = useState<Edge[]>(initialEdges);
+    const [loading, setLoading] = useState(true);
+    const [pipelineId, setPipelineId] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+
+    // Initial Load - For demo purposes we just grab the first pipeline, or create one if none exist
+    useEffect(() => {
+        let mounted = true;
+
+        async function loadOrCreatePipeline() {
+            try {
+                const pipelines = await ApiClient.get<any[]>('/api/v1/pipelines');
+                if (pipelines.length > 0) {
+                    const pl = pipelines[0];
+                    if (mounted) {
+                        setPipelineId(pl.id);
+                        if (pl.nodes?.length > 0) setNodes(pl.nodes);
+                        if (pl.edges?.length > 0) setEdges(pl.edges);
+                        setLoading(false);
+                    }
+                } else {
+                    // Create demo pipeline to start
+                    const demoNodes = [
+                        { id: '1', type: 'source', data: { label: 'OpenSky live', type: 'REST_API' }, position: { x: 100, y: 100 } },
+                        { id: '2', type: 'transform', data: { label: 'Filter Military', op: 'WHERE isMilitary = true' }, position: { x: 400, y: 100 } },
+                        { id: '3', type: 'ontology', data: { label: 'Aircraft Registry', entityType: 'Aircraft' }, position: { x: 700, y: 100 } },
+                    ];
+                    const demoEdges = [
+                        { id: 'e1-2', source: '1', target: '2' },
+                        { id: 'e2-3', source: '2', target: '3' },
+                    ];
+
+                    const newPl = await ApiClient.post<any>('/api/v1/pipelines', {
+                        name: 'Default Pipeline',
+                        description: 'AIP Auto-generated Pipeline',
+                        nodes: demoNodes,
+                        edges: demoEdges
+                    });
+
+                    if (mounted) {
+                        setPipelineId(newPl.id);
+                        setNodes(demoNodes);
+                        setEdges(demoEdges);
+                        setLoading(false);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load pipeline:", err);
+                if (mounted) setLoading(false);
+            }
+        }
+
+        loadOrCreatePipeline();
+
+        return () => { mounted = false; };
+    }, []);
+
+    const handleSave = async () => {
+        if (!pipelineId) return;
+        setSaving(true);
+        try {
+            await ApiClient.put(`/api/v1/pipelines/${pipelineId}`, { nodes, edges });
+        } catch (e) {
+            console.error("Failed to save pipeline:", e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleAddNode = () => {
+        // A minimal helper to drop a new node in for the user to wire up
+        const id = Date.now().toString();
+        const newNode: Node = {
+            id,
+            type: 'transform',
+            data: { label: 'New Transform', op: 'SELECT *' },
+            position: { x: 400, y: 250 }
+        };
+        setNodes(nds => [...nds, newNode]);
+    };
 
     const onNodesChange = useCallback(
         (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -107,13 +164,21 @@ export const PipelineEditor: React.FC = () => {
         []
     );
 
+    if (loading) {
+        return <div className="w-full h-full flex items-center justify-center bg-black/40"><Loader2 className="w-8 h-8 animate-spin text-cyan-500" /></div>;
+    }
+
     return (
         <div className="w-full h-full bg-black/40 relative">
             <div className="absolute top-4 left-4 z-10 flex gap-2">
-                <button className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 shadow-lg transition-all border border-cyan-400/30">
-                    <Share2 className="w-3 h-3" /> SAVE PIPELINE
+                <button onClick={handleSave} disabled={saving} className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 shadow-lg transition-all border border-cyan-400/30">
+                    {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Share2 className="w-3 h-3" />}
+                    {saving ? 'SAVING...' : 'SAVE PIPELINE'}
                 </button>
-                <button className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 backdrop-blur-md transition-all border border-white/10">
+                <button onClick={handleAddNode} className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 backdrop-blur-md transition-all border border-white/10">
+                    <Plus className="w-3 h-3" /> ADD NODE
+                </button>
+                <button disabled className="bg-white/5 opacity-50 cursor-not-allowed text-white px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 backdrop-blur-md transition-all border border-white/10">
                     <Play className="w-3 h-3 text-green-400" /> DRY RUN
                 </button>
             </div>

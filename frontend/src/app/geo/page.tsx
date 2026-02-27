@@ -35,8 +35,10 @@ import {
     X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { LANDMARKS, VisualMode } from "@/components/BattlefieldOverview";
 import { ApiClient } from "@/lib/apiClient";
+import { MissionPanel } from "@/components/MissionPanel";
 
 // Dynamic import to avoid SSR issues with CesiumJS
 const BattlefieldOverview = dynamic(
@@ -77,6 +79,7 @@ const VISUAL_MODES: { id: VisualMode; label: string; icon: any; desc: string }[]
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function GeoExplorer() {
+    const searchParams = useSearchParams();
     // Map state
     const flyToRef = useRef<((lat: number, lng: number, alt: number) => void) | null>(null);
     const [visualMode, setVisualMode] = useState<VisualMode>('normal');
@@ -125,6 +128,17 @@ export default function GeoExplorer() {
             setEntityDetails({ logicalId: rawId, type: 'Flight Track', data: { callsign: rawId, source: 'OpenSky Network' } });
         }
     }, []);
+
+    // Initial context mapping from URL
+    useEffect(() => {
+        const entityId = searchParams.get('entityId');
+        if (entityId) {
+            // Need a slight delay to ensure UI mounts and canvas is ready before selecting
+            setTimeout(() => {
+                handleEntitySelect(`aip-${entityId}`);
+            }, 500);
+        }
+    }, [searchParams, handleEntitySelect]);
 
     const handleLayerCount = useCallback((id: string, count: number) => {
         setLayerCounts(prev => ({ ...prev, [id]: count }));
@@ -424,37 +438,16 @@ export default function GeoExplorer() {
                 </div>
             </div>
 
-            {/* ── Entity Details Panel (Bottom Right) ──────────────────────── */}
+            {/* ── Mission Panel (Right Side) ─────────────────────────────── */}
             {selectedEntityId && entityDetails && (
-                <div className="absolute right-4 bottom-24 w-80 z-30 pointer-events-auto">
-                    <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl p-4 flex flex-col gap-3">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                            <div className="flex items-center gap-2">
-                                <Activity className="w-4 h-4 text-cyan-400" />
-                                <span className="text-sm font-bold text-white">{selectedEntityId}</span>
-                            </div>
-                            <button onClick={() => setSelectedEntityId(null)} className="text-white/40 hover:text-white">
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1 text-xs">
-                            {Object.entries(entityDetails.data || {}).map(([key, val]) => (
-                                <div key={key} className="flex justify-between border-b border-white/5 pb-1">
-                                    <span className="text-slate-400">{key}</span>
-                                    <span className="text-white font-mono break-all text-right max-w-[60%]">{String(val)}</span>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                            <button className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded py-1.5 text-xs font-semibold transition-colors">
-                                Track Object
-                            </button>
-                            <button className="flex-1 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded py-1.5 text-xs font-semibold transition-colors">
-                                Full History
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <MissionPanel
+                    entityId={selectedEntityId}
+                    entityDetails={entityDetails}
+                    onClose={() => {
+                        setSelectedEntityId(null);
+                        setEntityDetails(null);
+                    }}
+                />
             )}
 
             {/* ── Click-away for nav panel ───────────────────────────────── */}

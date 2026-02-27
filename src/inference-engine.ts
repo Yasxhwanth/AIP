@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from './generated/prisma/client';
+import { PrismaClient, Prisma } from './generated/prisma';
 import { evaluateExpression } from './computed-metrics';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -235,7 +235,30 @@ export async function runInference(
     const input = await getModelInputs(logicalId, inputFields, prisma);
     const hyperparameters = version.hyperparameters as unknown as Hyperparameters;
 
-    const { prediction, confidence } = await strategyFn(input, hyperparameters, { logicalId, prisma });
+    const startTime = performance.now();
+    let isError = false;
+    let prediction: any;
+    let confidence: number | null = null;
+
+    try {
+        const res = await strategyFn(input, hyperparameters, { logicalId, prisma });
+        prediction = res.prediction;
+        confidence = res.confidence;
+    } catch (e) {
+        isError = true;
+        prediction = { error: String(e) };
+    }
+    const endTime = performance.now();
+    const durationMs = endTime - startTime;
+
+    // Async capture of latency metrics
+    setImmediate(async () => {
+        try {
+            await recordLatencyMetric(modelVersionId, durationMs, isError, prisma);
+        } catch (e) {
+            console.error("Failed to record latency metric:", e);
+        }
+    });
 
     // Store result
     const result = await prisma.inferenceResult.create({
@@ -249,6 +272,104 @@ export async function runInference(
     });
 
     return { inferenceResultId: result.id, prediction, confidence };
+}
+
+/**
+ * Run inference in "simulation" mode for What-If scenarios.
+ * Takes explicit input data rather than fetching it, and does NOT
+ * persist the result to the DB or record standard metrics.
+ */
+export async function simulateInference(
+    modelVersionId: string,
+    simulatedInputs: Record<string, unknown>,
+    prisma: PrismaClient,
+): Promise<{ prediction: unknown; confidence: number | null }> {
+    // Load version + definition
+    const version = await prisma.modelVersion.findUnique({
+        where: { id: modelVersionId },
+        include: { modelDefinition: true },
+    });
+
+    if (!version) throw new Error(`Model version '${modelVersionId}' not found`);
+
+    const strategyFn = strategies[version.strategy];
+    if (!strategyFn) throw new Error(`Unknown strategy '${version.strategy}'`);
+
+    const hyperparameters = version.hyperparameters as unknown as Hyperparameters;
+
+    // Execute the strategy, passing 'SIMULATED' as the context ID
+    const { prediction, confidence } = await strategyFn(simulatedInputs, hyperparameters, { logicalId: 'SIMULATED', prisma });
+
+    return { prediction, confidence };
+}
+
+// ── Metric Helpers ───────────────────────────────────────────────
+
+/**
+ * Records a latency metric into a 5-minute tumbling window.
+ * Since Prisma doesn't natively support concurrent upsert arrays for percentiles easily,
+ * we will use an approximate rolling average update here, and increment the counts.
+ */
+async function recordLatencyMetric(
+    modelVersionId: string,
+    durationMs: number,
+    isError: boolean,
+    prisma: PrismaClient
+) {
+    const now = new Date();
+    // Round down to the nearest 5 minutes
+    const coeff = 1000 * 60 * 5;
+    const windowStart = new Date(Math.floor(now.getTime() / coeff) * coeff);
+
+    // Atomic upsert with Postgres requires raw SQL for safe concurrent math,
+    // but we can use Prisma's upsert to ensure the row exists, then math it.
+    // In a real high throughput system, we'd use Redis or a Timescale continuous aggregate.
+
+    // Check if the bucket exists
+    let bucket = await prisma.modelLatencyMetric.findFirst({
+        where: { modelVersionId, windowStart, windowSize: '5m' }
+    });
+
+    if (!bucket) {
+        try {
+            bucket = await prisma.modelLatencyMetric.create({
+                data: {
+                    modelVersionId,
+                    windowStart,
+                    windowSize: '5m',
+                    p50: durationMs, // approximations for the very first event
+                    p90: durationMs,
+                    p95: durationMs,
+                    p99: durationMs,
+                    avg: durationMs,
+                    requestCount: 1,
+                    errorCount: isError ? 1 : 0
+                }
+            });
+            return;
+        } catch (e) {
+            // Concurrent creation race condition, ignore and try update
+            bucket = await prisma.modelLatencyMetric.findFirst({
+                where: { modelVersionId, windowStart, windowSize: '5m' }
+            });
+        }
+    }
+
+    if (bucket) {
+        // Use raw query to atomically update the rolling average
+        const errIncrement = isError ? 1 : 0;
+        await prisma.$executeRaw`
+            UPDATE "ModelLatencyMetric"
+            SET 
+                "avg" = (("avg" * "requestCount") + ${durationMs}) / ("requestCount" + 1),
+                "requestCount" = "requestCount" + 1,
+                "errorCount" = "errorCount" + ${errIncrement},
+                "p50" = CASE WHEN ${durationMs} > "p50" THEN "p50" + (${durationMs} - "p50") * 0.1 ELSE "p50" - ("p50" - ${durationMs}) * 0.1 END,
+                "p90" = CASE WHEN ${durationMs} > "p90" THEN "p90" + (${durationMs} - "p90") * 0.02 ELSE "p90" - ("p90" - ${durationMs}) * 0.02 END,
+                "p99" = CASE WHEN ${durationMs} > "p99" THEN "p99" + (${durationMs} - "p99") * 0.002 ELSE "p99" - ("p99" - ${durationMs}) * 0.002 END
+            WHERE "id" = ${bucket.id}
+        `;
+    }
 }
 
 /**
@@ -273,12 +394,12 @@ export async function runInferenceByModel(
 }
 
 /**
- * Run all PRODUCTION models that match an entity's type.
+ * Run all PRODUCTION and SHADOW models that match an entity's type.
  */
 export async function runAllModelsForEntity(
     logicalId: string,
     prisma: PrismaClient,
-): Promise<{ model: string; version: number; prediction: unknown; confidence: number | null }[]> {
+): Promise<{ model: string; version: number; prediction: unknown; confidence: number | null; status: string }[]> {
     // Get entity type
     const entityState = await prisma.currentEntityState.findUnique({
         where: { logicalId },
@@ -286,39 +407,48 @@ export async function runAllModelsForEntity(
 
     if (!entityState) throw new Error(`No current state for '${logicalId}'`);
 
-    // Find all models for this entity type with PRODUCTION versions
+    // Find all models for this entity type with PRODUCTION or SHADOW versions
     const models = await prisma.modelDefinition.findMany({
         where: { entityTypeId: entityState.entityTypeId },
         include: {
             versions: {
-                where: { status: 'PRODUCTION' },
+                where: { status: { in: ['PRODUCTION', 'SHADOW'] } },
                 orderBy: { version: 'desc' },
-                take: 1,
+                // Allow multiple active versions if one is PROD and one is SHADOW
+                take: 10,
             },
         },
     });
 
-    const results: { model: string; version: number; prediction: unknown; confidence: number | null }[] = [];
+    const results: { model: string; version: number; prediction: unknown; confidence: number | null; status: string }[] = [];
 
     for (const model of models) {
-        const prodVersion = model.versions[0];
-        if (!prodVersion) continue;
+        // Collect latest PROD and latest SHADOW
+        const prodVersion = model.versions.find(v => v.status === 'PRODUCTION');
+        const shadowVersion = model.versions.find(v => v.status === 'SHADOW');
 
-        try {
-            const res = await runInference(prodVersion.id, logicalId, prisma);
-            results.push({
-                model: model.name,
-                version: prodVersion.version,
-                prediction: res.prediction,
-                confidence: res.confidence,
-            });
-        } catch (err) {
-            results.push({
-                model: model.name,
-                version: prodVersion.version,
-                prediction: { error: String(err) },
-                confidence: 0,
-            });
+        const versionsToRun = [prodVersion, shadowVersion].filter(Boolean);
+
+        for (const v of versionsToRun) {
+            if (!v) continue;
+            try {
+                const res = await runInference(v.id, logicalId, prisma);
+                results.push({
+                    model: model.name,
+                    version: v.version,
+                    prediction: res.prediction,
+                    confidence: res.confidence,
+                    status: v.status,
+                });
+            } catch (err) {
+                results.push({
+                    model: model.name,
+                    version: v.version,
+                    prediction: { error: String(err) },
+                    confidence: 0,
+                    status: v.status,
+                });
+            }
         }
     }
 

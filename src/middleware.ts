@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'crypto';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { ZodSchema, ZodError } from 'zod';
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 import logger from './logger';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -12,6 +12,7 @@ export interface AuthContext {
     apiKeyId: string;
     apiKeyName: string;
     role: string;
+    projectId?: string | null; // Tenant isolation
 }
 
 // Extend Express Request
@@ -86,7 +87,7 @@ export function apiKeyAuth(prisma: PrismaClient) {
 
         if (!AUTH_REQUIRED) {
             // Dev mode: attach a mock admin context
-            req.auth = { apiKeyId: 'dev', apiKeyName: 'dev-mode', role: 'ADMIN' };
+            req.auth = { apiKeyId: 'dev', apiKeyName: 'dev-mode', role: 'ADMIN', projectId: (global as any).DEFAULT_PROJECT_ID };
             next();
             return;
         }
@@ -111,7 +112,12 @@ export function apiKeyAuth(prisma: PrismaClient) {
                 data: { lastUsedAt: new Date() },
             });
 
-            req.auth = { apiKeyId: apiKey.id, apiKeyName: apiKey.name, role: apiKey.role };
+            req.auth = {
+                apiKeyId: apiKey.id,
+                apiKeyName: apiKey.name,
+                role: apiKey.role,
+                projectId: apiKey.projectId
+            };
             next();
             return;
         }

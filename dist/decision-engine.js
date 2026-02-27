@@ -189,6 +189,11 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
     // Evaluate conditions
     const conditions = rule.conditions;
     const { allPassed, results: conditionResults } = evaluateConditions(triggerData, conditions, rule.logicOperator);
+    // Extract confidence from triggerData if present (often injected by inference-engine)
+    let triggeredConfidence = null;
+    if (typeof triggerData.confidence === 'number') {
+        triggeredConfidence = triggerData.confidence;
+    }
     // Determine decision
     let decision;
     if (!allPassed) {
@@ -196,6 +201,9 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
     }
     else if (simulate) {
         decision = 'SIMULATED';
+    }
+    else if (rule.confidenceThreshold !== null && triggeredConfidence !== null && triggeredConfidence < rule.confidenceThreshold) {
+        decision = 'PENDING_ESCALATION'; // Falls below confidence, human review needed
     }
     else if (!rule.autoExecute) {
         decision = 'PENDING_APPROVAL';
@@ -251,7 +259,7 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
         ? 'SIMULATED'
         : decision === 'SKIPPED'
             ? 'COMPLETED'
-            : decision === 'PENDING_APPROVAL'
+            : (decision === 'PENDING_APPROVAL' || decision === 'PENDING_ESCALATION')
                 ? 'PENDING'
                 : executionResults.every((r) => r.success)
                     ? 'COMPLETED'

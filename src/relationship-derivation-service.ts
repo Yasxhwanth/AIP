@@ -1,4 +1,43 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
+
+/**
+ * Start a background scheduler that periodically decays relationship confidence.
+ * Runs once a day (or every hour, depending on requirement) to apply the decay algorithm.
+ */
+export function startConfidenceDecayScheduler(prisma: PrismaClient): void {
+    const INTERVAL = 60 * 60 * 1000; // run every hour to apply daily decay fractionally, or just check
+
+    setInterval(() => {
+        const idempotencyKey = `RELATIONSHIP_DECAY_${Math.floor(Date.now() / INTERVAL)}`;
+
+        prisma.jobQueue.upsert({
+            where: { idempotencyKey },
+            create: {
+                jobType: 'RELATIONSHIP_DECAY',
+                payload: {},
+                idempotencyKey,
+                priority: 0, // low priority background task
+            },
+            update: {}
+        }).catch((err: any) => {
+            console.error('[ConfidenceDecayScheduler] Failed to enqueue decay job:', err);
+        });
+    }, INTERVAL);
+
+    // Also run once on startup after a delay
+    setTimeout(() => {
+        prisma.jobQueue.create({
+            data: {
+                jobType: 'RELATIONSHIP_DECAY',
+                payload: {},
+                idempotencyKey: `RELATIONSHIP_DECAY_STARTUP_${Date.now()}`,
+                priority: 0,
+            }
+        }).catch(() => { }); // ignore if idempotency conflict
+    }, 10000);
+
+    console.log(`[ConfidenceDecayScheduler] Started — enqueueing relation decay jobs every ${INTERVAL / 1000}s`);
+}
 
 /**
  * RelationshipDerivationService infers graph edges between entities
@@ -96,5 +135,28 @@ export class RelationshipDerivationService {
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
+    }
+
+    /**
+     * Applies time-based decay to non-permanent probabilistic relationships.
+     * Should be called periodically via an ongoing orchestrator job.
+     */
+    static async applyConfidenceDecay(prisma: PrismaClient) {
+        // Raw SQL for efficient bulk update of decaying relationships
+        // Confidence = GREATEST(0, baseConfidence - (decayRate * days_since_last_observed))
+        try {
+            const count = await prisma.$executeRaw`
+                UPDATE "CurrentGraph"
+                SET "confidence" = GREATEST(0.0, "baseConfidence" - ("decayRate" * (EXTRACT(EPOCH FROM (NOW() - "lastObservedAt")) / 86400)))
+                WHERE "decayRate" > 0 AND "confidence" > 0;
+            `;
+            if (count > 0) {
+                console.log(`[RelationshipDerivationService] Decayed confidence for ${count} probabilistic edges.`);
+            }
+            return count;
+        } catch (error) {
+            console.error('[RelationshipDerivationService] Failed to apply confidence decay:', error);
+            return 0;
+        }
     }
 }

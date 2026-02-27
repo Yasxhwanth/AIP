@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma/client';
+import { PrismaClient } from './generated/prisma';
 /**
  * Evaluates a math expression with variable substitution.
  * Safe — no eval(), uses a custom parser.

@@ -1,0 +1,2 @@
+src/server.ts(450,27): error TS2304: Cannot find name 'lineageSvc'.
+src/server.ts(1538,11): error TS2304: Cannot find name 'lineageSvc'.

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Search, X, ExternalLink, Clock, Database, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, X, ExternalLink, Clock, Database, Globe, Loader2 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
 import { useWorkspaceStore } from "@/store/workspace";
+import { LineageGraphView } from "@/components/LineageGraphView";
 
 interface SearchResult {
     logicalId: string;
@@ -66,6 +68,7 @@ function ResultCard({ result, query, onSelect }: { result: SearchResult; query: 
 }
 
 function DetailPanel({ result, query, onClose }: { result: SearchResult; query: string; onClose: () => void }) {
+    const router = useRouter();
     return (
         <div className="w-96 shrink-0 border-l flex flex-col" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
             <div className="flex items-center justify-between px-4 py-3 border-b shrink-0" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
@@ -88,6 +91,23 @@ function DetailPanel({ result, query, onClose }: { result: SearchResult; query: 
                 <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.03)" }}>
                     <div className="text-slate-400 text-[10px] font-semibold mb-0.5">Last Updated</div>
                     <div className="text-slate-200 font-mono">{new Date(result.updatedAt).toLocaleString()}</div>
+                </div>
+
+                <button
+                    onClick={() => router.push(`/geo?entityId=${result.logicalId}`)}
+                    className="w-full mt-2 flex items-center justify-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 py-2 rounded-lg text-xs font-bold uppercase transition-colors"
+                >
+                    <Globe className="w-4 h-4" />
+                    Open in Battlefield Map
+                </button>
+
+                <div className="mt-6">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3">Lineage & Provenance Trace</p>
+                    <LineageGraphView
+                        targetType="EntityInstance"
+                        targetId={result.logicalId}
+                        logicalId={result.logicalId}
+                    />
                 </div>
             </div>
         </div>

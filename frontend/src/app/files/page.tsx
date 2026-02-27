@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
     Folder,
     FileText,
@@ -27,7 +27,8 @@ import {
     FileUp,
     CheckCircle2,
     TerminalSquare,
-    BarChart3
+    BarChart3,
+    X
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
 import * as T from '@/lib/types';
@@ -43,6 +44,28 @@ export default function FilesAndProjects() {
     const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
     const [files, setFiles] = useState<any[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [showConnectionModal, setShowConnectionModal] = useState(false);
+
+    const loadDataSources = useCallback(async () => {
+        try {
+            const sources = await ApiClient.get<any[]>('/api/v1/data-sources');
+            const mapped = sources.map(s => ({
+                id: s.id,
+                name: s.name,
+                type: 'datasource',
+                rawType: s.type,
+                updated: new Date(s.createdAt).toLocaleString(),
+                active: false,
+                rows: 0
+            }));
+            setFiles(prev => {
+                const nonSources = prev.filter(f => f.type !== 'datasource');
+                return [...mapped, ...nonSources].sort((a, b) => b.id - a.id);
+            });
+        } catch (e) { console.error(e) }
+    }, []);
+
+    useEffect(() => { loadDataSources(); }, [loadDataSources]);
 
     const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -200,7 +223,7 @@ export default function FilesAndProjects() {
                                                 </button>
                                                 <button
                                                     onClick={() => {
-                                                        alert("Data Connection functionality (e.g. Postgres, S3, REST) is coming soon!");
+                                                        setShowConnectionModal(true);
                                                         setShowUploadMenu(false);
                                                     }}
                                                     className="w-full text-left flex items-start gap-2 px-2 py-1.5 hover:bg-slate-100 rounded text-sm group"
@@ -263,6 +286,10 @@ export default function FilesAndProjects() {
                                         {file.type === 'dataset' ? (
                                             <div className="w-6 h-6 rounded flex items-center justify-center shrink-0">
                                                 <FileSpreadsheet size={16} className="text-emerald-600" />
+                                            </div>
+                                        ) : file.type === 'datasource' ? (
+                                            <div className="w-6 h-6 rounded flex items-center justify-center shrink-0">
+                                                <Database size={16} className="text-blue-600" />
                                             </div>
                                         ) : (
                                             <div className="w-6 h-6 rounded flex items-center justify-center bg-teal-100 shrink-0">
@@ -346,6 +373,12 @@ export default function FilesAndProjects() {
                     </div>
 
                 </div>
+                {showConnectionModal && (
+                    <DataConnectionModal
+                        onClose={() => setShowConnectionModal(false)}
+                        onSuccess={() => { setShowConnectionModal(false); loadDataSources(); }}
+                    />
+                )}
             </div>
         </div>
     );
@@ -831,4 +864,63 @@ function ViewGridIcon(props: any) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
         </svg>
     )
+}
+
+function DataConnectionModal({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) {
+    const [name, setName] = useState("");
+    const [type, setType] = useState("POSTGRES");
+    const [host, setHost] = useState("");
+    const [username, setUsername] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        try {
+            await ApiClient.post('/api/v1/data-sources', { name, type, config: { host, username } });
+            onSuccess();
+        } catch (error) {
+            console.error(error);
+            alert("Failed to save connection.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center">
+            <div className="bg-white rounded-xl shadow-2xl w-[480px] overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <h2 className="text-base font-bold text-slate-800 flex items-center gap-2"><Database size={18} className="text-blue-600" /> New Data Connection</h2>
+                    <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                </div>
+                <form onSubmit={handleSave} className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Connection Name</label>
+                        <input required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Primary ERP Database" className="w-full px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-sm placeholder:text-slate-400" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Connection Type</label>
+                        <select value={type} onChange={e => setType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-sm bg-white">
+                            <option value="POSTGRES">PostgreSQL</option><option value="S3">Amazon S3</option><option value="REST">REST API API</option><option value="KAFKA">Apache Kafka</option>
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Hostname / URL</label>
+                            <input required value={host} onChange={e => setHost(e.target.value)} placeholder="db.internal.corp" className="w-full px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-sm placeholder:text-slate-400" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1.5">Username (Optional)</label>
+                            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="readonly_user" className="w-full px-3 py-2 border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-sm placeholder:text-slate-400" />
+                        </div>
+                    </div>
+                    <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100 mt-6">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 border border-transparent cursor-pointer">Cancel</button>
+                        <button type="submit" disabled={isSaving} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded shadow-sm disabled:opacity-50 flex items-center gap-2 cursor-pointer">{isSaving ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : 'Save Connection'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
 }

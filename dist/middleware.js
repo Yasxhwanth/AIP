@@ -66,7 +66,7 @@ function apiKeyAuth(prisma) {
         }
         if (!AUTH_REQUIRED) {
             // Dev mode: attach a mock admin context
-            req.auth = { apiKeyId: 'dev', apiKeyName: 'dev-mode', role: 'ADMIN' };
+            req.auth = { apiKeyId: 'dev', apiKeyName: 'dev-mode', role: 'ADMIN', projectId: global.DEFAULT_PROJECT_ID };
             next();
             return;
         }
@@ -86,7 +86,12 @@ function apiKeyAuth(prisma) {
                 where: { id: apiKey.id },
                 data: { lastUsedAt: new Date() },
             });
-            req.auth = { apiKeyId: apiKey.id, apiKeyName: apiKey.name, role: apiKey.role };
+            req.auth = {
+                apiKeyId: apiKey.id,
+                apiKeyName: apiKey.name,
+                role: apiKey.role,
+                projectId: apiKey.projectId
+            };
             next();
             return;
         }

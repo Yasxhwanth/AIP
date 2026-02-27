@@ -12,6 +12,7 @@ import {
     RefreshCw,
     ShieldAlert,
     Network,
+    Undo2
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
 import { useWorkspaceStore } from "@/store/workspace";
@@ -92,6 +93,7 @@ export default function ResolvePage() {
     const [expanded, setExpanded] = useState<string | null>(null);
     const [selectedEntityTypeId, setSelectedEntityTypeId] = useState<string>("");
     const [statusFilter, setStatusFilter] = useState<string>("PENDING");
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     const fetchCandidates = useCallback(async () => {
         setLoading(true);
@@ -100,6 +102,7 @@ export default function ResolvePage() {
             if (selectedEntityTypeId) params.entityTypeId = selectedEntityTypeId;
             const data = await ApiClient.get<MatchCandidate[]>("/api/v1/identity/candidates", params);
             setCandidates(data);
+            setSelectedIds(new Set()); // Reset selection on fetch
         } catch (e) {
             console.error(e);
         } finally {
@@ -146,8 +149,34 @@ export default function ResolvePage() {
         try {
             await ApiClient.post(`/api/v1/identity/candidates/${id}/reject`, {});
             setCandidates(prev => prev.filter(c => c.id !== id));
+            setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
         } catch (e: any) {
             alert(`Reject failed: ${e.message}`);
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleBulkMerge = async () => {
+        if (selectedIds.size === 0) return;
+        setRunning(true);
+        try {
+            await ApiClient.post("/api/v1/identity/merge-batch", { candidateIds: Array.from(selectedIds) });
+            fetchCandidates();
+        } catch (e: any) {
+            alert(`Bulk merge failed: ${e.message}`);
+        } finally {
+            setRunning(false);
+        }
+    };
+
+    const handleRollback = async (id: string) => {
+        setProcessingId(id);
+        try {
+            await ApiClient.post(`/api/v1/identity/rollback/${id}`, {});
+            setCandidates(prev => prev.filter(c => c.id !== id));
+        } catch (e: any) {
+            alert(`Rollback failed: ${e.message}`);
         } finally {
             setProcessingId(null);
         }
@@ -248,22 +277,54 @@ export default function ResolvePage() {
                     </div>
                 ) : (
                     <div className="space-y-3 max-w-5xl mx-auto">
+
+                        {/* Bulk Action Bar */}
+                        {statusFilter === "PENDING" && selectedIds.size > 0 && (
+                            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30 mb-4">
+                                <span className="text-sm font-semibold text-indigo-300">
+                                    {selectedIds.size} candidate{selectedIds.size !== 1 ? 's' : ''} selected
+                                </span>
+                                <button
+                                    onClick={handleBulkMerge}
+                                    disabled={running}
+                                    className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white transition-colors disabled:opacity-50"
+                                >
+                                    {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitMerge className="w-3.5 h-3.5" />}
+                                    Merge Selected
+                                </button>
+                            </div>
+                        )}
+
                         {candidates.map(c => {
                             const isExpanded = expanded === c.id;
                             const divergent = getDivergentFields(c.dataA, c.dataB);
                             const isProcessing = processingId === c.id;
+                            const isSelected = selectedIds.has(c.id);
 
                             return (
                                 <div
                                     key={c.id}
-                                    className="rounded-xl border overflow-hidden transition-all"
-                                    style={{
+                                    className={`rounded-xl border overflow-hidden transition-all ${isSelected ? 'border-indigo-500/50 bg-indigo-500/[.03]' : ''}`}
+                                    style={!isSelected ? {
                                         background: "rgba(255,255,255,0.025)",
                                         borderColor: "rgba(255,255,255,0.07)",
-                                    }}
+                                    } : {}}
                                 >
                                     {/* Row header */}
                                     <div className="flex items-center gap-4 px-5 py-3">
+                                        {statusFilter === "PENDING" && (
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => {
+                                                    const newSet = new Set(selectedIds);
+                                                    if (isSelected) newSet.delete(c.id);
+                                                    else newSet.add(c.id);
+                                                    setSelectedIds(newSet);
+                                                }}
+                                                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                                            />
+                                        )}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-3 flex-wrap">
                                                 <ScoreBadge score={c.scoreOverall} />
@@ -302,6 +363,19 @@ export default function ResolvePage() {
                                                 >
                                                     <X className="w-3 h-3" />
                                                     Reject
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {statusFilter === "MERGED" && (
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    onClick={() => handleRollback(c.id)}
+                                                    disabled={isProcessing}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                                                >
+                                                    {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+                                                    Rollback
                                                 </button>
                                             </div>
                                         )}

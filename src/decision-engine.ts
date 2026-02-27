@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from './generated/prisma/client';
+import { PrismaClient, Prisma } from './generated/prisma';
 import { runInferenceByModel } from './inference-engine';
 import { upsertEntityInstance } from './data-integration';
 
@@ -243,12 +243,20 @@ export async function executeDecision(
     const conditions = rule.conditions as unknown as Condition[];
     const { allPassed, results: conditionResults } = evaluateConditions(triggerData, conditions, rule.logicOperator);
 
+    // Extract confidence from triggerData if present (often injected by inference-engine)
+    let triggeredConfidence: number | null = null;
+    if (typeof triggerData.confidence === 'number') {
+        triggeredConfidence = triggerData.confidence;
+    }
+
     // Determine decision
     let decision: string;
     if (!allPassed) {
         decision = 'SKIPPED';
     } else if (simulate) {
         decision = 'SIMULATED';
+    } else if (rule.confidenceThreshold !== null && triggeredConfidence !== null && triggeredConfidence < rule.confidenceThreshold) {
+        decision = 'PENDING_ESCALATION'; // Falls below confidence, human review needed
     } else if (!rule.autoExecute) {
         decision = 'PENDING_APPROVAL';
     } else {
@@ -305,7 +313,7 @@ export async function executeDecision(
         ? 'SIMULATED'
         : decision === 'SKIPPED'
             ? 'COMPLETED'
-            : decision === 'PENDING_APPROVAL'
+            : (decision === 'PENDING_APPROVAL' || decision === 'PENDING_ESCALATION')
                 ? 'PENDING'
                 : executionResults.every((r) => r.success)
                     ? 'COMPLETED'
