@@ -1,293 +1,286 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
+import { useWorkspaceStore } from "@/store/workspace";
 import {
-    Workflow,
-    Search,
-    Plus,
-    Play,
-    Save,
-    CheckCircle2,
-    AlertTriangle,
     Database,
-    Code,
-    Maximize2,
-    Box,
-    Layers,
-    Activity,
-    Loader2,
-    Clock
+    UploadCloud,
+    FileJson,
+    FileSpreadsheet,
+    ArrowRight,
+    CheckCircle2,
+    Settings2,
+    GitMerge,
+    Wand2,
+    Workflow
 } from "lucide-react";
+import Papa from 'papaparse';
+import { PipelineEditor } from "@/components/PipelineEditor";
 import { ApiClient } from "@/lib/apiClient";
-import * as T from '@/lib/types';
 
-export default function IntegrationsPipeline() {
-    const [selectedJob, setSelectedJob] = useState<any>(null);
+type IngestStep = 'UPLOAD' | 'MAP' | 'EXECUTE';
 
-    const [dataSources, setDataSources] = useState<T.DataSource[]>([]);
-    const [jobs, setJobs] = useState<T.IntegrationJob[]>([]);
-    const [entityTypes, setEntityTypes] = useState<T.EntityType[]>([]);
-    const [loading, setLoading] = useState(true);
+export default function IntegrationsPage() {
+    const { activeProjectName } = useWorkspaceStore();
+    const [step, setStep] = useState<IngestStep>('UPLOAD');
+    const [file, setFile] = useState<File | null>(null);
+    const [previewData, setPreviewData] = useState<any[]>([]);
+    const [columns, setColumns] = useState<string[]>([]);
+    const [mapping, setMapping] = useState<Record<string, string>>({});
+    const [entityName, setEntityName] = useState("New_Entity_Type");
+    const [viewMode, setViewMode] = useState<'WIZARD' | 'PIPELINES'>('WIZARD');
+    const [inferring, setInferring] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        async function fetchPipelineData() {
-            try {
-                const [dsData, jobData, etData] = await Promise.all([
-                    ApiClient.get<T.DataSource[]>('/data-sources'),
-                    ApiClient.get<T.IntegrationJob[]>('/integration-jobs'),
-                    ApiClient.get<T.EntityType[]>('/entity-types')
-                ]);
-                setDataSources(dsData);
-                setJobs(jobData);
-                setEntityTypes(etData);
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selected = e.target.files?.[0];
+        if (!selected) return;
+        setFile(selected);
 
-                if (jobData.length > 0) setSelectedJob(jobData[0]);
-            } catch (err) {
-                console.error("Failed to fetch pipeline data", err);
-            } finally {
-                setLoading(false);
-            }
+        // Parse CSV Preview
+        if (selected.name.endsWith('.csv')) {
+            Papa.parse(selected, {
+                header: true,
+                preview: 5, // preview first 5 rows
+                complete: (results) => {
+                    setColumns(results.meta.fields || []);
+                    setPreviewData(results.data);
+                    setStep('MAP');
+                }
+            });
+        } else if (selected.name.endsWith('.json')) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target?.result as string);
+                    const arr = Array.isArray(json) ? json : [json];
+                    setColumns(Object.keys(arr[0] || {}));
+                    setPreviewData(arr.slice(0, 5));
+                    setStep('MAP');
+                } catch (err) {
+                    alert("Invalid JSON format");
+                }
+            };
+            reader.readAsText(selected);
+        } else {
+            alert("Unsupported file format. Please upload CSV or JSON.");
         }
-        fetchPipelineData();
-    }, []);
+    };
 
-    const getSourceForJob = (job: any) => dataSources.find(ds => ds.id === job.dataSourceId);
-    const getDestForJob = (job: any) => entityTypes.find(et => et.id === job.targetEntityTypeId);
+    const handleMappingChange = (csvCol: string, ontologyType: string) => {
+        setMapping({ ...mapping, [csvCol]: ontologyType });
+    };
+
+    const executePipeline = () => {
+        setStep('EXECUTE');
+        setTimeout(() => {
+            alert(`Successfully ingested \${file?.name} and created EntityType: \${entityName}`);
+            setStep('UPLOAD');
+            setFile(null);
+        }, 2000);
+    };
+
+    const handleAutoInfer = async () => {
+        if (!previewData.length) return;
+        setInferring(true);
+        try {
+            const suggestions = await ApiClient.post<any[]>('/api/v1/integration/suggest-mappings', {
+                sampleData: previewData,
+                targetEntityType: entityName
+            });
+
+            const newMapping: Record<string, string> = { ...mapping };
+            suggestions.forEach((s: any) => {
+                if (s.suggestedAttribute) {
+                    newMapping[s.sourceField] = s.suggestedAttribute;
+                }
+            });
+            setMapping(newMapping);
+        } catch (err) {
+            console.error("Inference failed", err);
+        } finally {
+            setInferring(false);
+        }
+    };
 
     return (
-        <div className="h-full w-full flex flex-col bg-slate-100 text-slate-900 border-t border-slate-200 overflow-hidden">
-            {/* Top Action Bar */}
-            <div className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-4 shrink-0 shadow-sm z-10">
-                <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded bg-blue-100 text-blue-700">
-                        <Workflow className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-sm font-bold text-slate-800">Integration Pipeline Builder</h1>
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-widest border border-amber-200">Draft</span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">Connected to Postgres Data Integration Service</p>
-                    </div>
+        <div className="flex flex-col h-full bg-[#f8fafc] text-slate-900 border-t border-slate-200">
+            {/* Header */}
+            <div className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between shadow-sm shrink-0">
+                <div>
+                    <h1 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+                        <Database className="w-6 h-6 text-orange-500" />
+                        Kernal Data Ingestion
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-1">Upload flat files or connect APIs to dynamically build the '{activeProjectName}' Ontology Graph.</p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <button className="px-3 py-1.5 bg-white border border-slate-300 text-slate-600 rounded text-xs font-semibold hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Validate
+                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button
+                        onClick={() => setViewMode('WIZARD')}
+                        className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all \${viewMode === 'WIZARD' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Database className="w-3.5 h-3.5" /> WIZARD
                     </button>
-                    <button className="px-3 py-1.5 bg-white border border-slate-300 text-slate-600 rounded text-xs font-semibold hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-1.5">
-                        <Save className="w-4 h-4" /> Save
-                    </button>
-                    <button className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-semibold hover:bg-blue-700 transition-colors shadow flex items-center gap-1.5 ml-2">
-                        <Play className="w-4 h-4" /> Execute Pending
+                    <button
+                        onClick={() => setViewMode('PIPELINES')}
+                        className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all \${viewMode === 'PIPELINES' ? 'bg-white shadow-sm text-purple-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Workflow className="w-3.5 h-3.5" /> PIPELINES
                     </button>
                 </div>
+
+                {viewMode === 'WIZARD' && (
+                    <div className="flex items-center gap-4 text-sm font-semibold">
+                        <div className={`flex items-center gap-2 \${step === 'UPLOAD' ? 'text-orange-600' : 'text-slate-400'}`}>
+                            <span className="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs">1</span> Upload
+                        </div>
+                        <div className="w-8 h-px bg-slate-200"></div>
+                        <div className={`flex items-center gap-2 \${step === 'MAP' ? 'text-orange-600' : 'text-slate-400'}`}>
+                            <span className="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs">2</span> Map Schema
+                        </div>
+                        <div className="w-8 h-px bg-slate-200"></div>
+                        <div className={`flex items-center gap-2 \${step === 'EXECUTE' ? 'text-orange-600' : 'text-slate-400'}`}>
+                            <span className="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs">3</span> Execute
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Main Workspace: 3-Pane Layout */}
-            <div className="flex-1 flex min-h-0 relative">
-                {/* Left Pane: Node Library */}
-                <div className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 z-10 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
-                    <div className="p-3 border-b border-slate-200">
-                        <div className="relative">
-                            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Search library..."
-                                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-500 transition-colors bg-slate-50"
-                            />
-                        </div>
-                    </div>
+            <div className={`flex-1 overflow-hidden \${viewMode === 'WIZARD' ? 'p-8 flex justify-center overflow-y-auto' : ''}`}>
+                {viewMode === 'PIPELINES' ? (
+                    <PipelineEditor />
+                ) : (
+                    <div className="w-full max-w-5xl">
 
-                    <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                        {loading ? (
-                            <div className="flex justify-center p-6"><Loader2 className="w-5 h-5 text-blue-500 animate-spin" /></div>
-                        ) : (
-                            <>
-                                {/* Section: Sources */}
-                                <div>
-                                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Active Sources</h3>
-                                    <div className="space-y-1.5">
-                                        {dataSources.map(ds => (
-                                            <div key={ds.id} className="flex flex-col gap-0.5 p-2 rounded border border-slate-200 hover:border-blue-300 hover:shadow-sm cursor-grab bg-slate-50/50 transition-all group">
-                                                <div className="flex items-center gap-2">
-                                                    <Database className="w-4 h-4 text-emerald-500" />
-                                                    <span className="text-xs font-bold text-slate-700 truncate">{ds.name}</span>
+                        {step === 'UPLOAD' && (
+                            <div
+                                className="bg-white border-2 border-dashed border-slate-300 rounded-2xl h-[400px] flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-orange-400 transition-colors shadow-sm"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    ref={fileInputRef}
+                                    accept=".csv,.json"
+                                    onChange={handleFileUpload}
+                                />
+                                <div className="w-20 h-20 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                                    <UploadCloud className="w-10 h-10" />
+                                </div>
+                                <h2 className="text-xl font-bold text-slate-700 mb-2">Drag & Drop Dataset</h2>
+                                <p className="text-slate-500 mb-6 max-w-md text-center">Supports .CSV and .JSON formats up to 500MB.</p>
+                                <button className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-md transition-colors">
+                                    Browse Files
+                                </button>
+                            </div>
+                        )}
+
+                        {step === 'MAP' && (
+                            <div className="bg-white border text-sm border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-[600px]">
+                                <div className="bg-slate-50 border-b border-slate-200 p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        {file?.name.endsWith('json') ? <FileJson className="w-5 h-5 text-blue-500" /> : <FileSpreadsheet className="w-5 h-5 text-emerald-500" />}
+                                        <div>
+                                            <h3 className="font-bold text-slate-800">{file?.name}</h3>
+                                            <p className="text-xs text-slate-500">{(file?.size || 0) / 1000} KB • Map to Target Entity</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="text"
+                                            value={entityName}
+                                            onChange={e => setEntityName(e.target.value)}
+                                            className="border border-slate-300 rounded px-3 py-1.5 focus:ring-2 focus:ring-orange-500 outline-none"
+                                            placeholder="Target Entity Name"
+                                        />
+                                        <button
+                                            onClick={executePipeline}
+                                            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-1.5 rounded-lg hover:bg-slate-800 transition-colors font-semibold"
+                                        >
+                                            Build Graph Nodes <ArrowRight className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 flex overflow-hidden">
+                                    <div className="w-80 border-r border-slate-200 bg-white p-4 overflow-y-auto">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="font-bold text-slate-700 flex items-center gap-2"><GitMerge className="w-4 h-4" /> Column Mapping</h4>
+                                            <button
+                                                onClick={handleAutoInfer}
+                                                disabled={inferring}
+                                                title="AI Auto-Suggest Mappings"
+                                                className="p-1.5 rounded-full bg-purple-100 text-purple-600 hover:bg-purple-200 transition-all disabled:opacity-50"
+                                            >
+                                                <Wand2 className={`w-4 h-4 \${inferring ? 'animate-spin' : ''}`} />
+                                            </button>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {columns.map(col => (
+                                                <div key={col} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                                    <div className="font-semibold text-slate-800 mb-2 truncate">{col}</div>
+                                                    <select
+                                                        className="w-full border border-slate-300 rounded px-2 py-1.5 bg-white text-xs outline-none focus:border-orange-500"
+                                                        value={mapping[col] || "STRING"}
+                                                        onChange={e => handleMappingChange(col, e.target.value)}
+                                                    >
+                                                        <option value="ID">Primary Key (Logical ID)</option>
+                                                        <option value="STRING">Text Attribute</option>
+                                                        <option value="NUMBER">Number Attribute</option>
+                                                        <option value="BOOLEAN">Boolean Attribute</option>
+                                                        <option value="DATETIME">Timestamp Attribute</option>
+                                                        <option value="IGNORE">Ignore Column</option>
+                                                    </select>
                                                 </div>
-                                                <div className="text-[10px] text-slate-400 font-mono ml-6 uppercase">{ds.type}</div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Section: Destinations */}
-                                <div>
-                                    <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Schema Destinations</h3>
-                                    <div className="space-y-1.5">
-                                        {entityTypes.slice(0, 5).map(et => (
-                                            <div key={et.id} className="flex items-center gap-2 p-2 rounded border border-slate-200 hover:border-blue-300 hover:shadow-sm cursor-grab bg-slate-50/50 transition-all group">
-                                                <Box className="w-4 h-4 text-indigo-500" />
-                                                <span className="text-xs font-medium text-slate-700 truncate">{et.name}</span>
-                                            </div>
-                                        ))}
+                                    <div className="flex-1 p-4 bg-[#f8fafc] overflow-auto">
+                                        <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Settings2 className="w-4 h-4" /> Data Preview (Rows 1-5)</h4>
+                                        <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto shadow-sm">
+                                            <table className="w-full text-left border-collapse whitespace-nowrap">
+                                                <thead>
+                                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                                        {columns.map(col => (
+                                                            <th key={col} className="p-3 text-xs font-bold text-slate-600 border-r border-slate-100 last:border-r-0">
+                                                                {col}
+                                                                <span className="block text-[10px] text-orange-600 font-mono mt-0.5">{mapping[col] || "STRING"}</span>
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {previewData.map((row, i) => (
+                                                        <tr key={i} className="border-b border-slate-100 last:border-b-0">
+                                                            {columns.map(col => (
+                                                                <td key={col} className="p-3 text-sm text-slate-700 font-mono border-r border-slate-50 last:border-r-0">
+                                                                    {String(row[col] || '')}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 </div>
-                            </>
+                            </div>
+                        )}
+
+                        {step === 'EXECUTE' && (
+                            <div className="bg-white border border-slate-200 rounded-2xl h-[400px] flex flex-col items-center justify-center shadow-sm">
+                                <div className="relative">
+                                    <CheckCircle2 className="w-20 h-20 text-emerald-500 mb-6 relative z-10 animate-bounce" />
+                                    <div className="absolute inset-0 bg-emerald-100 blur-2xl rounded-full scale-150 animate-pulse"></div>
+                                </div>
+                                <h2 className="text-2xl font-bold text-slate-800 mb-2">Ingesting Pipeline...</h2>
+                                <p className="text-slate-500">Kernal is compiling EntityType models and writing nodes.</p>
+                            </div>
                         )}
                     </div>
-                </div>
-
-                {/* Center Pane: Pipeline Canvas */}
-                <div className="flex-1 flex flex-col relative bg-[#f8fafc] overflow-hidden">
-                    {/* Canvas Background Grid */}
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.03)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-
-                    <div className="absolute bottom-4 left-4 z-10 flex items-center bg-white border border-slate-200 rounded shadow-md overflow-hidden">
-                        <button className="px-3 py-1.5 border-r border-slate-200 hover:bg-slate-50 text-slate-600 font-bold">+</button>
-                        <button className="px-3 py-1.5 border-r border-slate-200 hover:bg-slate-50 text-slate-600 font-bold">-</button>
-                        <button className="px-3 py-1.5 hover:bg-slate-50 text-slate-600"><Maximize2 className="w-4 h-4" /></button>
-                    </div>
-
-                    <div className="absolute inset-0 p-10 z-1 overflow-auto">
-                        <div className="relative w-full h-[800px] min-w-[1200px]">
-                            {loading ? (
-                                <div className="absolute inset-0 flex items-center justify-center text-slate-400">
-                                    Parsing Integration DAG...
-                                </div>
-                            ) : jobs.length === 0 ? (
-                                <div className="absolute inset-0 flex items-center justify-center text-slate-400">
-                                    No Pipeline Jobs found. Drag a Source and Destination to begin.
-                                </div>
-                            ) : (
-                                jobs.map((job, idx) => {
-                                    const yOffset = 100 + (idx * 200);
-                                    const source = getSourceForJob(job);
-                                    const dest = getDestForJob(job);
-
-                                    return (
-                                        <div key={job.id}>
-                                            {/* Connecting SVG lines representing data flow */}
-                                            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
-                                                <path d={`M 260 ${yOffset + 35} L 400 ${yOffset + 35}`} fill="none" className="stroke-indigo-300" strokeWidth="2" strokeDasharray="4,2" />
-                                                <path d={`M 660 ${yOffset + 35} L 800 ${yOffset + 35}`} fill="none" className="stroke-emerald-300" strokeWidth="2" strokeDasharray="4,2" />
-                                            </svg>
-
-                                            {/* Source Node */}
-                                            <div className="absolute w-52 bg-white border border-slate-300 rounded-lg shadow-sm flex items-center p-3 z-10 opacity-90"
-                                                style={{ top: `${yOffset}px`, left: '40px' }}>
-                                                <div className={`p-2 rounded bg-slate-100 text-slate-600 mr-3 shrink-0`}><Database className="w-5 h-5" /></div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="text-xs font-bold text-slate-800 truncate">{source?.name || 'Unknown Source'}</div>
-                                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase">{source?.type || 'DB'}</div>
-                                                </div>
-                                                <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-slate-300 rounded-full"></div>
-                                            </div>
-
-                                            {/* Transform/Job Node */}
-                                            <div onClick={() => setSelectedJob(job)}
-                                                className={`absolute w-64 bg-white border-2 rounded-lg shadow-sm flex flex-col p-3 cursor-pointer z-20 transition-all ${selectedJob?.id === job.id ? 'border-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.1)]' : 'border-slate-200 hover:border-blue-300'}`}
-                                                style={{ top: `${yOffset - 15}px`, left: '400px' }}>
-
-                                                <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-slate-400 rounded-full"></div>
-
-                                                <div className="flex items-center border-b border-slate-100 pb-2 mb-2">
-                                                    <div className={`p-1.5 rounded bg-blue-50 text-blue-600 mr-2 shrink-0`}><Code className="w-4 h-4" /></div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="text-xs font-bold text-slate-800 truncate">{job.name}</div>
-                                                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">Integration Job</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center text-[10px] font-mono">
-                                                    <span className={`px-1.5 py-0.5 rounded text-white font-bold tracking-widest uppercase ${job.status === 'RUNNING' ? 'bg-emerald-500' : job.status === 'FAILED' ? 'bg-red-500' : 'bg-slate-400'}`}>
-                                                        {job.status}
-                                                    </span>
-                                                    <span className="text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" /> {job.schedule}</span>
-                                                </div>
-
-                                                <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 border-2 border-white rounded-full"></div>
-                                            </div>
-
-                                            {/* Destination Node */}
-                                            <div className="absolute w-52 bg-white border border-dashed border-slate-300 rounded-lg shadow-sm flex flex-col p-3 z-10 opacity-70"
-                                                style={{ top: `${yOffset}px`, left: '800px' }}>
-                                                <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-slate-300 rounded-full"></div>
-                                                <div className="flex items-center">
-                                                    <div className={`p-2 rounded bg-indigo-50 text-indigo-600 mr-3 shrink-0`}><Box className="w-5 h-5" /></div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="text-xs font-bold text-slate-800 truncate">{dest?.name || 'Unknown Entity'}</div>
-                                                        <div className="text-[10px] text-indigo-600 font-bold mt-0.5 uppercase">Sync Target</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right Pane: Selected Node Configuration */}
-                <div className="w-80 bg-white border-l border-slate-200 flex flex-col shrink-0 z-20 shadow-[-2px_0_10px_rgba(0,0,0,0.02)]">
-                    {!selectedJob ? (
-                        <div className="flex-1 flex items-center justify-center p-6 text-center text-slate-400 text-sm">
-                            Select an Integration Job node to inspect its mapping logic.
-                        </div>
-                    ) : (
-                        <>
-                            <div className="p-4 border-b border-slate-200">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <div className="p-1.5 rounded bg-blue-50 text-blue-600"><Layers className="w-4 h-4" /></div>
-                                    <div>
-                                        <h2 className="text-sm font-bold text-slate-800 leading-tight">{selectedJob.name}</h2>
-                                        <div className="text-[10px] font-mono text-slate-500 uppercase">System ID: {selectedJob.id}</div>
-                                    </div>
-                                </div>
-                                <div className="flex border-b border-slate-200 mt-4">
-                                    <button className="px-3 py-1.5 text-xs font-bold text-blue-600 border-b-2 border-blue-600">Mapping</button>
-                                    <button className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800">Schedule</button>
-                                    <button className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800">Executions</button>
-                                </div>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Source Dataset</label>
-                                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded px-2 py-2 font-mono truncate">
-                                        {getSourceForJob(selectedJob)?.name || selectedJob.dataSourceId}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Target Entity Type</label>
-                                    <div className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded px-2 py-2 font-mono truncate">
-                                        {getDestForJob(selectedJob)?.name || selectedJob.targetEntityTypeId}
-                                    </div>
-                                </div>
-
-                                <div className="pt-2">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Field Mapping (JSON)</label>
-                                    </div>
-                                    <div className="bg-slate-900 rounded-md border border-slate-800 p-3 font-mono text-[11px] leading-relaxed text-slate-300 overflow-x-auto shadow-inner">
-                                        <pre>{JSON.stringify(selectedJob.mapping, null, 2) || "{\n  // Identity mapping\n}"}</pre>
-                                    </div>
-                                </div>
-
-                                {selectedJob.status === 'FAILED' && (
-                                    <div className="bg-red-50 border border-red-200 rounded p-3 flex gap-2 mt-4">
-                                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                                        <p className="text-[11px] text-red-800 leading-tight">
-                                            Last execution failed due to schema mismatch on upstream Source Dataset. Field `customer_id` dropped.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    )}
-                </div>
-
+                )}
             </div>
         </div>
     );

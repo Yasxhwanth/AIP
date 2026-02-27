@@ -14,15 +14,19 @@ export type AggregateEntityInstance = {
 };
 export type EntityInstanceAvgAggregateOutputType = {
     entityVersion: number | null;
+    confidenceScore: number | null;
 };
 export type EntityInstanceSumAggregateOutputType = {
     entityVersion: number | null;
+    confidenceScore: number | null;
 };
 export type EntityInstanceMinAggregateOutputType = {
     id: string | null;
     logicalId: string | null;
     entityTypeId: string | null;
     entityVersion: number | null;
+    confidenceScore: number | null;
+    reviewStatus: string | null;
     validFrom: Date | null;
     validTo: Date | null;
     transactionTime: Date | null;
@@ -32,6 +36,8 @@ export type EntityInstanceMaxAggregateOutputType = {
     logicalId: string | null;
     entityTypeId: string | null;
     entityVersion: number | null;
+    confidenceScore: number | null;
+    reviewStatus: string | null;
     validFrom: Date | null;
     validTo: Date | null;
     transactionTime: Date | null;
@@ -42,6 +48,8 @@ export type EntityInstanceCountAggregateOutputType = {
     entityTypeId: number;
     entityVersion: number;
     data: number;
+    confidenceScore: number;
+    reviewStatus: number;
     validFrom: number;
     validTo: number;
     transactionTime: number;
@@ -49,15 +57,19 @@ export type EntityInstanceCountAggregateOutputType = {
 };
 export type EntityInstanceAvgAggregateInputType = {
     entityVersion?: true;
+    confidenceScore?: true;
 };
 export type EntityInstanceSumAggregateInputType = {
     entityVersion?: true;
+    confidenceScore?: true;
 };
 export type EntityInstanceMinAggregateInputType = {
     id?: true;
     logicalId?: true;
     entityTypeId?: true;
     entityVersion?: true;
+    confidenceScore?: true;
+    reviewStatus?: true;
     validFrom?: true;
     validTo?: true;
     transactionTime?: true;
@@ -67,6 +79,8 @@ export type EntityInstanceMaxAggregateInputType = {
     logicalId?: true;
     entityTypeId?: true;
     entityVersion?: true;
+    confidenceScore?: true;
+    reviewStatus?: true;
     validFrom?: true;
     validTo?: true;
     transactionTime?: true;
@@ -77,6 +91,8 @@ export type EntityInstanceCountAggregateInputType = {
     entityTypeId?: true;
     entityVersion?: true;
     data?: true;
+    confidenceScore?: true;
+    reviewStatus?: true;
     validFrom?: true;
     validTo?: true;
     transactionTime?: true;
@@ -164,6 +180,8 @@ export type EntityInstanceGroupByOutputType = {
     entityTypeId: string;
     entityVersion: number;
     data: runtime.JsonValue;
+    confidenceScore: number;
+    reviewStatus: string;
     validFrom: Date;
     validTo: Date | null;
     transactionTime: Date;
@@ -185,10 +203,13 @@ export type EntityInstanceWhereInput = {
     entityTypeId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntFilter<"EntityInstance"> | number;
     data?: Prisma.JsonFilter<"EntityInstance">;
+    confidenceScore?: Prisma.FloatFilter<"EntityInstance"> | number;
+    reviewStatus?: Prisma.StringFilter<"EntityInstance"> | string;
     validFrom?: Prisma.DateTimeFilter<"EntityInstance"> | Date | string;
     validTo?: Prisma.DateTimeNullableFilter<"EntityInstance"> | Date | string | null;
     transactionTime?: Prisma.DateTimeFilter<"EntityInstance"> | Date | string;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
+    provenanceRecords?: Prisma.ProvenanceRecordListRelationFilter;
 };
 export type EntityInstanceOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
@@ -196,10 +217,13 @@ export type EntityInstanceOrderByWithRelationInput = {
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
+    reviewStatus?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
     validTo?: Prisma.SortOrderInput | Prisma.SortOrder;
     transactionTime?: Prisma.SortOrder;
     entityType?: Prisma.EntityTypeOrderByWithRelationInput;
+    provenanceRecords?: Prisma.ProvenanceRecordOrderByRelationAggregateInput;
 };
 export type EntityInstanceWhereUniqueInput = Prisma.AtLeast<{
     id?: string;
@@ -210,10 +234,13 @@ export type EntityInstanceWhereUniqueInput = Prisma.AtLeast<{
     entityTypeId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntFilter<"EntityInstance"> | number;
     data?: Prisma.JsonFilter<"EntityInstance">;
+    confidenceScore?: Prisma.FloatFilter<"EntityInstance"> | number;
+    reviewStatus?: Prisma.StringFilter<"EntityInstance"> | string;
     validFrom?: Prisma.DateTimeFilter<"EntityInstance"> | Date | string;
     validTo?: Prisma.DateTimeNullableFilter<"EntityInstance"> | Date | string | null;
     transactionTime?: Prisma.DateTimeFilter<"EntityInstance"> | Date | string;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
+    provenanceRecords?: Prisma.ProvenanceRecordListRelationFilter;
 }, "id">;
 export type EntityInstanceOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
@@ -221,6 +248,8 @@ export type EntityInstanceOrderByWithAggregationInput = {
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
+    reviewStatus?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
     validTo?: Prisma.SortOrderInput | Prisma.SortOrder;
     transactionTime?: Prisma.SortOrder;
@@ -239,6 +268,8 @@ export type EntityInstanceScalarWhereWithAggregatesInput = {
     entityTypeId?: Prisma.StringWithAggregatesFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntWithAggregatesFilter<"EntityInstance"> | number;
     data?: Prisma.JsonWithAggregatesFilter<"EntityInstance">;
+    confidenceScore?: Prisma.FloatWithAggregatesFilter<"EntityInstance"> | number;
+    reviewStatus?: Prisma.StringWithAggregatesFilter<"EntityInstance"> | string;
     validFrom?: Prisma.DateTimeWithAggregatesFilter<"EntityInstance"> | Date | string;
     validTo?: Prisma.DateTimeNullableWithAggregatesFilter<"EntityInstance"> | Date | string | null;
     transactionTime?: Prisma.DateTimeWithAggregatesFilter<"EntityInstance"> | Date | string;
@@ -248,10 +279,13 @@ export type EntityInstanceCreateInput = {
     logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
     validFrom: Date | string;
     validTo?: Date | string | null;
     transactionTime?: Date | string;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutInstancesInput;
+    provenanceRecords?: Prisma.ProvenanceRecordCreateNestedManyWithoutEntityInstanceInput;
 };
 export type EntityInstanceUncheckedCreateInput = {
     id?: string;
@@ -259,19 +293,25 @@ export type EntityInstanceUncheckedCreateInput = {
     entityTypeId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
     validFrom: Date | string;
     validTo?: Date | string | null;
     transactionTime?: Date | string;
+    provenanceRecords?: Prisma.ProvenanceRecordUncheckedCreateNestedManyWithoutEntityInstanceInput;
 };
 export type EntityInstanceUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutInstancesNestedInput;
+    provenanceRecords?: Prisma.ProvenanceRecordUpdateManyWithoutEntityInstanceNestedInput;
 };
 export type EntityInstanceUncheckedUpdateInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -279,9 +319,12 @@ export type EntityInstanceUncheckedUpdateInput = {
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    provenanceRecords?: Prisma.ProvenanceRecordUncheckedUpdateManyWithoutEntityInstanceNestedInput;
 };
 export type EntityInstanceCreateManyInput = {
     id?: string;
@@ -289,6 +332,8 @@ export type EntityInstanceCreateManyInput = {
     entityTypeId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
     validFrom: Date | string;
     validTo?: Date | string | null;
     transactionTime?: Date | string;
@@ -298,6 +343,8 @@ export type EntityInstanceUpdateManyMutationInput = {
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -308,6 +355,8 @@ export type EntityInstanceUncheckedUpdateManyInput = {
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
@@ -326,18 +375,23 @@ export type EntityInstanceCountOrderByAggregateInput = {
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
+    reviewStatus?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
     validTo?: Prisma.SortOrder;
     transactionTime?: Prisma.SortOrder;
 };
 export type EntityInstanceAvgOrderByAggregateInput = {
     entityVersion?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
 };
 export type EntityInstanceMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
+    reviewStatus?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
     validTo?: Prisma.SortOrder;
     transactionTime?: Prisma.SortOrder;
@@ -347,12 +401,19 @@ export type EntityInstanceMinOrderByAggregateInput = {
     logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     entityVersion?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
+    reviewStatus?: Prisma.SortOrder;
     validFrom?: Prisma.SortOrder;
     validTo?: Prisma.SortOrder;
     transactionTime?: Prisma.SortOrder;
 };
 export type EntityInstanceSumOrderByAggregateInput = {
     entityVersion?: Prisma.SortOrder;
+    confidenceScore?: Prisma.SortOrder;
+};
+export type EntityInstanceScalarRelationFilter = {
+    is?: Prisma.EntityInstanceWhereInput;
+    isNot?: Prisma.EntityInstanceWhereInput;
 };
 export type EntityInstanceCreateNestedManyWithoutEntityTypeInput = {
     create?: Prisma.XOR<Prisma.EntityInstanceCreateWithoutEntityTypeInput, Prisma.EntityInstanceUncheckedCreateWithoutEntityTypeInput> | Prisma.EntityInstanceCreateWithoutEntityTypeInput[] | Prisma.EntityInstanceUncheckedCreateWithoutEntityTypeInput[];
@@ -392,23 +453,48 @@ export type EntityInstanceUncheckedUpdateManyWithoutEntityTypeNestedInput = {
     updateMany?: Prisma.EntityInstanceUpdateManyWithWhereWithoutEntityTypeInput | Prisma.EntityInstanceUpdateManyWithWhereWithoutEntityTypeInput[];
     deleteMany?: Prisma.EntityInstanceScalarWhereInput | Prisma.EntityInstanceScalarWhereInput[];
 };
+export type FloatFieldUpdateOperationsInput = {
+    set?: number;
+    increment?: number;
+    decrement?: number;
+    multiply?: number;
+    divide?: number;
+};
+export type EntityInstanceCreateNestedOneWithoutProvenanceRecordsInput = {
+    create?: Prisma.XOR<Prisma.EntityInstanceCreateWithoutProvenanceRecordsInput, Prisma.EntityInstanceUncheckedCreateWithoutProvenanceRecordsInput>;
+    connectOrCreate?: Prisma.EntityInstanceCreateOrConnectWithoutProvenanceRecordsInput;
+    connect?: Prisma.EntityInstanceWhereUniqueInput;
+};
+export type EntityInstanceUpdateOneRequiredWithoutProvenanceRecordsNestedInput = {
+    create?: Prisma.XOR<Prisma.EntityInstanceCreateWithoutProvenanceRecordsInput, Prisma.EntityInstanceUncheckedCreateWithoutProvenanceRecordsInput>;
+    connectOrCreate?: Prisma.EntityInstanceCreateOrConnectWithoutProvenanceRecordsInput;
+    upsert?: Prisma.EntityInstanceUpsertWithoutProvenanceRecordsInput;
+    connect?: Prisma.EntityInstanceWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.EntityInstanceUpdateToOneWithWhereWithoutProvenanceRecordsInput, Prisma.EntityInstanceUpdateWithoutProvenanceRecordsInput>, Prisma.EntityInstanceUncheckedUpdateWithoutProvenanceRecordsInput>;
+};
 export type EntityInstanceCreateWithoutEntityTypeInput = {
     id?: string;
     logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
     validFrom: Date | string;
     validTo?: Date | string | null;
     transactionTime?: Date | string;
+    provenanceRecords?: Prisma.ProvenanceRecordCreateNestedManyWithoutEntityInstanceInput;
 };
 export type EntityInstanceUncheckedCreateWithoutEntityTypeInput = {
     id?: string;
     logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
     validFrom: Date | string;
     validTo?: Date | string | null;
     transactionTime?: Date | string;
+    provenanceRecords?: Prisma.ProvenanceRecordUncheckedCreateNestedManyWithoutEntityInstanceInput;
 };
 export type EntityInstanceCreateOrConnectWithoutEntityTypeInput = {
     where: Prisma.EntityInstanceWhereUniqueInput;
@@ -440,15 +526,80 @@ export type EntityInstanceScalarWhereInput = {
     entityTypeId?: Prisma.StringFilter<"EntityInstance"> | string;
     entityVersion?: Prisma.IntFilter<"EntityInstance"> | number;
     data?: Prisma.JsonFilter<"EntityInstance">;
+    confidenceScore?: Prisma.FloatFilter<"EntityInstance"> | number;
+    reviewStatus?: Prisma.StringFilter<"EntityInstance"> | string;
     validFrom?: Prisma.DateTimeFilter<"EntityInstance"> | Date | string;
     validTo?: Prisma.DateTimeNullableFilter<"EntityInstance"> | Date | string | null;
     transactionTime?: Prisma.DateTimeFilter<"EntityInstance"> | Date | string;
+};
+export type EntityInstanceCreateWithoutProvenanceRecordsInput = {
+    id?: string;
+    logicalId: string;
+    entityVersion: number;
+    data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
+    validFrom: Date | string;
+    validTo?: Date | string | null;
+    transactionTime?: Date | string;
+    entityType: Prisma.EntityTypeCreateNestedOneWithoutInstancesInput;
+};
+export type EntityInstanceUncheckedCreateWithoutProvenanceRecordsInput = {
+    id?: string;
+    logicalId: string;
+    entityTypeId: string;
+    entityVersion: number;
+    data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
+    validFrom: Date | string;
+    validTo?: Date | string | null;
+    transactionTime?: Date | string;
+};
+export type EntityInstanceCreateOrConnectWithoutProvenanceRecordsInput = {
+    where: Prisma.EntityInstanceWhereUniqueInput;
+    create: Prisma.XOR<Prisma.EntityInstanceCreateWithoutProvenanceRecordsInput, Prisma.EntityInstanceUncheckedCreateWithoutProvenanceRecordsInput>;
+};
+export type EntityInstanceUpsertWithoutProvenanceRecordsInput = {
+    update: Prisma.XOR<Prisma.EntityInstanceUpdateWithoutProvenanceRecordsInput, Prisma.EntityInstanceUncheckedUpdateWithoutProvenanceRecordsInput>;
+    create: Prisma.XOR<Prisma.EntityInstanceCreateWithoutProvenanceRecordsInput, Prisma.EntityInstanceUncheckedCreateWithoutProvenanceRecordsInput>;
+    where?: Prisma.EntityInstanceWhereInput;
+};
+export type EntityInstanceUpdateToOneWithWhereWithoutProvenanceRecordsInput = {
+    where?: Prisma.EntityInstanceWhereInput;
+    data: Prisma.XOR<Prisma.EntityInstanceUpdateWithoutProvenanceRecordsInput, Prisma.EntityInstanceUncheckedUpdateWithoutProvenanceRecordsInput>;
+};
+export type EntityInstanceUpdateWithoutProvenanceRecordsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
+    data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
+    validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutInstancesNestedInput;
+};
+export type EntityInstanceUncheckedUpdateWithoutProvenanceRecordsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
+    data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
+    validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type EntityInstanceCreateManyEntityTypeInput = {
     id?: string;
     logicalId: string;
     entityVersion: number;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: number;
+    reviewStatus?: string;
     validFrom: Date | string;
     validTo?: Date | string | null;
     transactionTime?: Date | string;
@@ -458,27 +609,59 @@ export type EntityInstanceUpdateWithoutEntityTypeInput = {
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    provenanceRecords?: Prisma.ProvenanceRecordUpdateManyWithoutEntityInstanceNestedInput;
 };
 export type EntityInstanceUncheckedUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    provenanceRecords?: Prisma.ProvenanceRecordUncheckedUpdateManyWithoutEntityInstanceNestedInput;
 };
 export type EntityInstanceUncheckedUpdateManyWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
     entityVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    confidenceScore?: Prisma.FloatFieldUpdateOperationsInput | number;
+    reviewStatus?: Prisma.StringFieldUpdateOperationsInput | string;
     validFrom?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     validTo?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
     transactionTime?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
+/**
+ * Count Type EntityInstanceCountOutputType
+ */
+export type EntityInstanceCountOutputType = {
+    provenanceRecords: number;
+};
+export type EntityInstanceCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    provenanceRecords?: boolean | EntityInstanceCountOutputTypeCountProvenanceRecordsArgs;
+};
+/**
+ * EntityInstanceCountOutputType without action
+ */
+export type EntityInstanceCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EntityInstanceCountOutputType
+     */
+    select?: Prisma.EntityInstanceCountOutputTypeSelect<ExtArgs> | null;
+};
+/**
+ * EntityInstanceCountOutputType without action
+ */
+export type EntityInstanceCountOutputTypeCountProvenanceRecordsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.ProvenanceRecordWhereInput;
 };
 export type EntityInstanceSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -486,10 +669,14 @@ export type EntityInstanceSelect<ExtArgs extends runtime.Types.Extensions.Intern
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
+    confidenceScore?: boolean;
+    reviewStatus?: boolean;
     validFrom?: boolean;
     validTo?: boolean;
     transactionTime?: boolean;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+    provenanceRecords?: boolean | Prisma.EntityInstance$provenanceRecordsArgs<ExtArgs>;
+    _count?: boolean | Prisma.EntityInstanceCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["entityInstance"]>;
 export type EntityInstanceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -497,6 +684,8 @@ export type EntityInstanceSelectCreateManyAndReturn<ExtArgs extends runtime.Type
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
+    confidenceScore?: boolean;
+    reviewStatus?: boolean;
     validFrom?: boolean;
     validTo?: boolean;
     transactionTime?: boolean;
@@ -508,6 +697,8 @@ export type EntityInstanceSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
+    confidenceScore?: boolean;
+    reviewStatus?: boolean;
     validFrom?: boolean;
     validTo?: boolean;
     transactionTime?: boolean;
@@ -519,13 +710,17 @@ export type EntityInstanceSelectScalar = {
     entityTypeId?: boolean;
     entityVersion?: boolean;
     data?: boolean;
+    confidenceScore?: boolean;
+    reviewStatus?: boolean;
     validFrom?: boolean;
     validTo?: boolean;
     transactionTime?: boolean;
 };
-export type EntityInstanceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "logicalId" | "entityTypeId" | "entityVersion" | "data" | "validFrom" | "validTo" | "transactionTime", ExtArgs["result"]["entityInstance"]>;
+export type EntityInstanceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "logicalId" | "entityTypeId" | "entityVersion" | "data" | "confidenceScore" | "reviewStatus" | "validFrom" | "validTo" | "transactionTime", ExtArgs["result"]["entityInstance"]>;
 export type EntityInstanceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+    provenanceRecords?: boolean | Prisma.EntityInstance$provenanceRecordsArgs<ExtArgs>;
+    _count?: boolean | Prisma.EntityInstanceCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type EntityInstanceIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
@@ -537,6 +732,7 @@ export type $EntityInstancePayload<ExtArgs extends runtime.Types.Extensions.Inte
     name: "EntityInstance";
     objects: {
         entityType: Prisma.$EntityTypePayload<ExtArgs>;
+        provenanceRecords: Prisma.$ProvenanceRecordPayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: string;
@@ -544,6 +740,8 @@ export type $EntityInstancePayload<ExtArgs extends runtime.Types.Extensions.Inte
         entityTypeId: string;
         entityVersion: number;
         data: runtime.JsonValue;
+        confidenceScore: number;
+        reviewStatus: string;
         validFrom: Date;
         validTo: Date | null;
         transactionTime: Date;
@@ -877,6 +1075,7 @@ export interface EntityInstanceDelegate<ExtArgs extends runtime.Types.Extensions
 export interface Prisma__EntityInstanceClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
     entityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
+    provenanceRecords<T extends Prisma.EntityInstance$provenanceRecordsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityInstance$provenanceRecordsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ProvenanceRecordPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -907,6 +1106,8 @@ export interface EntityInstanceFieldRefs {
     readonly entityTypeId: Prisma.FieldRef<"EntityInstance", 'String'>;
     readonly entityVersion: Prisma.FieldRef<"EntityInstance", 'Int'>;
     readonly data: Prisma.FieldRef<"EntityInstance", 'Json'>;
+    readonly confidenceScore: Prisma.FieldRef<"EntityInstance", 'Float'>;
+    readonly reviewStatus: Prisma.FieldRef<"EntityInstance", 'String'>;
     readonly validFrom: Prisma.FieldRef<"EntityInstance", 'DateTime'>;
     readonly validTo: Prisma.FieldRef<"EntityInstance", 'DateTime'>;
     readonly transactionTime: Prisma.FieldRef<"EntityInstance", 'DateTime'>;
@@ -1287,6 +1488,29 @@ export type EntityInstanceDeleteManyArgs<ExtArgs extends runtime.Types.Extension
      * Limit how many EntityInstances to delete.
      */
     limit?: number;
+};
+/**
+ * EntityInstance.provenanceRecords
+ */
+export type EntityInstance$provenanceRecordsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProvenanceRecord
+     */
+    select?: Prisma.ProvenanceRecordSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ProvenanceRecord
+     */
+    omit?: Prisma.ProvenanceRecordOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.ProvenanceRecordInclude<ExtArgs> | null;
+    where?: Prisma.ProvenanceRecordWhereInput;
+    orderBy?: Prisma.ProvenanceRecordOrderByWithRelationInput | Prisma.ProvenanceRecordOrderByWithRelationInput[];
+    cursor?: Prisma.ProvenanceRecordWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.ProvenanceRecordScalarFieldEnum | Prisma.ProvenanceRecordScalarFieldEnum[];
 };
 /**
  * EntityInstance without action

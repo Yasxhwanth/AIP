@@ -126,12 +126,14 @@ export type CurrentEntityStateWhereInput = {
     entityTypeId?: Prisma.StringFilter<"CurrentEntityState"> | string;
     data?: Prisma.JsonFilter<"CurrentEntityState">;
     updatedAt?: Prisma.DateTimeFilter<"CurrentEntityState"> | Date | string;
+    entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
 };
 export type CurrentEntityStateOrderByWithRelationInput = {
     logicalId?: Prisma.SortOrder;
     entityTypeId?: Prisma.SortOrder;
     data?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
+    entityType?: Prisma.EntityTypeOrderByWithRelationInput;
 };
 export type CurrentEntityStateWhereUniqueInput = Prisma.AtLeast<{
     logicalId?: string;
@@ -141,6 +143,7 @@ export type CurrentEntityStateWhereUniqueInput = Prisma.AtLeast<{
     entityTypeId?: Prisma.StringFilter<"CurrentEntityState"> | string;
     data?: Prisma.JsonFilter<"CurrentEntityState">;
     updatedAt?: Prisma.DateTimeFilter<"CurrentEntityState"> | Date | string;
+    entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
 }, "logicalId">;
 export type CurrentEntityStateOrderByWithAggregationInput = {
     logicalId?: Prisma.SortOrder;
@@ -162,9 +165,9 @@ export type CurrentEntityStateScalarWhereWithAggregatesInput = {
 };
 export type CurrentEntityStateCreateInput = {
     logicalId: string;
-    entityTypeId: string;
     data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     updatedAt: Date | string;
+    entityType: Prisma.EntityTypeCreateNestedOneWithoutCurrentStatesInput;
 };
 export type CurrentEntityStateUncheckedCreateInput = {
     logicalId: string;
@@ -174,9 +177,9 @@ export type CurrentEntityStateUncheckedCreateInput = {
 };
 export type CurrentEntityStateUpdateInput = {
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
-    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutCurrentStatesNestedInput;
 };
 export type CurrentEntityStateUncheckedUpdateInput = {
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -192,7 +195,6 @@ export type CurrentEntityStateCreateManyInput = {
 };
 export type CurrentEntityStateUpdateManyMutationInput = {
     logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
-    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
@@ -201,6 +203,14 @@ export type CurrentEntityStateUncheckedUpdateManyInput = {
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
     data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
+export type CurrentEntityStateListRelationFilter = {
+    every?: Prisma.CurrentEntityStateWhereInput;
+    some?: Prisma.CurrentEntityStateWhereInput;
+    none?: Prisma.CurrentEntityStateWhereInput;
+};
+export type CurrentEntityStateOrderByRelationAggregateInput = {
+    _count?: Prisma.SortOrder;
 };
 export type CurrentEntityStateCountOrderByAggregateInput = {
     logicalId?: Prisma.SortOrder;
@@ -218,23 +228,124 @@ export type CurrentEntityStateMinOrderByAggregateInput = {
     entityTypeId?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
 };
+export type CurrentEntityStateCreateNestedManyWithoutEntityTypeInput = {
+    create?: Prisma.XOR<Prisma.CurrentEntityStateCreateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput> | Prisma.CurrentEntityStateCreateWithoutEntityTypeInput[] | Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput[];
+    connectOrCreate?: Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput | Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput[];
+    createMany?: Prisma.CurrentEntityStateCreateManyEntityTypeInputEnvelope;
+    connect?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+};
+export type CurrentEntityStateUncheckedCreateNestedManyWithoutEntityTypeInput = {
+    create?: Prisma.XOR<Prisma.CurrentEntityStateCreateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput> | Prisma.CurrentEntityStateCreateWithoutEntityTypeInput[] | Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput[];
+    connectOrCreate?: Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput | Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput[];
+    createMany?: Prisma.CurrentEntityStateCreateManyEntityTypeInputEnvelope;
+    connect?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+};
+export type CurrentEntityStateUpdateManyWithoutEntityTypeNestedInput = {
+    create?: Prisma.XOR<Prisma.CurrentEntityStateCreateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput> | Prisma.CurrentEntityStateCreateWithoutEntityTypeInput[] | Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput[];
+    connectOrCreate?: Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput | Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput[];
+    upsert?: Prisma.CurrentEntityStateUpsertWithWhereUniqueWithoutEntityTypeInput | Prisma.CurrentEntityStateUpsertWithWhereUniqueWithoutEntityTypeInput[];
+    createMany?: Prisma.CurrentEntityStateCreateManyEntityTypeInputEnvelope;
+    set?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    disconnect?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    delete?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    connect?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    update?: Prisma.CurrentEntityStateUpdateWithWhereUniqueWithoutEntityTypeInput | Prisma.CurrentEntityStateUpdateWithWhereUniqueWithoutEntityTypeInput[];
+    updateMany?: Prisma.CurrentEntityStateUpdateManyWithWhereWithoutEntityTypeInput | Prisma.CurrentEntityStateUpdateManyWithWhereWithoutEntityTypeInput[];
+    deleteMany?: Prisma.CurrentEntityStateScalarWhereInput | Prisma.CurrentEntityStateScalarWhereInput[];
+};
+export type CurrentEntityStateUncheckedUpdateManyWithoutEntityTypeNestedInput = {
+    create?: Prisma.XOR<Prisma.CurrentEntityStateCreateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput> | Prisma.CurrentEntityStateCreateWithoutEntityTypeInput[] | Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput[];
+    connectOrCreate?: Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput | Prisma.CurrentEntityStateCreateOrConnectWithoutEntityTypeInput[];
+    upsert?: Prisma.CurrentEntityStateUpsertWithWhereUniqueWithoutEntityTypeInput | Prisma.CurrentEntityStateUpsertWithWhereUniqueWithoutEntityTypeInput[];
+    createMany?: Prisma.CurrentEntityStateCreateManyEntityTypeInputEnvelope;
+    set?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    disconnect?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    delete?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    connect?: Prisma.CurrentEntityStateWhereUniqueInput | Prisma.CurrentEntityStateWhereUniqueInput[];
+    update?: Prisma.CurrentEntityStateUpdateWithWhereUniqueWithoutEntityTypeInput | Prisma.CurrentEntityStateUpdateWithWhereUniqueWithoutEntityTypeInput[];
+    updateMany?: Prisma.CurrentEntityStateUpdateManyWithWhereWithoutEntityTypeInput | Prisma.CurrentEntityStateUpdateManyWithWhereWithoutEntityTypeInput[];
+    deleteMany?: Prisma.CurrentEntityStateScalarWhereInput | Prisma.CurrentEntityStateScalarWhereInput[];
+};
+export type CurrentEntityStateCreateWithoutEntityTypeInput = {
+    logicalId: string;
+    data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    updatedAt: Date | string;
+};
+export type CurrentEntityStateUncheckedCreateWithoutEntityTypeInput = {
+    logicalId: string;
+    data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    updatedAt: Date | string;
+};
+export type CurrentEntityStateCreateOrConnectWithoutEntityTypeInput = {
+    where: Prisma.CurrentEntityStateWhereUniqueInput;
+    create: Prisma.XOR<Prisma.CurrentEntityStateCreateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput>;
+};
+export type CurrentEntityStateCreateManyEntityTypeInputEnvelope = {
+    data: Prisma.CurrentEntityStateCreateManyEntityTypeInput | Prisma.CurrentEntityStateCreateManyEntityTypeInput[];
+    skipDuplicates?: boolean;
+};
+export type CurrentEntityStateUpsertWithWhereUniqueWithoutEntityTypeInput = {
+    where: Prisma.CurrentEntityStateWhereUniqueInput;
+    update: Prisma.XOR<Prisma.CurrentEntityStateUpdateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedUpdateWithoutEntityTypeInput>;
+    create: Prisma.XOR<Prisma.CurrentEntityStateCreateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedCreateWithoutEntityTypeInput>;
+};
+export type CurrentEntityStateUpdateWithWhereUniqueWithoutEntityTypeInput = {
+    where: Prisma.CurrentEntityStateWhereUniqueInput;
+    data: Prisma.XOR<Prisma.CurrentEntityStateUpdateWithoutEntityTypeInput, Prisma.CurrentEntityStateUncheckedUpdateWithoutEntityTypeInput>;
+};
+export type CurrentEntityStateUpdateManyWithWhereWithoutEntityTypeInput = {
+    where: Prisma.CurrentEntityStateScalarWhereInput;
+    data: Prisma.XOR<Prisma.CurrentEntityStateUpdateManyMutationInput, Prisma.CurrentEntityStateUncheckedUpdateManyWithoutEntityTypeInput>;
+};
+export type CurrentEntityStateScalarWhereInput = {
+    AND?: Prisma.CurrentEntityStateScalarWhereInput | Prisma.CurrentEntityStateScalarWhereInput[];
+    OR?: Prisma.CurrentEntityStateScalarWhereInput[];
+    NOT?: Prisma.CurrentEntityStateScalarWhereInput | Prisma.CurrentEntityStateScalarWhereInput[];
+    logicalId?: Prisma.StringFilter<"CurrentEntityState"> | string;
+    entityTypeId?: Prisma.StringFilter<"CurrentEntityState"> | string;
+    data?: Prisma.JsonFilter<"CurrentEntityState">;
+    updatedAt?: Prisma.DateTimeFilter<"CurrentEntityState"> | Date | string;
+};
+export type CurrentEntityStateCreateManyEntityTypeInput = {
+    logicalId: string;
+    data: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    updatedAt: Date | string;
+};
+export type CurrentEntityStateUpdateWithoutEntityTypeInput = {
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
+    data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
+export type CurrentEntityStateUncheckedUpdateWithoutEntityTypeInput = {
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
+    data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
+export type CurrentEntityStateUncheckedUpdateManyWithoutEntityTypeInput = {
+    logicalId?: Prisma.StringFieldUpdateOperationsInput | string;
+    data?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
 export type CurrentEntityStateSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     logicalId?: boolean;
     entityTypeId?: boolean;
     data?: boolean;
     updatedAt?: boolean;
+    entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["currentEntityState"]>;
 export type CurrentEntityStateSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     logicalId?: boolean;
     entityTypeId?: boolean;
     data?: boolean;
     updatedAt?: boolean;
+    entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["currentEntityState"]>;
 export type CurrentEntityStateSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     logicalId?: boolean;
     entityTypeId?: boolean;
     data?: boolean;
     updatedAt?: boolean;
+    entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["currentEntityState"]>;
 export type CurrentEntityStateSelectScalar = {
     logicalId?: boolean;
@@ -243,9 +354,20 @@ export type CurrentEntityStateSelectScalar = {
     updatedAt?: boolean;
 };
 export type CurrentEntityStateOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"logicalId" | "entityTypeId" | "data" | "updatedAt", ExtArgs["result"]["currentEntityState"]>;
+export type CurrentEntityStateInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+};
+export type CurrentEntityStateIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+};
+export type CurrentEntityStateIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
+};
 export type $CurrentEntityStatePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "CurrentEntityState";
-    objects: {};
+    objects: {
+        entityType: Prisma.$EntityTypePayload<ExtArgs>;
+    };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         logicalId: string;
         entityTypeId: string;
@@ -580,6 +702,7 @@ export interface CurrentEntityStateDelegate<ExtArgs extends runtime.Types.Extens
  */
 export interface Prisma__CurrentEntityStateClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
+    entityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -623,6 +746,10 @@ export type CurrentEntityStateFindUniqueArgs<ExtArgs extends runtime.Types.Exten
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
+    /**
      * Filter, which CurrentEntityState to fetch.
      */
     where: Prisma.CurrentEntityStateWhereUniqueInput;
@@ -640,6 +767,10 @@ export type CurrentEntityStateFindUniqueOrThrowArgs<ExtArgs extends runtime.Type
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
+    /**
      * Filter, which CurrentEntityState to fetch.
      */
     where: Prisma.CurrentEntityStateWhereUniqueInput;
@@ -656,6 +787,10 @@ export type CurrentEntityStateFindFirstArgs<ExtArgs extends runtime.Types.Extens
      * Omit specific fields from the CurrentEntityState
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
     /**
      * Filter, which CurrentEntityState to fetch.
      */
@@ -704,6 +839,10 @@ export type CurrentEntityStateFindFirstOrThrowArgs<ExtArgs extends runtime.Types
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
+    /**
      * Filter, which CurrentEntityState to fetch.
      */
     where?: Prisma.CurrentEntityStateWhereInput;
@@ -751,6 +890,10 @@ export type CurrentEntityStateFindManyArgs<ExtArgs extends runtime.Types.Extensi
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
+    /**
      * Filter, which CurrentEntityStates to fetch.
      */
     where?: Prisma.CurrentEntityStateWhereInput;
@@ -793,6 +936,10 @@ export type CurrentEntityStateCreateArgs<ExtArgs extends runtime.Types.Extension
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
     /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
+    /**
      * The data needed to create a CurrentEntityState.
      */
     data: Prisma.XOR<Prisma.CurrentEntityStateCreateInput, Prisma.CurrentEntityStateUncheckedCreateInput>;
@@ -824,6 +971,10 @@ export type CurrentEntityStateCreateManyAndReturnArgs<ExtArgs extends runtime.Ty
      */
     data: Prisma.CurrentEntityStateCreateManyInput | Prisma.CurrentEntityStateCreateManyInput[];
     skipDuplicates?: boolean;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateIncludeCreateManyAndReturn<ExtArgs> | null;
 };
 /**
  * CurrentEntityState update
@@ -837,6 +988,10 @@ export type CurrentEntityStateUpdateArgs<ExtArgs extends runtime.Types.Extension
      * Omit specific fields from the CurrentEntityState
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
     /**
      * The data needed to update a CurrentEntityState.
      */
@@ -887,6 +1042,10 @@ export type CurrentEntityStateUpdateManyAndReturnArgs<ExtArgs extends runtime.Ty
      * Limit how many CurrentEntityStates to update.
      */
     limit?: number;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateIncludeUpdateManyAndReturn<ExtArgs> | null;
 };
 /**
  * CurrentEntityState upsert
@@ -900,6 +1059,10 @@ export type CurrentEntityStateUpsertArgs<ExtArgs extends runtime.Types.Extension
      * Omit specific fields from the CurrentEntityState
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
     /**
      * The filter to search for the CurrentEntityState to update in case it exists.
      */
@@ -925,6 +1088,10 @@ export type CurrentEntityStateDeleteArgs<ExtArgs extends runtime.Types.Extension
      * Omit specific fields from the CurrentEntityState
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
     /**
      * Filter which CurrentEntityState to delete.
      */
@@ -955,6 +1122,10 @@ export type CurrentEntityStateDefaultArgs<ExtArgs extends runtime.Types.Extensio
      * Omit specific fields from the CurrentEntityState
      */
     omit?: Prisma.CurrentEntityStateOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.CurrentEntityStateInclude<ExtArgs> | null;
 };
 export {};
 //# sourceMappingURL=CurrentEntityState.d.ts.map

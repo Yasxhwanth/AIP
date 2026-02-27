@@ -1,0 +1,12 @@
+﻿src/app/workshop/page.tsx(127,13): error TS2353: Object literal may only specify known properties, and 'i' does not exist in type 'readonly LayoutItem[]'.
+src/app/workshop/page.tsx(139,40): error TS2339: Property 'i' does not exist on type 'Layout'.
+src/app/workshop/page.tsx(197,22): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: {}, context?: any): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | Promise<...> | Component<...> | null | undefined', gave the following error.
+    Type '{ children: Element[]; className: string; layouts: { lg: Layout[]; }; breakpoints: { lg: number; md: number; sm: number; xs: number; xxs: number; }; cols: { lg: number; md: number; sm: number; xs: number; xxs: number; }; ... 4 more ...; margin: number[]; }' is not assignable to type 'IntrinsicAttributes'.
+      Property 'children' does not exist on type 'IntrinsicAttributes'.
+  Overload 2 of 2, '(props: {}): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | Promise<...> | Component<...> | null | undefined', gave the following error.
+    Type '{ children: Element[]; className: string; layouts: { lg: Layout[]; }; breakpoints: { lg: number; md: number; sm: number; xs: number; xxs: number; }; cols: { lg: number; md: number; sm: number; xs: number; xxs: number; }; ... 4 more ...; margin: number[]; }' is not assignable to type 'IntrinsicAttributes'.
+      Property 'children' does not exist on type 'IntrinsicAttributes'.
+src/app/workshop/page.tsx(209,71): error TS2339: Property 'i' does not exist on type 'Layout'.
+src/app/workshop/page.tsx(211,45): error TS2339: Property 'i' does not exist on type 'Layout'.
+src/app/workshop/page.tsx(217,71): error TS2339: Property 'i' does not exist on type 'Layout'.

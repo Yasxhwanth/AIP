@@ -30,6 +30,7 @@ export type DecisionRuleMinAggregateOutputType = {
     confidenceThreshold: number | null;
     enabled: boolean | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type DecisionRuleMaxAggregateOutputType = {
     id: string | null;
@@ -41,6 +42,7 @@ export type DecisionRuleMaxAggregateOutputType = {
     confidenceThreshold: number | null;
     enabled: boolean | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type DecisionRuleCountAggregateOutputType = {
     id: number;
@@ -53,6 +55,7 @@ export type DecisionRuleCountAggregateOutputType = {
     confidenceThreshold: number;
     enabled: number;
     createdAt: number;
+    projectId: number;
     _all: number;
 };
 export type DecisionRuleAvgAggregateInputType = {
@@ -73,6 +76,7 @@ export type DecisionRuleMinAggregateInputType = {
     confidenceThreshold?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type DecisionRuleMaxAggregateInputType = {
     id?: true;
@@ -84,6 +88,7 @@ export type DecisionRuleMaxAggregateInputType = {
     confidenceThreshold?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type DecisionRuleCountAggregateInputType = {
     id?: true;
@@ -96,6 +101,7 @@ export type DecisionRuleCountAggregateInputType = {
     confidenceThreshold?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
     _all?: true;
 };
 export type DecisionRuleAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -185,6 +191,7 @@ export type DecisionRuleGroupByOutputType = {
     confidenceThreshold: number | null;
     enabled: boolean;
     createdAt: Date;
+    projectId: string;
     _count: DecisionRuleCountAggregateOutputType | null;
     _avg: DecisionRuleAvgAggregateOutputType | null;
     _sum: DecisionRuleSumAggregateOutputType | null;
@@ -208,6 +215,8 @@ export type DecisionRuleWhereInput = {
     confidenceThreshold?: Prisma.FloatNullableFilter<"DecisionRule"> | number | null;
     enabled?: Prisma.BoolFilter<"DecisionRule"> | boolean;
     createdAt?: Prisma.DateTimeFilter<"DecisionRule"> | Date | string;
+    projectId?: Prisma.StringFilter<"DecisionRule"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     executionPlans?: Prisma.ExecutionPlanListRelationFilter;
     decisionLogs?: Prisma.DecisionLogListRelationFilter;
@@ -223,6 +232,8 @@ export type DecisionRuleOrderByWithRelationInput = {
     confidenceThreshold?: Prisma.SortOrderInput | Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
+    project?: Prisma.ProjectOrderByWithRelationInput;
     entityType?: Prisma.EntityTypeOrderByWithRelationInput;
     executionPlans?: Prisma.ExecutionPlanOrderByRelationAggregateInput;
     decisionLogs?: Prisma.DecisionLogOrderByRelationAggregateInput;
@@ -241,6 +252,8 @@ export type DecisionRuleWhereUniqueInput = Prisma.AtLeast<{
     confidenceThreshold?: Prisma.FloatNullableFilter<"DecisionRule"> | number | null;
     enabled?: Prisma.BoolFilter<"DecisionRule"> | boolean;
     createdAt?: Prisma.DateTimeFilter<"DecisionRule"> | Date | string;
+    projectId?: Prisma.StringFilter<"DecisionRule"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     executionPlans?: Prisma.ExecutionPlanListRelationFilter;
     decisionLogs?: Prisma.DecisionLogListRelationFilter;
@@ -256,6 +269,7 @@ export type DecisionRuleOrderByWithAggregationInput = {
     confidenceThreshold?: Prisma.SortOrderInput | Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
     _count?: Prisma.DecisionRuleCountOrderByAggregateInput;
     _avg?: Prisma.DecisionRuleAvgOrderByAggregateInput;
     _max?: Prisma.DecisionRuleMaxOrderByAggregateInput;
@@ -276,6 +290,7 @@ export type DecisionRuleScalarWhereWithAggregatesInput = {
     confidenceThreshold?: Prisma.FloatNullableWithAggregatesFilter<"DecisionRule"> | number | null;
     enabled?: Prisma.BoolWithAggregatesFilter<"DecisionRule"> | boolean;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"DecisionRule"> | Date | string;
+    projectId?: Prisma.StringWithAggregatesFilter<"DecisionRule"> | string;
 };
 export type DecisionRuleCreateInput = {
     id?: string;
@@ -287,6 +302,7 @@ export type DecisionRuleCreateInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutDecisionRulesInput;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutDecisionRulesInput;
     executionPlans?: Prisma.ExecutionPlanCreateNestedManyWithoutDecisionRuleInput;
     decisionLogs?: Prisma.DecisionLogCreateNestedManyWithoutDecisionRuleInput;
@@ -302,6 +318,7 @@ export type DecisionRuleUncheckedCreateInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     executionPlans?: Prisma.ExecutionPlanUncheckedCreateNestedManyWithoutDecisionRuleInput;
     decisionLogs?: Prisma.DecisionLogUncheckedCreateNestedManyWithoutDecisionRuleInput;
 };
@@ -315,6 +332,7 @@ export type DecisionRuleUpdateInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutDecisionRulesNestedInput;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutDecisionRulesNestedInput;
     executionPlans?: Prisma.ExecutionPlanUpdateManyWithoutDecisionRuleNestedInput;
     decisionLogs?: Prisma.DecisionLogUpdateManyWithoutDecisionRuleNestedInput;
@@ -330,6 +348,7 @@ export type DecisionRuleUncheckedUpdateInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     executionPlans?: Prisma.ExecutionPlanUncheckedUpdateManyWithoutDecisionRuleNestedInput;
     decisionLogs?: Prisma.DecisionLogUncheckedUpdateManyWithoutDecisionRuleNestedInput;
 };
@@ -344,6 +363,7 @@ export type DecisionRuleCreateManyInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type DecisionRuleUpdateManyMutationInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -367,6 +387,7 @@ export type DecisionRuleUncheckedUpdateManyInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 export type DecisionRuleListRelationFilter = {
     every?: Prisma.DecisionRuleWhereInput;
@@ -387,6 +408,7 @@ export type DecisionRuleCountOrderByAggregateInput = {
     confidenceThreshold?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type DecisionRuleAvgOrderByAggregateInput = {
     priority?: Prisma.SortOrder;
@@ -402,6 +424,7 @@ export type DecisionRuleMaxOrderByAggregateInput = {
     confidenceThreshold?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type DecisionRuleMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -413,6 +436,7 @@ export type DecisionRuleMinOrderByAggregateInput = {
     confidenceThreshold?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type DecisionRuleSumOrderByAggregateInput = {
     priority?: Prisma.SortOrder;
@@ -421,6 +445,44 @@ export type DecisionRuleSumOrderByAggregateInput = {
 export type DecisionRuleScalarRelationFilter = {
     is?: Prisma.DecisionRuleWhereInput;
     isNot?: Prisma.DecisionRuleWhereInput;
+};
+export type DecisionRuleCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.DecisionRuleCreateWithoutProjectInput, Prisma.DecisionRuleUncheckedCreateWithoutProjectInput> | Prisma.DecisionRuleCreateWithoutProjectInput[] | Prisma.DecisionRuleUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DecisionRuleCreateOrConnectWithoutProjectInput | Prisma.DecisionRuleCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.DecisionRuleCreateManyProjectInputEnvelope;
+    connect?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+};
+export type DecisionRuleUncheckedCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.DecisionRuleCreateWithoutProjectInput, Prisma.DecisionRuleUncheckedCreateWithoutProjectInput> | Prisma.DecisionRuleCreateWithoutProjectInput[] | Prisma.DecisionRuleUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DecisionRuleCreateOrConnectWithoutProjectInput | Prisma.DecisionRuleCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.DecisionRuleCreateManyProjectInputEnvelope;
+    connect?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+};
+export type DecisionRuleUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.DecisionRuleCreateWithoutProjectInput, Prisma.DecisionRuleUncheckedCreateWithoutProjectInput> | Prisma.DecisionRuleCreateWithoutProjectInput[] | Prisma.DecisionRuleUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DecisionRuleCreateOrConnectWithoutProjectInput | Prisma.DecisionRuleCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.DecisionRuleUpsertWithWhereUniqueWithoutProjectInput | Prisma.DecisionRuleUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.DecisionRuleCreateManyProjectInputEnvelope;
+    set?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    disconnect?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    delete?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    connect?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    update?: Prisma.DecisionRuleUpdateWithWhereUniqueWithoutProjectInput | Prisma.DecisionRuleUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.DecisionRuleUpdateManyWithWhereWithoutProjectInput | Prisma.DecisionRuleUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.DecisionRuleScalarWhereInput | Prisma.DecisionRuleScalarWhereInput[];
+};
+export type DecisionRuleUncheckedUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.DecisionRuleCreateWithoutProjectInput, Prisma.DecisionRuleUncheckedCreateWithoutProjectInput> | Prisma.DecisionRuleCreateWithoutProjectInput[] | Prisma.DecisionRuleUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DecisionRuleCreateOrConnectWithoutProjectInput | Prisma.DecisionRuleCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.DecisionRuleUpsertWithWhereUniqueWithoutProjectInput | Prisma.DecisionRuleUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.DecisionRuleCreateManyProjectInputEnvelope;
+    set?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    disconnect?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    delete?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    connect?: Prisma.DecisionRuleWhereUniqueInput | Prisma.DecisionRuleWhereUniqueInput[];
+    update?: Prisma.DecisionRuleUpdateWithWhereUniqueWithoutProjectInput | Prisma.DecisionRuleUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.DecisionRuleUpdateManyWithWhereWithoutProjectInput | Prisma.DecisionRuleUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.DecisionRuleScalarWhereInput | Prisma.DecisionRuleScalarWhereInput[];
 };
 export type DecisionRuleCreateNestedManyWithoutEntityTypeInput = {
     create?: Prisma.XOR<Prisma.DecisionRuleCreateWithoutEntityTypeInput, Prisma.DecisionRuleUncheckedCreateWithoutEntityTypeInput> | Prisma.DecisionRuleCreateWithoutEntityTypeInput[] | Prisma.DecisionRuleUncheckedCreateWithoutEntityTypeInput[];
@@ -484,6 +546,71 @@ export type DecisionRuleUpdateOneRequiredWithoutDecisionLogsNestedInput = {
     connect?: Prisma.DecisionRuleWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.DecisionRuleUpdateToOneWithWhereWithoutDecisionLogsInput, Prisma.DecisionRuleUpdateWithoutDecisionLogsInput>, Prisma.DecisionRuleUncheckedUpdateWithoutDecisionLogsInput>;
 };
+export type DecisionRuleCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    conditions: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicOperator?: string;
+    priority?: number;
+    autoExecute?: boolean;
+    confidenceThreshold?: number | null;
+    enabled?: boolean;
+    createdAt?: Date | string;
+    entityType: Prisma.EntityTypeCreateNestedOneWithoutDecisionRulesInput;
+    executionPlans?: Prisma.ExecutionPlanCreateNestedManyWithoutDecisionRuleInput;
+    decisionLogs?: Prisma.DecisionLogCreateNestedManyWithoutDecisionRuleInput;
+};
+export type DecisionRuleUncheckedCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    entityTypeId: string;
+    conditions: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicOperator?: string;
+    priority?: number;
+    autoExecute?: boolean;
+    confidenceThreshold?: number | null;
+    enabled?: boolean;
+    createdAt?: Date | string;
+    executionPlans?: Prisma.ExecutionPlanUncheckedCreateNestedManyWithoutDecisionRuleInput;
+    decisionLogs?: Prisma.DecisionLogUncheckedCreateNestedManyWithoutDecisionRuleInput;
+};
+export type DecisionRuleCreateOrConnectWithoutProjectInput = {
+    where: Prisma.DecisionRuleWhereUniqueInput;
+    create: Prisma.XOR<Prisma.DecisionRuleCreateWithoutProjectInput, Prisma.DecisionRuleUncheckedCreateWithoutProjectInput>;
+};
+export type DecisionRuleCreateManyProjectInputEnvelope = {
+    data: Prisma.DecisionRuleCreateManyProjectInput | Prisma.DecisionRuleCreateManyProjectInput[];
+    skipDuplicates?: boolean;
+};
+export type DecisionRuleUpsertWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.DecisionRuleWhereUniqueInput;
+    update: Prisma.XOR<Prisma.DecisionRuleUpdateWithoutProjectInput, Prisma.DecisionRuleUncheckedUpdateWithoutProjectInput>;
+    create: Prisma.XOR<Prisma.DecisionRuleCreateWithoutProjectInput, Prisma.DecisionRuleUncheckedCreateWithoutProjectInput>;
+};
+export type DecisionRuleUpdateWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.DecisionRuleWhereUniqueInput;
+    data: Prisma.XOR<Prisma.DecisionRuleUpdateWithoutProjectInput, Prisma.DecisionRuleUncheckedUpdateWithoutProjectInput>;
+};
+export type DecisionRuleUpdateManyWithWhereWithoutProjectInput = {
+    where: Prisma.DecisionRuleScalarWhereInput;
+    data: Prisma.XOR<Prisma.DecisionRuleUpdateManyMutationInput, Prisma.DecisionRuleUncheckedUpdateManyWithoutProjectInput>;
+};
+export type DecisionRuleScalarWhereInput = {
+    AND?: Prisma.DecisionRuleScalarWhereInput | Prisma.DecisionRuleScalarWhereInput[];
+    OR?: Prisma.DecisionRuleScalarWhereInput[];
+    NOT?: Prisma.DecisionRuleScalarWhereInput | Prisma.DecisionRuleScalarWhereInput[];
+    id?: Prisma.StringFilter<"DecisionRule"> | string;
+    name?: Prisma.StringFilter<"DecisionRule"> | string;
+    entityTypeId?: Prisma.StringFilter<"DecisionRule"> | string;
+    conditions?: Prisma.JsonFilter<"DecisionRule">;
+    logicOperator?: Prisma.StringFilter<"DecisionRule"> | string;
+    priority?: Prisma.IntFilter<"DecisionRule"> | number;
+    autoExecute?: Prisma.BoolFilter<"DecisionRule"> | boolean;
+    confidenceThreshold?: Prisma.FloatNullableFilter<"DecisionRule"> | number | null;
+    enabled?: Prisma.BoolFilter<"DecisionRule"> | boolean;
+    createdAt?: Prisma.DateTimeFilter<"DecisionRule"> | Date | string;
+    projectId?: Prisma.StringFilter<"DecisionRule"> | string;
+};
 export type DecisionRuleCreateWithoutEntityTypeInput = {
     id?: string;
     name: string;
@@ -494,6 +621,7 @@ export type DecisionRuleCreateWithoutEntityTypeInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutDecisionRulesInput;
     executionPlans?: Prisma.ExecutionPlanCreateNestedManyWithoutDecisionRuleInput;
     decisionLogs?: Prisma.DecisionLogCreateNestedManyWithoutDecisionRuleInput;
 };
@@ -507,6 +635,7 @@ export type DecisionRuleUncheckedCreateWithoutEntityTypeInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     executionPlans?: Prisma.ExecutionPlanUncheckedCreateNestedManyWithoutDecisionRuleInput;
     decisionLogs?: Prisma.DecisionLogUncheckedCreateNestedManyWithoutDecisionRuleInput;
 };
@@ -531,21 +660,6 @@ export type DecisionRuleUpdateManyWithWhereWithoutEntityTypeInput = {
     where: Prisma.DecisionRuleScalarWhereInput;
     data: Prisma.XOR<Prisma.DecisionRuleUpdateManyMutationInput, Prisma.DecisionRuleUncheckedUpdateManyWithoutEntityTypeInput>;
 };
-export type DecisionRuleScalarWhereInput = {
-    AND?: Prisma.DecisionRuleScalarWhereInput | Prisma.DecisionRuleScalarWhereInput[];
-    OR?: Prisma.DecisionRuleScalarWhereInput[];
-    NOT?: Prisma.DecisionRuleScalarWhereInput | Prisma.DecisionRuleScalarWhereInput[];
-    id?: Prisma.StringFilter<"DecisionRule"> | string;
-    name?: Prisma.StringFilter<"DecisionRule"> | string;
-    entityTypeId?: Prisma.StringFilter<"DecisionRule"> | string;
-    conditions?: Prisma.JsonFilter<"DecisionRule">;
-    logicOperator?: Prisma.StringFilter<"DecisionRule"> | string;
-    priority?: Prisma.IntFilter<"DecisionRule"> | number;
-    autoExecute?: Prisma.BoolFilter<"DecisionRule"> | boolean;
-    confidenceThreshold?: Prisma.FloatNullableFilter<"DecisionRule"> | number | null;
-    enabled?: Prisma.BoolFilter<"DecisionRule"> | boolean;
-    createdAt?: Prisma.DateTimeFilter<"DecisionRule"> | Date | string;
-};
 export type DecisionRuleCreateWithoutExecutionPlansInput = {
     id?: string;
     name: string;
@@ -556,6 +670,7 @@ export type DecisionRuleCreateWithoutExecutionPlansInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutDecisionRulesInput;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutDecisionRulesInput;
     decisionLogs?: Prisma.DecisionLogCreateNestedManyWithoutDecisionRuleInput;
 };
@@ -570,6 +685,7 @@ export type DecisionRuleUncheckedCreateWithoutExecutionPlansInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     decisionLogs?: Prisma.DecisionLogUncheckedCreateNestedManyWithoutDecisionRuleInput;
 };
 export type DecisionRuleCreateOrConnectWithoutExecutionPlansInput = {
@@ -595,6 +711,7 @@ export type DecisionRuleUpdateWithoutExecutionPlansInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutDecisionRulesNestedInput;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutDecisionRulesNestedInput;
     decisionLogs?: Prisma.DecisionLogUpdateManyWithoutDecisionRuleNestedInput;
 };
@@ -609,6 +726,7 @@ export type DecisionRuleUncheckedUpdateWithoutExecutionPlansInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     decisionLogs?: Prisma.DecisionLogUncheckedUpdateManyWithoutDecisionRuleNestedInput;
 };
 export type DecisionRuleCreateWithoutDecisionLogsInput = {
@@ -621,6 +739,7 @@ export type DecisionRuleCreateWithoutDecisionLogsInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutDecisionRulesInput;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutDecisionRulesInput;
     executionPlans?: Prisma.ExecutionPlanCreateNestedManyWithoutDecisionRuleInput;
 };
@@ -635,6 +754,7 @@ export type DecisionRuleUncheckedCreateWithoutDecisionLogsInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     executionPlans?: Prisma.ExecutionPlanUncheckedCreateNestedManyWithoutDecisionRuleInput;
 };
 export type DecisionRuleCreateOrConnectWithoutDecisionLogsInput = {
@@ -660,6 +780,7 @@ export type DecisionRuleUpdateWithoutDecisionLogsInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutDecisionRulesNestedInput;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutDecisionRulesNestedInput;
     executionPlans?: Prisma.ExecutionPlanUpdateManyWithoutDecisionRuleNestedInput;
 };
@@ -674,7 +795,60 @@ export type DecisionRuleUncheckedUpdateWithoutDecisionLogsInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     executionPlans?: Prisma.ExecutionPlanUncheckedUpdateManyWithoutDecisionRuleNestedInput;
+};
+export type DecisionRuleCreateManyProjectInput = {
+    id?: string;
+    name: string;
+    entityTypeId: string;
+    conditions: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicOperator?: string;
+    priority?: number;
+    autoExecute?: boolean;
+    confidenceThreshold?: number | null;
+    enabled?: boolean;
+    createdAt?: Date | string;
+};
+export type DecisionRuleUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    conditions?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicOperator?: Prisma.StringFieldUpdateOperationsInput | string;
+    priority?: Prisma.IntFieldUpdateOperationsInput | number;
+    autoExecute?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutDecisionRulesNestedInput;
+    executionPlans?: Prisma.ExecutionPlanUpdateManyWithoutDecisionRuleNestedInput;
+    decisionLogs?: Prisma.DecisionLogUpdateManyWithoutDecisionRuleNestedInput;
+};
+export type DecisionRuleUncheckedUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    conditions?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicOperator?: Prisma.StringFieldUpdateOperationsInput | string;
+    priority?: Prisma.IntFieldUpdateOperationsInput | number;
+    autoExecute?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    executionPlans?: Prisma.ExecutionPlanUncheckedUpdateManyWithoutDecisionRuleNestedInput;
+    decisionLogs?: Prisma.DecisionLogUncheckedUpdateManyWithoutDecisionRuleNestedInput;
+};
+export type DecisionRuleUncheckedUpdateManyWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    conditions?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicOperator?: Prisma.StringFieldUpdateOperationsInput | string;
+    priority?: Prisma.IntFieldUpdateOperationsInput | number;
+    autoExecute?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type DecisionRuleCreateManyEntityTypeInput = {
     id?: string;
@@ -686,6 +860,7 @@ export type DecisionRuleCreateManyEntityTypeInput = {
     confidenceThreshold?: number | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type DecisionRuleUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -697,6 +872,7 @@ export type DecisionRuleUpdateWithoutEntityTypeInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutDecisionRulesNestedInput;
     executionPlans?: Prisma.ExecutionPlanUpdateManyWithoutDecisionRuleNestedInput;
     decisionLogs?: Prisma.DecisionLogUpdateManyWithoutDecisionRuleNestedInput;
 };
@@ -710,6 +886,7 @@ export type DecisionRuleUncheckedUpdateWithoutEntityTypeInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     executionPlans?: Prisma.ExecutionPlanUncheckedUpdateManyWithoutDecisionRuleNestedInput;
     decisionLogs?: Prisma.DecisionLogUncheckedUpdateManyWithoutDecisionRuleNestedInput;
 };
@@ -723,6 +900,7 @@ export type DecisionRuleUncheckedUpdateManyWithoutEntityTypeInput = {
     confidenceThreshold?: Prisma.NullableFloatFieldUpdateOperationsInput | number | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 /**
  * Count Type DecisionRuleCountOutputType
@@ -767,6 +945,8 @@ export type DecisionRuleSelect<ExtArgs extends runtime.Types.Extensions.Internal
     confidenceThreshold?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     executionPlans?: boolean | Prisma.DecisionRule$executionPlansArgs<ExtArgs>;
     decisionLogs?: boolean | Prisma.DecisionRule$decisionLogsArgs<ExtArgs>;
@@ -783,6 +963,8 @@ export type DecisionRuleSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
     confidenceThreshold?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["decisionRule"]>;
 export type DecisionRuleSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -796,6 +978,8 @@ export type DecisionRuleSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
     confidenceThreshold?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["decisionRule"]>;
 export type DecisionRuleSelectScalar = {
@@ -809,23 +993,28 @@ export type DecisionRuleSelectScalar = {
     confidenceThreshold?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
 };
-export type DecisionRuleOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "entityTypeId" | "conditions" | "logicOperator" | "priority" | "autoExecute" | "confidenceThreshold" | "enabled" | "createdAt", ExtArgs["result"]["decisionRule"]>;
+export type DecisionRuleOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "entityTypeId" | "conditions" | "logicOperator" | "priority" | "autoExecute" | "confidenceThreshold" | "enabled" | "createdAt" | "projectId", ExtArgs["result"]["decisionRule"]>;
 export type DecisionRuleInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     executionPlans?: boolean | Prisma.DecisionRule$executionPlansArgs<ExtArgs>;
     decisionLogs?: boolean | Prisma.DecisionRule$decisionLogsArgs<ExtArgs>;
     _count?: boolean | Prisma.DecisionRuleCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type DecisionRuleIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
 export type DecisionRuleIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
 export type $DecisionRulePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "DecisionRule";
     objects: {
+        project: Prisma.$ProjectPayload<ExtArgs>;
         entityType: Prisma.$EntityTypePayload<ExtArgs>;
         executionPlans: Prisma.$ExecutionPlanPayload<ExtArgs>[];
         decisionLogs: Prisma.$DecisionLogPayload<ExtArgs>[];
@@ -841,6 +1030,7 @@ export type $DecisionRulePayload<ExtArgs extends runtime.Types.Extensions.Intern
         confidenceThreshold: number | null;
         enabled: boolean;
         createdAt: Date;
+        projectId: string;
     }, ExtArgs["result"]["decisionRule"]>;
     composites: {};
 };
@@ -1170,6 +1360,7 @@ export interface DecisionRuleDelegate<ExtArgs extends runtime.Types.Extensions.I
  */
 export interface Prisma__DecisionRuleClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
+    project<T extends Prisma.ProjectDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectDefaultArgs<ExtArgs>>): Prisma.Prisma__ProjectClient<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     entityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     executionPlans<T extends Prisma.DecisionRule$executionPlansArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.DecisionRule$executionPlansArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ExecutionPlanPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     decisionLogs<T extends Prisma.DecisionRule$decisionLogsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.DecisionRule$decisionLogsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DecisionLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
@@ -1208,6 +1399,7 @@ export interface DecisionRuleFieldRefs {
     readonly confidenceThreshold: Prisma.FieldRef<"DecisionRule", 'Float'>;
     readonly enabled: Prisma.FieldRef<"DecisionRule", 'Boolean'>;
     readonly createdAt: Prisma.FieldRef<"DecisionRule", 'DateTime'>;
+    readonly projectId: Prisma.FieldRef<"DecisionRule", 'String'>;
 }
 /**
  * DecisionRule findUnique

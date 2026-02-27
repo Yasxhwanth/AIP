@@ -16,6 +16,7 @@ export type DataSourceMinAggregateOutputType = {
     type: string | null;
     enabled: boolean | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type DataSourceMaxAggregateOutputType = {
     id: string | null;
@@ -23,6 +24,7 @@ export type DataSourceMaxAggregateOutputType = {
     type: string | null;
     enabled: boolean | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type DataSourceCountAggregateOutputType = {
     id: number;
@@ -31,6 +33,7 @@ export type DataSourceCountAggregateOutputType = {
     connectionConfig: number;
     enabled: number;
     createdAt: number;
+    projectId: number;
     _all: number;
 };
 export type DataSourceMinAggregateInputType = {
@@ -39,6 +42,7 @@ export type DataSourceMinAggregateInputType = {
     type?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type DataSourceMaxAggregateInputType = {
     id?: true;
@@ -46,6 +50,7 @@ export type DataSourceMaxAggregateInputType = {
     type?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type DataSourceCountAggregateInputType = {
     id?: true;
@@ -54,6 +59,7 @@ export type DataSourceCountAggregateInputType = {
     connectionConfig?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
     _all?: true;
 };
 export type DataSourceAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -125,6 +131,7 @@ export type DataSourceGroupByOutputType = {
     connectionConfig: runtime.JsonValue;
     enabled: boolean;
     createdAt: Date;
+    projectId: string;
     _count: DataSourceCountAggregateOutputType | null;
     _min: DataSourceMinAggregateOutputType | null;
     _max: DataSourceMaxAggregateOutputType | null;
@@ -142,6 +149,8 @@ export type DataSourceWhereInput = {
     connectionConfig?: Prisma.JsonFilter<"DataSource">;
     enabled?: Prisma.BoolFilter<"DataSource"> | boolean;
     createdAt?: Prisma.DateTimeFilter<"DataSource"> | Date | string;
+    projectId?: Prisma.StringFilter<"DataSource"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     integrationJobs?: Prisma.IntegrationJobListRelationFilter;
 };
 export type DataSourceOrderByWithRelationInput = {
@@ -151,6 +160,8 @@ export type DataSourceOrderByWithRelationInput = {
     connectionConfig?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
+    project?: Prisma.ProjectOrderByWithRelationInput;
     integrationJobs?: Prisma.IntegrationJobOrderByRelationAggregateInput;
 };
 export type DataSourceWhereUniqueInput = Prisma.AtLeast<{
@@ -163,6 +174,8 @@ export type DataSourceWhereUniqueInput = Prisma.AtLeast<{
     connectionConfig?: Prisma.JsonFilter<"DataSource">;
     enabled?: Prisma.BoolFilter<"DataSource"> | boolean;
     createdAt?: Prisma.DateTimeFilter<"DataSource"> | Date | string;
+    projectId?: Prisma.StringFilter<"DataSource"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     integrationJobs?: Prisma.IntegrationJobListRelationFilter;
 }, "id" | "name">;
 export type DataSourceOrderByWithAggregationInput = {
@@ -172,6 +185,7 @@ export type DataSourceOrderByWithAggregationInput = {
     connectionConfig?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
     _count?: Prisma.DataSourceCountOrderByAggregateInput;
     _max?: Prisma.DataSourceMaxOrderByAggregateInput;
     _min?: Prisma.DataSourceMinOrderByAggregateInput;
@@ -186,6 +200,7 @@ export type DataSourceScalarWhereWithAggregatesInput = {
     connectionConfig?: Prisma.JsonWithAggregatesFilter<"DataSource">;
     enabled?: Prisma.BoolWithAggregatesFilter<"DataSource"> | boolean;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"DataSource"> | Date | string;
+    projectId?: Prisma.StringWithAggregatesFilter<"DataSource"> | string;
 };
 export type DataSourceCreateInput = {
     id?: string;
@@ -194,6 +209,7 @@ export type DataSourceCreateInput = {
     connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutDataSourcesInput;
     integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutDataSourceInput;
 };
 export type DataSourceUncheckedCreateInput = {
@@ -203,6 +219,7 @@ export type DataSourceUncheckedCreateInput = {
     connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutDataSourceInput;
 };
 export type DataSourceUpdateInput = {
@@ -212,6 +229,7 @@ export type DataSourceUpdateInput = {
     connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutDataSourcesNestedInput;
     integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutDataSourceNestedInput;
 };
 export type DataSourceUncheckedUpdateInput = {
@@ -221,6 +239,7 @@ export type DataSourceUncheckedUpdateInput = {
     connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutDataSourceNestedInput;
 };
 export type DataSourceCreateManyInput = {
@@ -230,6 +249,7 @@ export type DataSourceCreateManyInput = {
     connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type DataSourceUpdateManyMutationInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -246,6 +266,15 @@ export type DataSourceUncheckedUpdateManyInput = {
     connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
+};
+export type DataSourceListRelationFilter = {
+    every?: Prisma.DataSourceWhereInput;
+    some?: Prisma.DataSourceWhereInput;
+    none?: Prisma.DataSourceWhereInput;
+};
+export type DataSourceOrderByRelationAggregateInput = {
+    _count?: Prisma.SortOrder;
 };
 export type DataSourceCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -254,6 +283,7 @@ export type DataSourceCountOrderByAggregateInput = {
     connectionConfig?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type DataSourceMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -261,6 +291,7 @@ export type DataSourceMaxOrderByAggregateInput = {
     type?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type DataSourceMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -268,10 +299,49 @@ export type DataSourceMinOrderByAggregateInput = {
     type?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type DataSourceScalarRelationFilter = {
     is?: Prisma.DataSourceWhereInput;
     isNot?: Prisma.DataSourceWhereInput;
+};
+export type DataSourceCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.DataSourceCreateWithoutProjectInput, Prisma.DataSourceUncheckedCreateWithoutProjectInput> | Prisma.DataSourceCreateWithoutProjectInput[] | Prisma.DataSourceUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DataSourceCreateOrConnectWithoutProjectInput | Prisma.DataSourceCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.DataSourceCreateManyProjectInputEnvelope;
+    connect?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+};
+export type DataSourceUncheckedCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.DataSourceCreateWithoutProjectInput, Prisma.DataSourceUncheckedCreateWithoutProjectInput> | Prisma.DataSourceCreateWithoutProjectInput[] | Prisma.DataSourceUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DataSourceCreateOrConnectWithoutProjectInput | Prisma.DataSourceCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.DataSourceCreateManyProjectInputEnvelope;
+    connect?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+};
+export type DataSourceUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.DataSourceCreateWithoutProjectInput, Prisma.DataSourceUncheckedCreateWithoutProjectInput> | Prisma.DataSourceCreateWithoutProjectInput[] | Prisma.DataSourceUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DataSourceCreateOrConnectWithoutProjectInput | Prisma.DataSourceCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.DataSourceUpsertWithWhereUniqueWithoutProjectInput | Prisma.DataSourceUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.DataSourceCreateManyProjectInputEnvelope;
+    set?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    disconnect?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    delete?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    connect?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    update?: Prisma.DataSourceUpdateWithWhereUniqueWithoutProjectInput | Prisma.DataSourceUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.DataSourceUpdateManyWithWhereWithoutProjectInput | Prisma.DataSourceUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.DataSourceScalarWhereInput | Prisma.DataSourceScalarWhereInput[];
+};
+export type DataSourceUncheckedUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.DataSourceCreateWithoutProjectInput, Prisma.DataSourceUncheckedCreateWithoutProjectInput> | Prisma.DataSourceCreateWithoutProjectInput[] | Prisma.DataSourceUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.DataSourceCreateOrConnectWithoutProjectInput | Prisma.DataSourceCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.DataSourceUpsertWithWhereUniqueWithoutProjectInput | Prisma.DataSourceUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.DataSourceCreateManyProjectInputEnvelope;
+    set?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    disconnect?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    delete?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    connect?: Prisma.DataSourceWhereUniqueInput | Prisma.DataSourceWhereUniqueInput[];
+    update?: Prisma.DataSourceUpdateWithWhereUniqueWithoutProjectInput | Prisma.DataSourceUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.DataSourceUpdateManyWithWhereWithoutProjectInput | Prisma.DataSourceUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.DataSourceScalarWhereInput | Prisma.DataSourceScalarWhereInput[];
 };
 export type DataSourceCreateNestedOneWithoutIntegrationJobsInput = {
     create?: Prisma.XOR<Prisma.DataSourceCreateWithoutIntegrationJobsInput, Prisma.DataSourceUncheckedCreateWithoutIntegrationJobsInput>;
@@ -285,6 +355,57 @@ export type DataSourceUpdateOneRequiredWithoutIntegrationJobsNestedInput = {
     connect?: Prisma.DataSourceWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.DataSourceUpdateToOneWithWhereWithoutIntegrationJobsInput, Prisma.DataSourceUpdateWithoutIntegrationJobsInput>, Prisma.DataSourceUncheckedUpdateWithoutIntegrationJobsInput>;
 };
+export type DataSourceCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    type: string;
+    connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    enabled?: boolean;
+    createdAt?: Date | string;
+    integrationJobs?: Prisma.IntegrationJobCreateNestedManyWithoutDataSourceInput;
+};
+export type DataSourceUncheckedCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    type: string;
+    connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    enabled?: boolean;
+    createdAt?: Date | string;
+    integrationJobs?: Prisma.IntegrationJobUncheckedCreateNestedManyWithoutDataSourceInput;
+};
+export type DataSourceCreateOrConnectWithoutProjectInput = {
+    where: Prisma.DataSourceWhereUniqueInput;
+    create: Prisma.XOR<Prisma.DataSourceCreateWithoutProjectInput, Prisma.DataSourceUncheckedCreateWithoutProjectInput>;
+};
+export type DataSourceCreateManyProjectInputEnvelope = {
+    data: Prisma.DataSourceCreateManyProjectInput | Prisma.DataSourceCreateManyProjectInput[];
+    skipDuplicates?: boolean;
+};
+export type DataSourceUpsertWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.DataSourceWhereUniqueInput;
+    update: Prisma.XOR<Prisma.DataSourceUpdateWithoutProjectInput, Prisma.DataSourceUncheckedUpdateWithoutProjectInput>;
+    create: Prisma.XOR<Prisma.DataSourceCreateWithoutProjectInput, Prisma.DataSourceUncheckedCreateWithoutProjectInput>;
+};
+export type DataSourceUpdateWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.DataSourceWhereUniqueInput;
+    data: Prisma.XOR<Prisma.DataSourceUpdateWithoutProjectInput, Prisma.DataSourceUncheckedUpdateWithoutProjectInput>;
+};
+export type DataSourceUpdateManyWithWhereWithoutProjectInput = {
+    where: Prisma.DataSourceScalarWhereInput;
+    data: Prisma.XOR<Prisma.DataSourceUpdateManyMutationInput, Prisma.DataSourceUncheckedUpdateManyWithoutProjectInput>;
+};
+export type DataSourceScalarWhereInput = {
+    AND?: Prisma.DataSourceScalarWhereInput | Prisma.DataSourceScalarWhereInput[];
+    OR?: Prisma.DataSourceScalarWhereInput[];
+    NOT?: Prisma.DataSourceScalarWhereInput | Prisma.DataSourceScalarWhereInput[];
+    id?: Prisma.StringFilter<"DataSource"> | string;
+    name?: Prisma.StringFilter<"DataSource"> | string;
+    type?: Prisma.StringFilter<"DataSource"> | string;
+    connectionConfig?: Prisma.JsonFilter<"DataSource">;
+    enabled?: Prisma.BoolFilter<"DataSource"> | boolean;
+    createdAt?: Prisma.DateTimeFilter<"DataSource"> | Date | string;
+    projectId?: Prisma.StringFilter<"DataSource"> | string;
+};
 export type DataSourceCreateWithoutIntegrationJobsInput = {
     id?: string;
     name: string;
@@ -292,6 +413,7 @@ export type DataSourceCreateWithoutIntegrationJobsInput = {
     connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutDataSourcesInput;
 };
 export type DataSourceUncheckedCreateWithoutIntegrationJobsInput = {
     id?: string;
@@ -300,6 +422,7 @@ export type DataSourceUncheckedCreateWithoutIntegrationJobsInput = {
     connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type DataSourceCreateOrConnectWithoutIntegrationJobsInput = {
     where: Prisma.DataSourceWhereUniqueInput;
@@ -321,8 +444,44 @@ export type DataSourceUpdateWithoutIntegrationJobsInput = {
     connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutDataSourcesNestedInput;
 };
 export type DataSourceUncheckedUpdateWithoutIntegrationJobsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
+};
+export type DataSourceCreateManyProjectInput = {
+    id?: string;
+    name: string;
+    type: string;
+    connectionConfig: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    enabled?: boolean;
+    createdAt?: Date | string;
+};
+export type DataSourceUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    integrationJobs?: Prisma.IntegrationJobUpdateManyWithoutDataSourceNestedInput;
+};
+export type DataSourceUncheckedUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    connectionConfig?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    integrationJobs?: Prisma.IntegrationJobUncheckedUpdateManyWithoutDataSourceNestedInput;
+};
+export type DataSourceUncheckedUpdateManyWithoutProjectInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     type?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -361,6 +520,8 @@ export type DataSourceSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
     connectionConfig?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     integrationJobs?: boolean | Prisma.DataSource$integrationJobsArgs<ExtArgs>;
     _count?: boolean | Prisma.DataSourceCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["dataSource"]>;
@@ -371,6 +532,8 @@ export type DataSourceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ex
     connectionConfig?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["dataSource"]>;
 export type DataSourceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -379,6 +542,8 @@ export type DataSourceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ex
     connectionConfig?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["dataSource"]>;
 export type DataSourceSelectScalar = {
     id?: boolean;
@@ -387,17 +552,24 @@ export type DataSourceSelectScalar = {
     connectionConfig?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
 };
-export type DataSourceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "type" | "connectionConfig" | "enabled" | "createdAt", ExtArgs["result"]["dataSource"]>;
+export type DataSourceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "type" | "connectionConfig" | "enabled" | "createdAt" | "projectId", ExtArgs["result"]["dataSource"]>;
 export type DataSourceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     integrationJobs?: boolean | Prisma.DataSource$integrationJobsArgs<ExtArgs>;
     _count?: boolean | Prisma.DataSourceCountOutputTypeDefaultArgs<ExtArgs>;
 };
-export type DataSourceIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {};
-export type DataSourceIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {};
+export type DataSourceIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
+};
+export type DataSourceIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
+};
 export type $DataSourcePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "DataSource";
     objects: {
+        project: Prisma.$ProjectPayload<ExtArgs>;
         integrationJobs: Prisma.$IntegrationJobPayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
@@ -407,6 +579,7 @@ export type $DataSourcePayload<ExtArgs extends runtime.Types.Extensions.Internal
         connectionConfig: runtime.JsonValue;
         enabled: boolean;
         createdAt: Date;
+        projectId: string;
     }, ExtArgs["result"]["dataSource"]>;
     composites: {};
 };
@@ -736,6 +909,7 @@ export interface DataSourceDelegate<ExtArgs extends runtime.Types.Extensions.Int
  */
 export interface Prisma__DataSourceClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
+    project<T extends Prisma.ProjectDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectDefaultArgs<ExtArgs>>): Prisma.Prisma__ProjectClient<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     integrationJobs<T extends Prisma.DataSource$integrationJobsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.DataSource$integrationJobsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$IntegrationJobPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -768,6 +942,7 @@ export interface DataSourceFieldRefs {
     readonly connectionConfig: Prisma.FieldRef<"DataSource", 'Json'>;
     readonly enabled: Prisma.FieldRef<"DataSource", 'Boolean'>;
     readonly createdAt: Prisma.FieldRef<"DataSource", 'DateTime'>;
+    readonly projectId: Prisma.FieldRef<"DataSource", 'String'>;
 }
 /**
  * DataSource findUnique
@@ -1007,6 +1182,10 @@ export type DataSourceCreateManyAndReturnArgs<ExtArgs extends runtime.Types.Exte
      */
     data: Prisma.DataSourceCreateManyInput | Prisma.DataSourceCreateManyInput[];
     skipDuplicates?: boolean;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.DataSourceIncludeCreateManyAndReturn<ExtArgs> | null;
 };
 /**
  * DataSource update
@@ -1074,6 +1253,10 @@ export type DataSourceUpdateManyAndReturnArgs<ExtArgs extends runtime.Types.Exte
      * Limit how many DataSources to update.
      */
     limit?: number;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.DataSourceIncludeUpdateManyAndReturn<ExtArgs> | null;
 };
 /**
  * DataSource upsert

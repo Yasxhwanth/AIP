@@ -3,6 +3,11 @@ export { Prisma };
 export * as $Enums from './enums';
 export * from './enums';
 /**
+ * Model Project
+ *
+ */
+export type Project = Prisma.ProjectModel;
+/**
  * Model EntityType
  *
  */
@@ -27,6 +32,16 @@ export type RelationshipInstance = Prisma.RelationshipInstanceModel;
  *
  */
 export type EntityInstance = Prisma.EntityInstanceModel;
+/**
+ * Model EntityAlias
+ *
+ */
+export type EntityAlias = Prisma.EntityAliasModel;
+/**
+ * Model ProvenanceRecord
+ *
+ */
+export type ProvenanceRecord = Prisma.ProvenanceRecordModel;
 /**
  * Model DomainEvent
  *
@@ -62,6 +77,11 @@ export type TimeseriesMetric = Prisma.TimeseriesMetricModel;
  *
  */
 export type DataSource = Prisma.DataSourceModel;
+/**
+ * Model Pipeline
+ *
+ */
+export type Pipeline = Prisma.PipelineModel;
 /**
  * Model IntegrationJob
  *
@@ -122,4 +142,14 @@ export type DecisionLog = Prisma.DecisionLogModel;
  *
  */
 export type ApiKey = Prisma.ApiKeyModel;
+/**
+ * Model Dashboard
+ *
+ */
+export type Dashboard = Prisma.DashboardModel;
+/**
+ * Model DashboardWidget
+ *
+ */
+export type DashboardWidget = Prisma.DashboardWidgetModel;
 //# sourceMappingURL=browser.d.ts.map

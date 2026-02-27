@@ -9,8 +9,8 @@ export interface PrismaClientConstructor {
    * @example
    * ```
    * const prisma = new PrismaClient()
-   * // Fetch zero or more EntityTypes
-   * const entityTypes = await prisma.entityType.findMany()
+   * // Fetch zero or more Projects
+   * const projects = await prisma.project.findMany()
    * ```
    *
    * Read more in our [docs](https://pris.ly/d/client).
@@ -26,8 +26,8 @@ export interface PrismaClientConstructor {
  * @example
  * ```
  * const prisma = new PrismaClient()
- * // Fetch zero or more EntityTypes
- * const entityTypes = await prisma.entityType.findMany()
+ * // Fetch zero or more Projects
+ * const projects = await prisma.project.findMany()
  * ```
  *
  * Read more in our [docs](https://pris.ly/d/client).
@@ -112,13 +112,24 @@ export interface PrismaClient<in LogOpts extends Prisma.LogLevel = never, in out
         extArgs: ExtArgs;
     }>>;
     /**
- * `prisma.entityType`: Exposes CRUD operations for the **EntityType** model.
+ * `prisma.project`: Exposes CRUD operations for the **Project** model.
   * Example usage:
   * ```ts
-  * // Fetch zero or more EntityTypes
-  * const entityTypes = await prisma.entityType.findMany()
+  * // Fetch zero or more Projects
+  * const projects = await prisma.project.findMany()
   * ```
   */
+    get project(): Prisma.ProjectDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.entityType`: Exposes CRUD operations for the **EntityType** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more EntityTypes
+      * const entityTypes = await prisma.entityType.findMany()
+      * ```
+      */
     get entityType(): Prisma.EntityTypeDelegate<ExtArgs, {
         omit: OmitOpts;
     }>;
@@ -164,6 +175,28 @@ export interface PrismaClient<in LogOpts extends Prisma.LogLevel = never, in out
       * ```
       */
     get entityInstance(): Prisma.EntityInstanceDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.entityAlias`: Exposes CRUD operations for the **EntityAlias** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more EntityAliases
+      * const entityAliases = await prisma.entityAlias.findMany()
+      * ```
+      */
+    get entityAlias(): Prisma.EntityAliasDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.provenanceRecord`: Exposes CRUD operations for the **ProvenanceRecord** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more ProvenanceRecords
+      * const provenanceRecords = await prisma.provenanceRecord.findMany()
+      * ```
+      */
+    get provenanceRecord(): Prisma.ProvenanceRecordDelegate<ExtArgs, {
         omit: OmitOpts;
     }>;
     /**
@@ -241,6 +274,17 @@ export interface PrismaClient<in LogOpts extends Prisma.LogLevel = never, in out
       * ```
       */
     get dataSource(): Prisma.DataSourceDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.pipeline`: Exposes CRUD operations for the **Pipeline** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more Pipelines
+      * const pipelines = await prisma.pipeline.findMany()
+      * ```
+      */
+    get pipeline(): Prisma.PipelineDelegate<ExtArgs, {
         omit: OmitOpts;
     }>;
     /**
@@ -373,6 +417,28 @@ export interface PrismaClient<in LogOpts extends Prisma.LogLevel = never, in out
       * ```
       */
     get apiKey(): Prisma.ApiKeyDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.dashboard`: Exposes CRUD operations for the **Dashboard** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more Dashboards
+      * const dashboards = await prisma.dashboard.findMany()
+      * ```
+      */
+    get dashboard(): Prisma.DashboardDelegate<ExtArgs, {
+        omit: OmitOpts;
+    }>;
+    /**
+     * `prisma.dashboardWidget`: Exposes CRUD operations for the **DashboardWidget** model.
+      * Example usage:
+      * ```ts
+      * // Fetch zero or more DashboardWidgets
+      * const dashboardWidgets = await prisma.dashboardWidget.findMany()
+      * ```
+      */
+    get dashboardWidget(): Prisma.DashboardWidgetDelegate<ExtArgs, {
         omit: OmitOpts;
     }>;
 }

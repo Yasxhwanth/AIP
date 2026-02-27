@@ -59,8 +59,8 @@ __exportStar(require("./enums"), exports);
  * @example
  * ```
  * const prisma = new PrismaClient()
- * // Fetch zero or more EntityTypes
- * const entityTypes = await prisma.entityType.findMany()
+ * // Fetch zero or more Projects
+ * const projects = await prisma.project.findMany()
  * ```
  *
  * Read more in our [docs](https://pris.ly/d/client).

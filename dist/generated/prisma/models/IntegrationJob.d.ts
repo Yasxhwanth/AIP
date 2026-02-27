@@ -19,6 +19,7 @@ export type IntegrationJobMinAggregateOutputType = {
     schedule: string | null;
     enabled: boolean | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type IntegrationJobMaxAggregateOutputType = {
     id: string | null;
@@ -29,6 +30,7 @@ export type IntegrationJobMaxAggregateOutputType = {
     schedule: string | null;
     enabled: boolean | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type IntegrationJobCountAggregateOutputType = {
     id: number;
@@ -40,6 +42,7 @@ export type IntegrationJobCountAggregateOutputType = {
     schedule: number;
     enabled: number;
     createdAt: number;
+    projectId: number;
     _all: number;
 };
 export type IntegrationJobMinAggregateInputType = {
@@ -51,6 +54,7 @@ export type IntegrationJobMinAggregateInputType = {
     schedule?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type IntegrationJobMaxAggregateInputType = {
     id?: true;
@@ -61,6 +65,7 @@ export type IntegrationJobMaxAggregateInputType = {
     schedule?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type IntegrationJobCountAggregateInputType = {
     id?: true;
@@ -72,6 +77,7 @@ export type IntegrationJobCountAggregateInputType = {
     schedule?: true;
     enabled?: true;
     createdAt?: true;
+    projectId?: true;
     _all?: true;
 };
 export type IntegrationJobAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -146,6 +152,7 @@ export type IntegrationJobGroupByOutputType = {
     schedule: string | null;
     enabled: boolean;
     createdAt: Date;
+    projectId: string;
     _count: IntegrationJobCountAggregateOutputType | null;
     _min: IntegrationJobMinAggregateOutputType | null;
     _max: IntegrationJobMaxAggregateOutputType | null;
@@ -166,6 +173,8 @@ export type IntegrationJobWhereInput = {
     schedule?: Prisma.StringNullableFilter<"IntegrationJob"> | string | null;
     enabled?: Prisma.BoolFilter<"IntegrationJob"> | boolean;
     createdAt?: Prisma.DateTimeFilter<"IntegrationJob"> | Date | string;
+    projectId?: Prisma.StringFilter<"IntegrationJob"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     dataSource?: Prisma.XOR<Prisma.DataSourceScalarRelationFilter, Prisma.DataSourceWhereInput>;
     targetEntityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     executions?: Prisma.JobExecutionListRelationFilter;
@@ -180,6 +189,8 @@ export type IntegrationJobOrderByWithRelationInput = {
     schedule?: Prisma.SortOrderInput | Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
+    project?: Prisma.ProjectOrderByWithRelationInput;
     dataSource?: Prisma.DataSourceOrderByWithRelationInput;
     targetEntityType?: Prisma.EntityTypeOrderByWithRelationInput;
     executions?: Prisma.JobExecutionOrderByRelationAggregateInput;
@@ -197,6 +208,8 @@ export type IntegrationJobWhereUniqueInput = Prisma.AtLeast<{
     schedule?: Prisma.StringNullableFilter<"IntegrationJob"> | string | null;
     enabled?: Prisma.BoolFilter<"IntegrationJob"> | boolean;
     createdAt?: Prisma.DateTimeFilter<"IntegrationJob"> | Date | string;
+    projectId?: Prisma.StringFilter<"IntegrationJob"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     dataSource?: Prisma.XOR<Prisma.DataSourceScalarRelationFilter, Prisma.DataSourceWhereInput>;
     targetEntityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     executions?: Prisma.JobExecutionListRelationFilter;
@@ -211,6 +224,7 @@ export type IntegrationJobOrderByWithAggregationInput = {
     schedule?: Prisma.SortOrderInput | Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
     _count?: Prisma.IntegrationJobCountOrderByAggregateInput;
     _max?: Prisma.IntegrationJobMaxOrderByAggregateInput;
     _min?: Prisma.IntegrationJobMinOrderByAggregateInput;
@@ -228,6 +242,7 @@ export type IntegrationJobScalarWhereWithAggregatesInput = {
     schedule?: Prisma.StringNullableWithAggregatesFilter<"IntegrationJob"> | string | null;
     enabled?: Prisma.BoolWithAggregatesFilter<"IntegrationJob"> | boolean;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"IntegrationJob"> | Date | string;
+    projectId?: Prisma.StringWithAggregatesFilter<"IntegrationJob"> | string;
 };
 export type IntegrationJobCreateInput = {
     id?: string;
@@ -237,6 +252,7 @@ export type IntegrationJobCreateInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutIntegrationJobsInput;
     dataSource: Prisma.DataSourceCreateNestedOneWithoutIntegrationJobsInput;
     targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIntegrationJobsInput;
     executions?: Prisma.JobExecutionCreateNestedManyWithoutIntegrationJobInput;
@@ -251,6 +267,7 @@ export type IntegrationJobUncheckedCreateInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     executions?: Prisma.JobExecutionUncheckedCreateNestedManyWithoutIntegrationJobInput;
 };
 export type IntegrationJobUpdateInput = {
@@ -261,6 +278,7 @@ export type IntegrationJobUpdateInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     dataSource?: Prisma.DataSourceUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     executions?: Prisma.JobExecutionUpdateManyWithoutIntegrationJobNestedInput;
@@ -275,6 +293,7 @@ export type IntegrationJobUncheckedUpdateInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     executions?: Prisma.JobExecutionUncheckedUpdateManyWithoutIntegrationJobNestedInput;
 };
 export type IntegrationJobCreateManyInput = {
@@ -287,6 +306,7 @@ export type IntegrationJobCreateManyInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type IntegrationJobUpdateManyMutationInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -307,6 +327,7 @@ export type IntegrationJobUncheckedUpdateManyInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 export type IntegrationJobListRelationFilter = {
     every?: Prisma.IntegrationJobWhereInput;
@@ -326,6 +347,7 @@ export type IntegrationJobCountOrderByAggregateInput = {
     schedule?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type IntegrationJobMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -336,6 +358,7 @@ export type IntegrationJobMaxOrderByAggregateInput = {
     schedule?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type IntegrationJobMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -346,10 +369,49 @@ export type IntegrationJobMinOrderByAggregateInput = {
     schedule?: Prisma.SortOrder;
     enabled?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type IntegrationJobScalarRelationFilter = {
     is?: Prisma.IntegrationJobWhereInput;
     isNot?: Prisma.IntegrationJobWhereInput;
+};
+export type IntegrationJobCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.IntegrationJobCreateWithoutProjectInput, Prisma.IntegrationJobUncheckedCreateWithoutProjectInput> | Prisma.IntegrationJobCreateWithoutProjectInput[] | Prisma.IntegrationJobUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.IntegrationJobCreateOrConnectWithoutProjectInput | Prisma.IntegrationJobCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.IntegrationJobCreateManyProjectInputEnvelope;
+    connect?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+};
+export type IntegrationJobUncheckedCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.IntegrationJobCreateWithoutProjectInput, Prisma.IntegrationJobUncheckedCreateWithoutProjectInput> | Prisma.IntegrationJobCreateWithoutProjectInput[] | Prisma.IntegrationJobUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.IntegrationJobCreateOrConnectWithoutProjectInput | Prisma.IntegrationJobCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.IntegrationJobCreateManyProjectInputEnvelope;
+    connect?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+};
+export type IntegrationJobUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.IntegrationJobCreateWithoutProjectInput, Prisma.IntegrationJobUncheckedCreateWithoutProjectInput> | Prisma.IntegrationJobCreateWithoutProjectInput[] | Prisma.IntegrationJobUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.IntegrationJobCreateOrConnectWithoutProjectInput | Prisma.IntegrationJobCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.IntegrationJobUpsertWithWhereUniqueWithoutProjectInput | Prisma.IntegrationJobUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.IntegrationJobCreateManyProjectInputEnvelope;
+    set?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    disconnect?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    delete?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    connect?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    update?: Prisma.IntegrationJobUpdateWithWhereUniqueWithoutProjectInput | Prisma.IntegrationJobUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.IntegrationJobUpdateManyWithWhereWithoutProjectInput | Prisma.IntegrationJobUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.IntegrationJobScalarWhereInput | Prisma.IntegrationJobScalarWhereInput[];
+};
+export type IntegrationJobUncheckedUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.IntegrationJobCreateWithoutProjectInput, Prisma.IntegrationJobUncheckedCreateWithoutProjectInput> | Prisma.IntegrationJobCreateWithoutProjectInput[] | Prisma.IntegrationJobUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.IntegrationJobCreateOrConnectWithoutProjectInput | Prisma.IntegrationJobCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.IntegrationJobUpsertWithWhereUniqueWithoutProjectInput | Prisma.IntegrationJobUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.IntegrationJobCreateManyProjectInputEnvelope;
+    set?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    disconnect?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    delete?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    connect?: Prisma.IntegrationJobWhereUniqueInput | Prisma.IntegrationJobWhereUniqueInput[];
+    update?: Prisma.IntegrationJobUpdateWithWhereUniqueWithoutProjectInput | Prisma.IntegrationJobUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.IntegrationJobUpdateManyWithWhereWithoutProjectInput | Prisma.IntegrationJobUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.IntegrationJobScalarWhereInput | Prisma.IntegrationJobScalarWhereInput[];
 };
 export type IntegrationJobCreateNestedManyWithoutTargetEntityTypeInput = {
     create?: Prisma.XOR<Prisma.IntegrationJobCreateWithoutTargetEntityTypeInput, Prisma.IntegrationJobUncheckedCreateWithoutTargetEntityTypeInput> | Prisma.IntegrationJobCreateWithoutTargetEntityTypeInput[] | Prisma.IntegrationJobUncheckedCreateWithoutTargetEntityTypeInput[];
@@ -439,6 +501,66 @@ export type IntegrationJobUpdateOneRequiredWithoutExecutionsNestedInput = {
     connect?: Prisma.IntegrationJobWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.IntegrationJobUpdateToOneWithWhereWithoutExecutionsInput, Prisma.IntegrationJobUpdateWithoutExecutionsInput>, Prisma.IntegrationJobUncheckedUpdateWithoutExecutionsInput>;
 };
+export type IntegrationJobCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    fieldMapping: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicalIdField: string;
+    schedule?: string | null;
+    enabled?: boolean;
+    createdAt?: Date | string;
+    dataSource: Prisma.DataSourceCreateNestedOneWithoutIntegrationJobsInput;
+    targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIntegrationJobsInput;
+    executions?: Prisma.JobExecutionCreateNestedManyWithoutIntegrationJobInput;
+};
+export type IntegrationJobUncheckedCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    dataSourceId: string;
+    targetEntityTypeId: string;
+    fieldMapping: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicalIdField: string;
+    schedule?: string | null;
+    enabled?: boolean;
+    createdAt?: Date | string;
+    executions?: Prisma.JobExecutionUncheckedCreateNestedManyWithoutIntegrationJobInput;
+};
+export type IntegrationJobCreateOrConnectWithoutProjectInput = {
+    where: Prisma.IntegrationJobWhereUniqueInput;
+    create: Prisma.XOR<Prisma.IntegrationJobCreateWithoutProjectInput, Prisma.IntegrationJobUncheckedCreateWithoutProjectInput>;
+};
+export type IntegrationJobCreateManyProjectInputEnvelope = {
+    data: Prisma.IntegrationJobCreateManyProjectInput | Prisma.IntegrationJobCreateManyProjectInput[];
+    skipDuplicates?: boolean;
+};
+export type IntegrationJobUpsertWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.IntegrationJobWhereUniqueInput;
+    update: Prisma.XOR<Prisma.IntegrationJobUpdateWithoutProjectInput, Prisma.IntegrationJobUncheckedUpdateWithoutProjectInput>;
+    create: Prisma.XOR<Prisma.IntegrationJobCreateWithoutProjectInput, Prisma.IntegrationJobUncheckedCreateWithoutProjectInput>;
+};
+export type IntegrationJobUpdateWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.IntegrationJobWhereUniqueInput;
+    data: Prisma.XOR<Prisma.IntegrationJobUpdateWithoutProjectInput, Prisma.IntegrationJobUncheckedUpdateWithoutProjectInput>;
+};
+export type IntegrationJobUpdateManyWithWhereWithoutProjectInput = {
+    where: Prisma.IntegrationJobScalarWhereInput;
+    data: Prisma.XOR<Prisma.IntegrationJobUpdateManyMutationInput, Prisma.IntegrationJobUncheckedUpdateManyWithoutProjectInput>;
+};
+export type IntegrationJobScalarWhereInput = {
+    AND?: Prisma.IntegrationJobScalarWhereInput | Prisma.IntegrationJobScalarWhereInput[];
+    OR?: Prisma.IntegrationJobScalarWhereInput[];
+    NOT?: Prisma.IntegrationJobScalarWhereInput | Prisma.IntegrationJobScalarWhereInput[];
+    id?: Prisma.StringFilter<"IntegrationJob"> | string;
+    name?: Prisma.StringFilter<"IntegrationJob"> | string;
+    dataSourceId?: Prisma.StringFilter<"IntegrationJob"> | string;
+    targetEntityTypeId?: Prisma.StringFilter<"IntegrationJob"> | string;
+    fieldMapping?: Prisma.JsonFilter<"IntegrationJob">;
+    logicalIdField?: Prisma.StringFilter<"IntegrationJob"> | string;
+    schedule?: Prisma.StringNullableFilter<"IntegrationJob"> | string | null;
+    enabled?: Prisma.BoolFilter<"IntegrationJob"> | boolean;
+    createdAt?: Prisma.DateTimeFilter<"IntegrationJob"> | Date | string;
+    projectId?: Prisma.StringFilter<"IntegrationJob"> | string;
+};
 export type IntegrationJobCreateWithoutTargetEntityTypeInput = {
     id?: string;
     name: string;
@@ -447,6 +569,7 @@ export type IntegrationJobCreateWithoutTargetEntityTypeInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutIntegrationJobsInput;
     dataSource: Prisma.DataSourceCreateNestedOneWithoutIntegrationJobsInput;
     executions?: Prisma.JobExecutionCreateNestedManyWithoutIntegrationJobInput;
 };
@@ -459,6 +582,7 @@ export type IntegrationJobUncheckedCreateWithoutTargetEntityTypeInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     executions?: Prisma.JobExecutionUncheckedCreateNestedManyWithoutIntegrationJobInput;
 };
 export type IntegrationJobCreateOrConnectWithoutTargetEntityTypeInput = {
@@ -482,20 +606,6 @@ export type IntegrationJobUpdateManyWithWhereWithoutTargetEntityTypeInput = {
     where: Prisma.IntegrationJobScalarWhereInput;
     data: Prisma.XOR<Prisma.IntegrationJobUpdateManyMutationInput, Prisma.IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeInput>;
 };
-export type IntegrationJobScalarWhereInput = {
-    AND?: Prisma.IntegrationJobScalarWhereInput | Prisma.IntegrationJobScalarWhereInput[];
-    OR?: Prisma.IntegrationJobScalarWhereInput[];
-    NOT?: Prisma.IntegrationJobScalarWhereInput | Prisma.IntegrationJobScalarWhereInput[];
-    id?: Prisma.StringFilter<"IntegrationJob"> | string;
-    name?: Prisma.StringFilter<"IntegrationJob"> | string;
-    dataSourceId?: Prisma.StringFilter<"IntegrationJob"> | string;
-    targetEntityTypeId?: Prisma.StringFilter<"IntegrationJob"> | string;
-    fieldMapping?: Prisma.JsonFilter<"IntegrationJob">;
-    logicalIdField?: Prisma.StringFilter<"IntegrationJob"> | string;
-    schedule?: Prisma.StringNullableFilter<"IntegrationJob"> | string | null;
-    enabled?: Prisma.BoolFilter<"IntegrationJob"> | boolean;
-    createdAt?: Prisma.DateTimeFilter<"IntegrationJob"> | Date | string;
-};
 export type IntegrationJobCreateWithoutDataSourceInput = {
     id?: string;
     name: string;
@@ -504,6 +614,7 @@ export type IntegrationJobCreateWithoutDataSourceInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutIntegrationJobsInput;
     targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIntegrationJobsInput;
     executions?: Prisma.JobExecutionCreateNestedManyWithoutIntegrationJobInput;
 };
@@ -516,6 +627,7 @@ export type IntegrationJobUncheckedCreateWithoutDataSourceInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
     executions?: Prisma.JobExecutionUncheckedCreateNestedManyWithoutIntegrationJobInput;
 };
 export type IntegrationJobCreateOrConnectWithoutDataSourceInput = {
@@ -547,6 +659,7 @@ export type IntegrationJobCreateWithoutExecutionsInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutIntegrationJobsInput;
     dataSource: Prisma.DataSourceCreateNestedOneWithoutIntegrationJobsInput;
     targetEntityType: Prisma.EntityTypeCreateNestedOneWithoutIntegrationJobsInput;
 };
@@ -560,6 +673,7 @@ export type IntegrationJobUncheckedCreateWithoutExecutionsInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type IntegrationJobCreateOrConnectWithoutExecutionsInput = {
     where: Prisma.IntegrationJobWhereUniqueInput;
@@ -582,10 +696,58 @@ export type IntegrationJobUpdateWithoutExecutionsInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     dataSource?: Prisma.DataSourceUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIntegrationJobsNestedInput;
 };
 export type IntegrationJobUncheckedUpdateWithoutExecutionsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    dataSourceId?: Prisma.StringFieldUpdateOperationsInput | string;
+    targetEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    fieldMapping?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicalIdField?: Prisma.StringFieldUpdateOperationsInput | string;
+    schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
+};
+export type IntegrationJobCreateManyProjectInput = {
+    id?: string;
+    name: string;
+    dataSourceId: string;
+    targetEntityTypeId: string;
+    fieldMapping: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicalIdField: string;
+    schedule?: string | null;
+    enabled?: boolean;
+    createdAt?: Date | string;
+};
+export type IntegrationJobUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    fieldMapping?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicalIdField?: Prisma.StringFieldUpdateOperationsInput | string;
+    schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    dataSource?: Prisma.DataSourceUpdateOneRequiredWithoutIntegrationJobsNestedInput;
+    targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIntegrationJobsNestedInput;
+    executions?: Prisma.JobExecutionUpdateManyWithoutIntegrationJobNestedInput;
+};
+export type IntegrationJobUncheckedUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    dataSourceId?: Prisma.StringFieldUpdateOperationsInput | string;
+    targetEntityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    fieldMapping?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    logicalIdField?: Prisma.StringFieldUpdateOperationsInput | string;
+    schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    executions?: Prisma.JobExecutionUncheckedUpdateManyWithoutIntegrationJobNestedInput;
+};
+export type IntegrationJobUncheckedUpdateManyWithoutProjectInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     dataSourceId?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -605,6 +767,7 @@ export type IntegrationJobCreateManyTargetEntityTypeInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type IntegrationJobUpdateWithoutTargetEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -614,6 +777,7 @@ export type IntegrationJobUpdateWithoutTargetEntityTypeInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     dataSource?: Prisma.DataSourceUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     executions?: Prisma.JobExecutionUpdateManyWithoutIntegrationJobNestedInput;
 };
@@ -626,6 +790,7 @@ export type IntegrationJobUncheckedUpdateWithoutTargetEntityTypeInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     executions?: Prisma.JobExecutionUncheckedUpdateManyWithoutIntegrationJobNestedInput;
 };
 export type IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeInput = {
@@ -637,6 +802,7 @@ export type IntegrationJobUncheckedUpdateManyWithoutTargetEntityTypeInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 export type IntegrationJobCreateManyDataSourceInput = {
     id?: string;
@@ -647,6 +813,7 @@ export type IntegrationJobCreateManyDataSourceInput = {
     schedule?: string | null;
     enabled?: boolean;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type IntegrationJobUpdateWithoutDataSourceInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -656,6 +823,7 @@ export type IntegrationJobUpdateWithoutDataSourceInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     targetEntityType?: Prisma.EntityTypeUpdateOneRequiredWithoutIntegrationJobsNestedInput;
     executions?: Prisma.JobExecutionUpdateManyWithoutIntegrationJobNestedInput;
 };
@@ -668,6 +836,7 @@ export type IntegrationJobUncheckedUpdateWithoutDataSourceInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     executions?: Prisma.JobExecutionUncheckedUpdateManyWithoutIntegrationJobNestedInput;
 };
 export type IntegrationJobUncheckedUpdateManyWithoutDataSourceInput = {
@@ -679,6 +848,7 @@ export type IntegrationJobUncheckedUpdateManyWithoutDataSourceInput = {
     schedule?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     enabled?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 /**
  * Count Type IntegrationJobCountOutputType
@@ -714,6 +884,8 @@ export type IntegrationJobSelect<ExtArgs extends runtime.Types.Extensions.Intern
     schedule?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     dataSource?: boolean | Prisma.DataSourceDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     executions?: boolean | Prisma.IntegrationJob$executionsArgs<ExtArgs>;
@@ -729,6 +901,8 @@ export type IntegrationJobSelectCreateManyAndReturn<ExtArgs extends runtime.Type
     schedule?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     dataSource?: boolean | Prisma.DataSourceDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["integrationJob"]>;
@@ -742,6 +916,8 @@ export type IntegrationJobSelectUpdateManyAndReturn<ExtArgs extends runtime.Type
     schedule?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     dataSource?: boolean | Prisma.DataSourceDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["integrationJob"]>;
@@ -755,25 +931,30 @@ export type IntegrationJobSelectScalar = {
     schedule?: boolean;
     enabled?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
 };
-export type IntegrationJobOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "dataSourceId" | "targetEntityTypeId" | "fieldMapping" | "logicalIdField" | "schedule" | "enabled" | "createdAt", ExtArgs["result"]["integrationJob"]>;
+export type IntegrationJobOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "dataSourceId" | "targetEntityTypeId" | "fieldMapping" | "logicalIdField" | "schedule" | "enabled" | "createdAt" | "projectId", ExtArgs["result"]["integrationJob"]>;
 export type IntegrationJobInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     dataSource?: boolean | Prisma.DataSourceDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     executions?: boolean | Prisma.IntegrationJob$executionsArgs<ExtArgs>;
     _count?: boolean | Prisma.IntegrationJobCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type IntegrationJobIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     dataSource?: boolean | Prisma.DataSourceDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
 export type IntegrationJobIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     dataSource?: boolean | Prisma.DataSourceDefaultArgs<ExtArgs>;
     targetEntityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
 export type $IntegrationJobPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "IntegrationJob";
     objects: {
+        project: Prisma.$ProjectPayload<ExtArgs>;
         dataSource: Prisma.$DataSourcePayload<ExtArgs>;
         targetEntityType: Prisma.$EntityTypePayload<ExtArgs>;
         executions: Prisma.$JobExecutionPayload<ExtArgs>[];
@@ -788,6 +969,7 @@ export type $IntegrationJobPayload<ExtArgs extends runtime.Types.Extensions.Inte
         schedule: string | null;
         enabled: boolean;
         createdAt: Date;
+        projectId: string;
     }, ExtArgs["result"]["integrationJob"]>;
     composites: {};
 };
@@ -1117,6 +1299,7 @@ export interface IntegrationJobDelegate<ExtArgs extends runtime.Types.Extensions
  */
 export interface Prisma__IntegrationJobClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
+    project<T extends Prisma.ProjectDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectDefaultArgs<ExtArgs>>): Prisma.Prisma__ProjectClient<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     dataSource<T extends Prisma.DataSourceDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.DataSourceDefaultArgs<ExtArgs>>): Prisma.Prisma__DataSourceClient<runtime.Types.Result.GetResult<Prisma.$DataSourcePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     targetEntityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     executions<T extends Prisma.IntegrationJob$executionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.IntegrationJob$executionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$JobExecutionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
@@ -1154,6 +1337,7 @@ export interface IntegrationJobFieldRefs {
     readonly schedule: Prisma.FieldRef<"IntegrationJob", 'String'>;
     readonly enabled: Prisma.FieldRef<"IntegrationJob", 'Boolean'>;
     readonly createdAt: Prisma.FieldRef<"IntegrationJob", 'DateTime'>;
+    readonly projectId: Prisma.FieldRef<"IntegrationJob", 'String'>;
 }
 /**
  * IntegrationJob findUnique

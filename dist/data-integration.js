@@ -4,6 +4,8 @@ exports.upsertEntityInstance = upsertEntityInstance;
 exports.executeJob = executeJob;
 exports.startScheduler = startScheduler;
 const policy_engine_1 = require("./policy-engine");
+const identity_service_1 = require("./identity-service");
+const provenance_service_1 = require("./provenance-service");
 const connectors = {
     /**
      * REST_API — Fetch records from an HTTP endpoint.
@@ -80,10 +82,10 @@ function transformRecord(record, fieldMapping) {
  *
  * Returns { success: true } on success, { success: false, error } on failure.
  */
-async function upsertEntityInstance(entityType, logicalId, attrData, prisma) {
+async function upsertEntityInstance(entityType, logicalId, attrData, prisma, options) {
     const now = new Date();
     try {
-        const { eventId, previousState } = await prisma.$transaction(async (tx) => {
+        const { eventId, previousState, instanceId } = await prisma.$transaction(async (tx) => {
             // Fetch the currently-active row
             const current = await tx.entityInstance.findFirst({
                 where: {
@@ -100,7 +102,7 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma) {
                 });
             }
             // Insert new active row
-            await tx.entityInstance.create({
+            const newInstance = await tx.entityInstance.create({
                 data: {
                     logicalId,
                     entityTypeId: entityType.id,
@@ -108,8 +110,16 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma) {
                     data: attrData,
                     validFrom: now,
                     validTo: null,
+                    confidenceScore: options?.confidence ?? 1.0,
+                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED' // Low confidence requires review
                 },
             });
+            // Record Provenance
+            if (options?.sourceSystem && options?.sourceRecordId) {
+                await provenance_service_1.ProvenanceService.recordLineage(newInstance.id, options.sourceSystem, options.sourceRecordId, now, // source timestamp (approximated here as now)
+                null, // Entire record provenance for now
+                tx);
+            }
             // Emit domain event
             const idempotencyKey = `EntityStateChanged:${logicalId}:${now.toISOString()}`;
             const domainEvent = await tx.domainEvent.create({
@@ -143,6 +153,7 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma) {
             return {
                 eventId: domainEvent.id,
                 previousState: current?.data ?? null,
+                instanceId: newInstance.id
             };
         });
         // Fire-and-forget: evaluate policies
@@ -158,7 +169,7 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma) {
                 validFrom: now.toISOString(),
             },
         }, prisma);
-        return { success: true };
+        return { success: true, instanceId };
     }
     catch (error) {
         return { success: false, error: String(error) };
@@ -213,15 +224,31 @@ async function executeJob(jobId, prisma, inlineData) {
             name: job.targetEntityType.name,
         };
         for (const raw of rawRecords) {
-            const logicalId = raw[job.logicalIdField];
-            if (!logicalId || typeof logicalId !== 'string') {
+            let externalId = raw[job.logicalIdField];
+            if (!externalId || typeof externalId !== 'string') {
                 recordsFailed++;
                 // eslint-disable-next-line no-console
                 console.warn(`[DataIntegration] Skipping record: missing or invalid logicalIdField '${job.logicalIdField}'`, raw);
                 continue;
             }
+            // Step 2a: Identity Resolution
+            let logicalId = externalId;
+            let confidence = 1.0;
+            const resolved = await identity_service_1.IdentityService.resolveLogicalId(job.dataSource.name, externalId, prisma);
+            if (resolved) {
+                logicalId = resolved.logicalId;
+                confidence = resolved.confidence;
+            }
+            else {
+                // If not resolved, use the externalId as the logicalId for now and register an alias
+                await identity_service_1.IdentityService.registerAlias(job.dataSource.name, externalId, externalId, 1.0, prisma);
+            }
             const mapped = transformRecord(raw, fieldMapping);
-            const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma);
+            const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma, {
+                sourceSystem: job.dataSource.name,
+                sourceRecordId: externalId, // Using externalId as sourceRecordId for simplicity
+                confidence
+            });
             if (result.success) {
                 recordsProcessed++;
             }

@@ -5,7 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
@@ -27,6 +27,7 @@ model Project {
   decisionRules    DecisionRule[]
   modelDefinitions ModelDefinition[]
   dashboards       Dashboard[]
+  pipelines        Pipeline[]
 }
 
 model EntityType {
@@ -43,6 +44,7 @@ model EntityType {
   computedMetrics       ComputedMetricDefinition[]
   modelDefinitions      ModelDefinition[]
   decisionRules         DecisionRule[]
+  currentStates         CurrentEntityState[]
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -104,14 +106,48 @@ model EntityInstance {
   entityVersion Int
   data          Json
 
+  // Identity & Trust
+  confidenceScore Float  @default(1.0)
+  reviewStatus    String @default("APPROVED") // PENDING, APPROVED, REJECTED, MERGED
+
   validFrom       DateTime
   validTo         DateTime?
   transactionTime DateTime  @default(now())
 
-  entityType EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+  entityType        EntityType         @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+  provenanceRecords ProvenanceRecord[]
 
   @@index([entityTypeId, logicalId])
   @@index([validFrom, validTo, transactionTime])
+}
+
+model EntityAlias {
+  id              String @id @default(uuid())
+  externalId      String // The ID from the source system (e.g. OpenSky callsign)
+  sourceSystem    String // e.g. "OPENSKY", "ADSB_EXCHANGE"
+  targetLogicalId String // The platform's logicalId this maps to
+
+  confidence Float @default(1.0)
+  isPrimary  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([sourceSystem, externalId])
+  @@index([targetLogicalId])
+}
+
+model ProvenanceRecord {
+  id               String   @id @default(uuid())
+  entityInstanceId String
+  attributeName    String? // Null means the entire record, otherwise specific field
+  sourceSystem     String
+  sourceRecordId   String // The ID in the external system for this specific data point
+  sourceTimestamp  DateTime
+  ingestedAt       DateTime @default(now())
+
+  entityInstance EntityInstance @relation(fields: [entityInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([entityInstanceId, attributeName])
 }
 
 model DomainEvent {
@@ -173,6 +209,8 @@ model CurrentEntityState {
   data         Json
   updatedAt    DateTime
 
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Cascade)
+
   @@index([entityTypeId])
 }
 
@@ -216,6 +254,21 @@ model DataSource {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   integrationJobs IntegrationJob[]
+
+  @@index([projectId])
+}
+
+model Pipeline {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  nodes       Json // ReactFlow nodes
+  edges       Json // ReactFlow edges
+  enabled     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
 }

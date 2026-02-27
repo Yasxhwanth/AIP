@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NullsOrder = exports.JsonNullValueFilter = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.ApiKeyScalarFieldEnum = exports.DecisionLogScalarFieldEnum = exports.ExecutionPlanScalarFieldEnum = exports.ActionDefinitionScalarFieldEnum = exports.DecisionRuleScalarFieldEnum = exports.InferenceResultScalarFieldEnum = exports.ModelVersionScalarFieldEnum = exports.ModelDefinitionScalarFieldEnum = exports.TelemetryRollupScalarFieldEnum = exports.ComputedMetricDefinitionScalarFieldEnum = exports.JobExecutionScalarFieldEnum = exports.IntegrationJobScalarFieldEnum = exports.DataSourceScalarFieldEnum = exports.TimeseriesMetricScalarFieldEnum = exports.CurrentGraphScalarFieldEnum = exports.CurrentEntityStateScalarFieldEnum = exports.AlertScalarFieldEnum = exports.PolicyDefinitionScalarFieldEnum = exports.DomainEventScalarFieldEnum = exports.EntityInstanceScalarFieldEnum = exports.RelationshipInstanceScalarFieldEnum = exports.RelationshipDefinitionScalarFieldEnum = exports.AttributeDefinitionScalarFieldEnum = exports.EntityTypeScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
+exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.DashboardWidgetScalarFieldEnum = exports.DashboardScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.DecisionLogScalarFieldEnum = exports.ExecutionPlanScalarFieldEnum = exports.ActionDefinitionScalarFieldEnum = exports.DecisionRuleScalarFieldEnum = exports.InferenceResultScalarFieldEnum = exports.ModelVersionScalarFieldEnum = exports.ModelDefinitionScalarFieldEnum = exports.TelemetryRollupScalarFieldEnum = exports.ComputedMetricDefinitionScalarFieldEnum = exports.JobExecutionScalarFieldEnum = exports.IntegrationJobScalarFieldEnum = exports.PipelineScalarFieldEnum = exports.DataSourceScalarFieldEnum = exports.TimeseriesMetricScalarFieldEnum = exports.CurrentGraphScalarFieldEnum = exports.CurrentEntityStateScalarFieldEnum = exports.AlertScalarFieldEnum = exports.PolicyDefinitionScalarFieldEnum = exports.DomainEventScalarFieldEnum = exports.ProvenanceRecordScalarFieldEnum = exports.EntityAliasScalarFieldEnum = exports.EntityInstanceScalarFieldEnum = exports.RelationshipInstanceScalarFieldEnum = exports.RelationshipDefinitionScalarFieldEnum = exports.AttributeDefinitionScalarFieldEnum = exports.EntityTypeScalarFieldEnum = exports.ProjectScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.Decimal = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/index-browser"));
 exports.Decimal = runtime.Decimal;
 exports.NullTypes = {
@@ -75,11 +75,14 @@ exports.JsonNull = runtime.JsonNull;
  */
 exports.AnyNull = runtime.AnyNull;
 exports.ModelName = {
+    Project: 'Project',
     EntityType: 'EntityType',
     AttributeDefinition: 'AttributeDefinition',
     RelationshipDefinition: 'RelationshipDefinition',
     RelationshipInstance: 'RelationshipInstance',
     EntityInstance: 'EntityInstance',
+    EntityAlias: 'EntityAlias',
+    ProvenanceRecord: 'ProvenanceRecord',
     DomainEvent: 'DomainEvent',
     PolicyDefinition: 'PolicyDefinition',
     Alert: 'Alert',
@@ -87,6 +90,7 @@ exports.ModelName = {
     CurrentGraph: 'CurrentGraph',
     TimeseriesMetric: 'TimeseriesMetric',
     DataSource: 'DataSource',
+    Pipeline: 'Pipeline',
     IntegrationJob: 'IntegrationJob',
     JobExecution: 'JobExecution',
     ComputedMetricDefinition: 'ComputedMetricDefinition',
@@ -98,7 +102,9 @@ exports.ModelName = {
     ActionDefinition: 'ActionDefinition',
     ExecutionPlan: 'ExecutionPlan',
     DecisionLog: 'DecisionLog',
-    ApiKey: 'ApiKey'
+    ApiKey: 'ApiKey',
+    Dashboard: 'Dashboard',
+    DashboardWidget: 'DashboardWidget'
 };
 /*
  * Enums
@@ -109,11 +115,18 @@ exports.TransactionIsolationLevel = runtime.makeStrictEnum({
     RepeatableRead: 'RepeatableRead',
     Serializable: 'Serializable'
 });
+exports.ProjectScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
+    createdAt: 'createdAt'
+};
 exports.EntityTypeScalarFieldEnum = {
     id: 'id',
     name: 'name',
     version: 'version',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    projectId: 'projectId'
 };
 exports.AttributeDefinitionScalarFieldEnum = {
     id: 'id',
@@ -146,9 +159,29 @@ exports.EntityInstanceScalarFieldEnum = {
     entityTypeId: 'entityTypeId',
     entityVersion: 'entityVersion',
     data: 'data',
+    confidenceScore: 'confidenceScore',
+    reviewStatus: 'reviewStatus',
     validFrom: 'validFrom',
     validTo: 'validTo',
     transactionTime: 'transactionTime'
+};
+exports.EntityAliasScalarFieldEnum = {
+    id: 'id',
+    externalId: 'externalId',
+    sourceSystem: 'sourceSystem',
+    targetLogicalId: 'targetLogicalId',
+    confidence: 'confidence',
+    isPrimary: 'isPrimary',
+    createdAt: 'createdAt'
+};
+exports.ProvenanceRecordScalarFieldEnum = {
+    id: 'id',
+    entityInstanceId: 'entityInstanceId',
+    attributeName: 'attributeName',
+    sourceSystem: 'sourceSystem',
+    sourceRecordId: 'sourceRecordId',
+    sourceTimestamp: 'sourceTimestamp',
+    ingestedAt: 'ingestedAt'
 };
 exports.DomainEventScalarFieldEnum = {
     id: 'id',
@@ -214,7 +247,18 @@ exports.DataSourceScalarFieldEnum = {
     type: 'type',
     connectionConfig: 'connectionConfig',
     enabled: 'enabled',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    projectId: 'projectId'
+};
+exports.PipelineScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
+    nodes: 'nodes',
+    edges: 'edges',
+    enabled: 'enabled',
+    createdAt: 'createdAt',
+    projectId: 'projectId'
 };
 exports.IntegrationJobScalarFieldEnum = {
     id: 'id',
@@ -225,7 +269,8 @@ exports.IntegrationJobScalarFieldEnum = {
     logicalIdField: 'logicalIdField',
     schedule: 'schedule',
     enabled: 'enabled',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    projectId: 'projectId'
 };
 exports.JobExecutionScalarFieldEnum = {
     id: 'id',
@@ -265,7 +310,8 @@ exports.ModelDefinitionScalarFieldEnum = {
     description: 'description',
     inputFields: 'inputFields',
     outputField: 'outputField',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    projectId: 'projectId'
 };
 exports.ModelVersionScalarFieldEnum = {
     id: 'id',
@@ -296,7 +342,8 @@ exports.DecisionRuleScalarFieldEnum = {
     autoExecute: 'autoExecute',
     confidenceThreshold: 'confidenceThreshold',
     enabled: 'enabled',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    projectId: 'projectId'
 };
 exports.ActionDefinitionScalarFieldEnum = {
     id: 'id',
@@ -334,6 +381,23 @@ exports.ApiKeyScalarFieldEnum = {
     lastUsedAt: 'lastUsedAt',
     createdAt: 'createdAt'
 };
+exports.DashboardScalarFieldEnum = {
+    id: 'id',
+    projectId: 'projectId',
+    name: 'name',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+exports.DashboardWidgetScalarFieldEnum = {
+    id: 'id',
+    dashboardId: 'dashboardId',
+    type: 'type',
+    configData: 'configData',
+    x: 'x',
+    y: 'y',
+    w: 'w',
+    h: 'h'
+};
 exports.SortOrder = {
     asc: 'asc',
     desc: 'desc'
@@ -349,13 +413,13 @@ exports.QueryMode = {
     default: 'default',
     insensitive: 'insensitive'
 };
+exports.NullsOrder = {
+    first: 'first',
+    last: 'last'
+};
 exports.JsonNullValueFilter = {
     DbNull: exports.DbNull,
     JsonNull: exports.JsonNull,
     AnyNull: exports.AnyNull
-};
-exports.NullsOrder = {
-    first: 'first',
-    last: 'last'
 };
 //# sourceMappingURL=prismaNamespaceBrowser.js.map

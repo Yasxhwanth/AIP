@@ -344,9 +344,6 @@ export type DomainEventMinOrderByAggregateInput = {
 export type DomainEventSumOrderByAggregateInput = {
     entityVersion?: Prisma.SortOrder;
 };
-export type NullableStringFieldUpdateOperationsInput = {
-    set?: string | null;
-};
 export type DomainEventSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     idempotencyKey?: boolean;

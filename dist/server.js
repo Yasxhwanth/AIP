@@ -10,6 +10,8 @@ const adapter_pg_1 = require("@prisma/adapter-pg");
 const client_1 = require("./generated/prisma/client");
 const policy_engine_1 = require("./policy-engine");
 const data_integration_1 = require("./data-integration");
+const schema_inference_service_1 = require("./schema-inference-service");
+const relationship_derivation_service_1 = require("./relationship-derivation-service");
 const computed_metrics_1 = require("./computed-metrics");
 const rollup_engine_1 = require("./rollup-engine");
 const inference_engine_1 = require("./inference-engine");
@@ -35,6 +37,51 @@ app.use((0, middleware_1.correlationId)());
 app.use((0, middleware_1.requestLogger)());
 app.use((0, middleware_1.apiKeyAuth)(prisma));
 app.use((0, middleware_1.createRateLimiter)());
+// ── Projects & Dashboards ────────────────────────────────────────
+app.post('/projects', async (req, res) => {
+    try {
+        const project = await prisma.project.create({ data: { name: req.body.name || 'New Project', description: req.body.description } });
+        return res.status(201).json(project);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.get('/projects', async (req, res) => {
+    try {
+        const projects = await prisma.project.findMany({ orderBy: { createdAt: 'desc' } });
+        return res.json(projects);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.post('/dashboards', async (req, res) => {
+    try {
+        const dashboard = await prisma.dashboard.create({
+            data: { name: req.body.name, projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID }
+        });
+        return res.status(201).json(dashboard);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.get('/dashboards', async (req, res) => {
+    try {
+        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        const dashboards = await prisma.dashboard.findMany({
+            where: { projectId },
+            include: { widgets: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        return res.json(dashboards);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── End Projects & Dashboards ────────────────────────────────────
 // ── Health Checks (no auth) ──────────────────────────────────────
 app.get('/api/v1/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
@@ -133,6 +180,7 @@ app.post('/entity-types', async (req, res) => {
     try {
         const created = await prisma.entityType.create({
             data: {
+                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
                 name,
                 version: 1,
                 attributes: {
@@ -169,6 +217,82 @@ app.get('/entity-types', async (_req, res) => {
     }
     catch (error) {
         return res.status(500).json({ error: 'failed to list entity types', details: String(error) });
+    }
+});
+// ── Integration & Inference ───────────────────────────────────────
+app.post('/api/v1/integration/infer-schema', async (req, res) => {
+    try {
+        const { sample } = req.body;
+        if (!sample)
+            return res.status(400).json({ error: 'sample JSON is required' });
+        const inferred = schema_inference_service_1.SchemaInferenceService.inferAttributes(sample);
+        return res.json({ attributes: inferred });
+    }
+    catch (error) {
+        return res.status(500).json({ error: 'failed to infer schema', details: String(error) });
+    }
+});
+app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
+    try {
+        const { inferredAttributes, entityTypeId } = req.body;
+        if (!inferredAttributes || !entityTypeId) {
+            return res.status(400).json({ error: 'inferredAttributes and entityTypeId are required' });
+        }
+        const entityType = await prisma.entityType.findUnique({
+            where: { id: entityTypeId },
+            include: { attributes: true },
+        });
+        if (!entityType)
+            return res.status(404).json({ error: 'entity type not found' });
+        const suggestions = schema_inference_service_1.SchemaInferenceService.suggestMappings(inferredAttributes, entityType.attributes);
+        return res.json({ suggestions });
+    }
+    catch (error) {
+        return res.status(500).json({ error: 'failed to suggest mappings', details: String(error) });
+    }
+});
+app.post('/api/v1/pipelines', async (req, res) => {
+    try {
+        const { name, description, nodes, edges, projectId } = req.body;
+        const pipeline = await prisma.pipeline.create({
+            data: {
+                name,
+                description,
+                nodes: nodes,
+                edges: edges,
+                projectId: projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID
+            }
+        });
+        return res.status(201).json(pipeline);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.get('/api/v1/pipelines', async (req, res) => {
+    try {
+        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        const pipelines = await prisma.pipeline.findMany({
+            where: { projectId },
+            orderBy: { createdAt: 'desc' }
+        });
+        return res.json(pipelines);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.post('/api/v1/ontology/derive-relationships', async (req, res) => {
+    try {
+        const { sourceEntityTypeId, targetEntityTypeId, relationshipDefId, maxDistanceKm } = req.body;
+        if (!sourceEntityTypeId || !targetEntityTypeId || !relationshipDefId) {
+            return res.status(400).json({ error: 'sourceEntityTypeId, targetEntityTypeId, and relationshipDefId are required' });
+        }
+        const count = await relationship_derivation_service_1.RelationshipDerivationService.deriveProximityLinks(sourceEntityTypeId, targetEntityTypeId, relationshipDefId, maxDistanceKm || 5.0, prisma);
+        return res.json({ success: true, derivedLinksCount: count });
+    }
+    catch (error) {
+        return res.status(500).json({ error: 'failed to derive relationships', details: String(error) });
     }
 });
 app.get('/entity-types/:id', async (req, res) => {
@@ -252,6 +376,7 @@ app.put('/entity-types/:id', async (req, res) => {
         // Insert-only versioning: create a new EntityType row + new AttributeDefinition rows.
         const createdVersion = await prisma.entityType.create({
             data: {
+                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
                 name: existing.name,
                 version: newVersion,
                 attributes: {
@@ -275,6 +400,29 @@ app.put('/entity-types/:id', async (req, res) => {
     }
 });
 // ── Entity Instances ─────────────────────────────────────────────
+app.get('/api/v1/ontology/instances/current', async (req, res) => {
+    try {
+        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        const whereClause = {};
+        if (projectId) {
+            whereClause.entityType = {
+                projectId: String(projectId)
+            };
+        }
+        const instances = await prisma.currentEntityState.findMany({
+            where: whereClause,
+            include: {
+                entityType: {
+                    select: { name: true }
+                }
+            }
+        });
+        return res.json(instances);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
 app.post('/entity-types/:id/instances', async (req, res) => {
     try {
         const entityType = await prisma.entityType.findUnique({
@@ -501,6 +649,18 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
     }
     catch (error) {
         return res.status(500).json({ error: 'failed to execute bulk ingestion', details: String(error) });
+    }
+});
+app.get('/api/v1/ontology/instances/:id/provenance', async (req, res) => {
+    try {
+        const provenance = await prisma.provenanceRecord.findMany({
+            where: { entityInstanceId: req.params.id },
+            orderBy: { ingestedAt: 'desc' }
+        });
+        return res.json(provenance);
+    }
+    catch (error) {
+        return res.status(500).json({ error: 'failed to fetch provenance', details: String(error) });
     }
 });
 app.get('/entity-types/:id/instances', async (req, res) => {
@@ -1055,6 +1215,7 @@ app.post('/data-sources', async (req, res) => {
         }
         const source = await prisma.dataSource.create({
             data: {
+                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
                 name,
                 type,
                 connectionConfig: connectionConfig ?? {},
@@ -1152,6 +1313,7 @@ app.post('/integration-jobs', async (req, res) => {
             return res.status(404).json({ error: 'target entity type not found' });
         const job = await prisma.integrationJob.create({
             data: {
+                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
                 name,
                 dataSourceId,
                 targetEntityTypeId,
@@ -1419,6 +1581,7 @@ app.post('/models', async (req, res) => {
             return res.status(404).json({ error: 'entity type not found' });
         const model = await prisma.modelDefinition.create({
             data: {
+                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
                 name,
                 entityTypeId,
                 description: description ?? null,
@@ -1594,6 +1757,7 @@ app.post('/decision-rules', async (req, res) => {
         }
         const rule = await prisma.decisionRule.create({
             data: {
+                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
                 name,
                 entityTypeId,
                 conditions: conditions,
@@ -1786,11 +1950,47 @@ app.get('/decision-logs', async (req, res) => {
         return res.status(500).json({ error: 'failed to query decision logs', details: String(error) });
     }
 });
+app.post('/decision-logs/:id/execute', async (req, res) => {
+    try {
+        const log = await prisma.decisionLog.findUnique({
+            where: { id: req.params.id },
+            include: { decisionRule: true }
+        });
+        if (!log)
+            return res.status(404).json({ error: 'decision log not found' });
+        if (log.status !== 'PENDING')
+            return res.status(400).json({ error: `Cannot execute log with status ${log.status}` });
+        // Mark it as executed. In a full system, we might orchestrate Action Definitions here.
+        // However, Phase 5 requested a "mock" execute state transition:
+        const updated = await prisma.decisionLog.update({
+            where: { id: req.params.id },
+            data: { status: 'COMPLETED' }
+        });
+        return res.json({ success: true, executedLog: updated });
+    }
+    catch (error) {
+        return res.status(500).json({ error: 'failed to execute logic', details: String(error) });
+    }
+});
 // ── Error Handler ────────────────────────────────────────────────
 app.use((0, middleware_1.errorHandler)());
+// ── Server & Graceful Shutdown ───────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
     logger_1.default.info(`Server listening on http://0.0.0.0:${PORT}`);
+    try {
+        let proj = await prisma.project.findFirst({ orderBy: { createdAt: 'asc' } });
+        if (!proj) {
+            proj = await prisma.project.create({
+                data: { name: 'Default Workspace', description: 'Auto-generated default workspace' }
+            });
+            logger_1.default.info(`Created default project: ${proj.id}`);
+        }
+        global.DEFAULT_PROJECT_ID = proj.id;
+    }
+    catch (err) {
+        logger_1.default.error({ err }, 'Failed to create default project');
+    }
     // Start the lightweight job scheduler
     (0, data_integration_1.startScheduler)(prisma);
     // Start the telemetry rollup scheduler

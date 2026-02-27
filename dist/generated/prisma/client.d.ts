@@ -10,8 +10,8 @@ export * from "./enums";
  * @example
  * ```
  * const prisma = new PrismaClient()
- * // Fetch zero or more EntityTypes
- * const entityTypes = await prisma.entityType.findMany()
+ * // Fetch zero or more Projects
+ * const projects = await prisma.project.findMany()
  * ```
  *
  * Read more in our [docs](https://pris.ly/d/client).
@@ -19,6 +19,11 @@ export * from "./enums";
 export declare const PrismaClient: $Class.PrismaClientConstructor;
 export type PrismaClient<LogOpts extends Prisma.LogLevel = never, OmitOpts extends Prisma.PrismaClientOptions["omit"] = Prisma.PrismaClientOptions["omit"], ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = $Class.PrismaClient<LogOpts, OmitOpts, ExtArgs>;
 export { Prisma };
+/**
+ * Model Project
+ *
+ */
+export type Project = Prisma.ProjectModel;
 /**
  * Model EntityType
  *
@@ -44,6 +49,16 @@ export type RelationshipInstance = Prisma.RelationshipInstanceModel;
  *
  */
 export type EntityInstance = Prisma.EntityInstanceModel;
+/**
+ * Model EntityAlias
+ *
+ */
+export type EntityAlias = Prisma.EntityAliasModel;
+/**
+ * Model ProvenanceRecord
+ *
+ */
+export type ProvenanceRecord = Prisma.ProvenanceRecordModel;
 /**
  * Model DomainEvent
  *
@@ -79,6 +94,11 @@ export type TimeseriesMetric = Prisma.TimeseriesMetricModel;
  *
  */
 export type DataSource = Prisma.DataSourceModel;
+/**
+ * Model Pipeline
+ *
+ */
+export type Pipeline = Prisma.PipelineModel;
 /**
  * Model IntegrationJob
  *
@@ -139,4 +159,14 @@ export type DecisionLog = Prisma.DecisionLogModel;
  *
  */
 export type ApiKey = Prisma.ApiKeyModel;
+/**
+ * Model Dashboard
+ *
+ */
+export type Dashboard = Prisma.DashboardModel;
+/**
+ * Model DashboardWidget
+ *
+ */
+export type DashboardWidget = Prisma.DashboardWidgetModel;
 //# sourceMappingURL=client.d.ts.map

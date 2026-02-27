@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+
 .box-glow {
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
 }
@@ -28,4 +36,13 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Sidebar smooth width transition ─────────────────────────────────────── */
+.transition-\[width\] {
+  transition-property: width;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.duration-250 {
+  transition-duration: 250ms;
 }

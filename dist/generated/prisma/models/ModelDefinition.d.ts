@@ -17,6 +17,7 @@ export type ModelDefinitionMinAggregateOutputType = {
     description: string | null;
     outputField: string | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type ModelDefinitionMaxAggregateOutputType = {
     id: string | null;
@@ -25,6 +26,7 @@ export type ModelDefinitionMaxAggregateOutputType = {
     description: string | null;
     outputField: string | null;
     createdAt: Date | null;
+    projectId: string | null;
 };
 export type ModelDefinitionCountAggregateOutputType = {
     id: number;
@@ -34,6 +36,7 @@ export type ModelDefinitionCountAggregateOutputType = {
     inputFields: number;
     outputField: number;
     createdAt: number;
+    projectId: number;
     _all: number;
 };
 export type ModelDefinitionMinAggregateInputType = {
@@ -43,6 +46,7 @@ export type ModelDefinitionMinAggregateInputType = {
     description?: true;
     outputField?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type ModelDefinitionMaxAggregateInputType = {
     id?: true;
@@ -51,6 +55,7 @@ export type ModelDefinitionMaxAggregateInputType = {
     description?: true;
     outputField?: true;
     createdAt?: true;
+    projectId?: true;
 };
 export type ModelDefinitionCountAggregateInputType = {
     id?: true;
@@ -60,6 +65,7 @@ export type ModelDefinitionCountAggregateInputType = {
     inputFields?: true;
     outputField?: true;
     createdAt?: true;
+    projectId?: true;
     _all?: true;
 };
 export type ModelDefinitionAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -132,6 +138,7 @@ export type ModelDefinitionGroupByOutputType = {
     inputFields: runtime.JsonValue;
     outputField: string;
     createdAt: Date;
+    projectId: string;
     _count: ModelDefinitionCountAggregateOutputType | null;
     _min: ModelDefinitionMinAggregateOutputType | null;
     _max: ModelDefinitionMaxAggregateOutputType | null;
@@ -150,6 +157,8 @@ export type ModelDefinitionWhereInput = {
     inputFields?: Prisma.JsonFilter<"ModelDefinition">;
     outputField?: Prisma.StringFilter<"ModelDefinition"> | string;
     createdAt?: Prisma.DateTimeFilter<"ModelDefinition"> | Date | string;
+    projectId?: Prisma.StringFilter<"ModelDefinition"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     versions?: Prisma.ModelVersionListRelationFilter;
 };
@@ -161,6 +170,8 @@ export type ModelDefinitionOrderByWithRelationInput = {
     inputFields?: Prisma.SortOrder;
     outputField?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
+    project?: Prisma.ProjectOrderByWithRelationInput;
     entityType?: Prisma.EntityTypeOrderByWithRelationInput;
     versions?: Prisma.ModelVersionOrderByRelationAggregateInput;
 };
@@ -175,6 +186,8 @@ export type ModelDefinitionWhereUniqueInput = Prisma.AtLeast<{
     inputFields?: Prisma.JsonFilter<"ModelDefinition">;
     outputField?: Prisma.StringFilter<"ModelDefinition"> | string;
     createdAt?: Prisma.DateTimeFilter<"ModelDefinition"> | Date | string;
+    projectId?: Prisma.StringFilter<"ModelDefinition"> | string;
+    project?: Prisma.XOR<Prisma.ProjectScalarRelationFilter, Prisma.ProjectWhereInput>;
     entityType?: Prisma.XOR<Prisma.EntityTypeScalarRelationFilter, Prisma.EntityTypeWhereInput>;
     versions?: Prisma.ModelVersionListRelationFilter;
 }, "id" | "name">;
@@ -186,6 +199,7 @@ export type ModelDefinitionOrderByWithAggregationInput = {
     inputFields?: Prisma.SortOrder;
     outputField?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
     _count?: Prisma.ModelDefinitionCountOrderByAggregateInput;
     _max?: Prisma.ModelDefinitionMaxOrderByAggregateInput;
     _min?: Prisma.ModelDefinitionMinOrderByAggregateInput;
@@ -201,6 +215,7 @@ export type ModelDefinitionScalarWhereWithAggregatesInput = {
     inputFields?: Prisma.JsonWithAggregatesFilter<"ModelDefinition">;
     outputField?: Prisma.StringWithAggregatesFilter<"ModelDefinition"> | string;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"ModelDefinition"> | Date | string;
+    projectId?: Prisma.StringWithAggregatesFilter<"ModelDefinition"> | string;
 };
 export type ModelDefinitionCreateInput = {
     id?: string;
@@ -209,6 +224,7 @@ export type ModelDefinitionCreateInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutModelDefinitionsInput;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutModelDefinitionsInput;
     versions?: Prisma.ModelVersionCreateNestedManyWithoutModelDefinitionInput;
 };
@@ -220,6 +236,7 @@ export type ModelDefinitionUncheckedCreateInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    projectId: string;
     versions?: Prisma.ModelVersionUncheckedCreateNestedManyWithoutModelDefinitionInput;
 };
 export type ModelDefinitionUpdateInput = {
@@ -229,6 +246,7 @@ export type ModelDefinitionUpdateInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutModelDefinitionsNestedInput;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutModelDefinitionsNestedInput;
     versions?: Prisma.ModelVersionUpdateManyWithoutModelDefinitionNestedInput;
 };
@@ -240,6 +258,7 @@ export type ModelDefinitionUncheckedUpdateInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     versions?: Prisma.ModelVersionUncheckedUpdateManyWithoutModelDefinitionNestedInput;
 };
 export type ModelDefinitionCreateManyInput = {
@@ -250,6 +269,7 @@ export type ModelDefinitionCreateManyInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type ModelDefinitionUpdateManyMutationInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -267,6 +287,7 @@ export type ModelDefinitionUncheckedUpdateManyInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 export type ModelDefinitionListRelationFilter = {
     every?: Prisma.ModelDefinitionWhereInput;
@@ -284,6 +305,7 @@ export type ModelDefinitionCountOrderByAggregateInput = {
     inputFields?: Prisma.SortOrder;
     outputField?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type ModelDefinitionMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -292,6 +314,7 @@ export type ModelDefinitionMaxOrderByAggregateInput = {
     description?: Prisma.SortOrder;
     outputField?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type ModelDefinitionMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -300,10 +323,49 @@ export type ModelDefinitionMinOrderByAggregateInput = {
     description?: Prisma.SortOrder;
     outputField?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
+    projectId?: Prisma.SortOrder;
 };
 export type ModelDefinitionScalarRelationFilter = {
     is?: Prisma.ModelDefinitionWhereInput;
     isNot?: Prisma.ModelDefinitionWhereInput;
+};
+export type ModelDefinitionCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutProjectInput, Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput> | Prisma.ModelDefinitionCreateWithoutProjectInput[] | Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput | Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.ModelDefinitionCreateManyProjectInputEnvelope;
+    connect?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+};
+export type ModelDefinitionUncheckedCreateNestedManyWithoutProjectInput = {
+    create?: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutProjectInput, Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput> | Prisma.ModelDefinitionCreateWithoutProjectInput[] | Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput | Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput[];
+    createMany?: Prisma.ModelDefinitionCreateManyProjectInputEnvelope;
+    connect?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+};
+export type ModelDefinitionUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutProjectInput, Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput> | Prisma.ModelDefinitionCreateWithoutProjectInput[] | Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput | Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.ModelDefinitionUpsertWithWhereUniqueWithoutProjectInput | Prisma.ModelDefinitionUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.ModelDefinitionCreateManyProjectInputEnvelope;
+    set?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    disconnect?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    delete?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    connect?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    update?: Prisma.ModelDefinitionUpdateWithWhereUniqueWithoutProjectInput | Prisma.ModelDefinitionUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.ModelDefinitionUpdateManyWithWhereWithoutProjectInput | Prisma.ModelDefinitionUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.ModelDefinitionScalarWhereInput | Prisma.ModelDefinitionScalarWhereInput[];
+};
+export type ModelDefinitionUncheckedUpdateManyWithoutProjectNestedInput = {
+    create?: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutProjectInput, Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput> | Prisma.ModelDefinitionCreateWithoutProjectInput[] | Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput[];
+    connectOrCreate?: Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput | Prisma.ModelDefinitionCreateOrConnectWithoutProjectInput[];
+    upsert?: Prisma.ModelDefinitionUpsertWithWhereUniqueWithoutProjectInput | Prisma.ModelDefinitionUpsertWithWhereUniqueWithoutProjectInput[];
+    createMany?: Prisma.ModelDefinitionCreateManyProjectInputEnvelope;
+    set?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    disconnect?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    delete?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    connect?: Prisma.ModelDefinitionWhereUniqueInput | Prisma.ModelDefinitionWhereUniqueInput[];
+    update?: Prisma.ModelDefinitionUpdateWithWhereUniqueWithoutProjectInput | Prisma.ModelDefinitionUpdateWithWhereUniqueWithoutProjectInput[];
+    updateMany?: Prisma.ModelDefinitionUpdateManyWithWhereWithoutProjectInput | Prisma.ModelDefinitionUpdateManyWithWhereWithoutProjectInput[];
+    deleteMany?: Prisma.ModelDefinitionScalarWhereInput | Prisma.ModelDefinitionScalarWhereInput[];
 };
 export type ModelDefinitionCreateNestedManyWithoutEntityTypeInput = {
     create?: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutEntityTypeInput, Prisma.ModelDefinitionUncheckedCreateWithoutEntityTypeInput> | Prisma.ModelDefinitionCreateWithoutEntityTypeInput[] | Prisma.ModelDefinitionUncheckedCreateWithoutEntityTypeInput[];
@@ -355,6 +417,60 @@ export type ModelDefinitionUpdateOneRequiredWithoutVersionsNestedInput = {
     connect?: Prisma.ModelDefinitionWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.ModelDefinitionUpdateToOneWithWhereWithoutVersionsInput, Prisma.ModelDefinitionUpdateWithoutVersionsInput>, Prisma.ModelDefinitionUncheckedUpdateWithoutVersionsInput>;
 };
+export type ModelDefinitionCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    description?: string | null;
+    inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    outputField: string;
+    createdAt?: Date | string;
+    entityType: Prisma.EntityTypeCreateNestedOneWithoutModelDefinitionsInput;
+    versions?: Prisma.ModelVersionCreateNestedManyWithoutModelDefinitionInput;
+};
+export type ModelDefinitionUncheckedCreateWithoutProjectInput = {
+    id?: string;
+    name: string;
+    entityTypeId: string;
+    description?: string | null;
+    inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    outputField: string;
+    createdAt?: Date | string;
+    versions?: Prisma.ModelVersionUncheckedCreateNestedManyWithoutModelDefinitionInput;
+};
+export type ModelDefinitionCreateOrConnectWithoutProjectInput = {
+    where: Prisma.ModelDefinitionWhereUniqueInput;
+    create: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutProjectInput, Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput>;
+};
+export type ModelDefinitionCreateManyProjectInputEnvelope = {
+    data: Prisma.ModelDefinitionCreateManyProjectInput | Prisma.ModelDefinitionCreateManyProjectInput[];
+    skipDuplicates?: boolean;
+};
+export type ModelDefinitionUpsertWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.ModelDefinitionWhereUniqueInput;
+    update: Prisma.XOR<Prisma.ModelDefinitionUpdateWithoutProjectInput, Prisma.ModelDefinitionUncheckedUpdateWithoutProjectInput>;
+    create: Prisma.XOR<Prisma.ModelDefinitionCreateWithoutProjectInput, Prisma.ModelDefinitionUncheckedCreateWithoutProjectInput>;
+};
+export type ModelDefinitionUpdateWithWhereUniqueWithoutProjectInput = {
+    where: Prisma.ModelDefinitionWhereUniqueInput;
+    data: Prisma.XOR<Prisma.ModelDefinitionUpdateWithoutProjectInput, Prisma.ModelDefinitionUncheckedUpdateWithoutProjectInput>;
+};
+export type ModelDefinitionUpdateManyWithWhereWithoutProjectInput = {
+    where: Prisma.ModelDefinitionScalarWhereInput;
+    data: Prisma.XOR<Prisma.ModelDefinitionUpdateManyMutationInput, Prisma.ModelDefinitionUncheckedUpdateManyWithoutProjectInput>;
+};
+export type ModelDefinitionScalarWhereInput = {
+    AND?: Prisma.ModelDefinitionScalarWhereInput | Prisma.ModelDefinitionScalarWhereInput[];
+    OR?: Prisma.ModelDefinitionScalarWhereInput[];
+    NOT?: Prisma.ModelDefinitionScalarWhereInput | Prisma.ModelDefinitionScalarWhereInput[];
+    id?: Prisma.StringFilter<"ModelDefinition"> | string;
+    name?: Prisma.StringFilter<"ModelDefinition"> | string;
+    entityTypeId?: Prisma.StringFilter<"ModelDefinition"> | string;
+    description?: Prisma.StringNullableFilter<"ModelDefinition"> | string | null;
+    inputFields?: Prisma.JsonFilter<"ModelDefinition">;
+    outputField?: Prisma.StringFilter<"ModelDefinition"> | string;
+    createdAt?: Prisma.DateTimeFilter<"ModelDefinition"> | Date | string;
+    projectId?: Prisma.StringFilter<"ModelDefinition"> | string;
+};
 export type ModelDefinitionCreateWithoutEntityTypeInput = {
     id?: string;
     name: string;
@@ -362,6 +478,7 @@ export type ModelDefinitionCreateWithoutEntityTypeInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutModelDefinitionsInput;
     versions?: Prisma.ModelVersionCreateNestedManyWithoutModelDefinitionInput;
 };
 export type ModelDefinitionUncheckedCreateWithoutEntityTypeInput = {
@@ -371,6 +488,7 @@ export type ModelDefinitionUncheckedCreateWithoutEntityTypeInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    projectId: string;
     versions?: Prisma.ModelVersionUncheckedCreateNestedManyWithoutModelDefinitionInput;
 };
 export type ModelDefinitionCreateOrConnectWithoutEntityTypeInput = {
@@ -394,18 +512,6 @@ export type ModelDefinitionUpdateManyWithWhereWithoutEntityTypeInput = {
     where: Prisma.ModelDefinitionScalarWhereInput;
     data: Prisma.XOR<Prisma.ModelDefinitionUpdateManyMutationInput, Prisma.ModelDefinitionUncheckedUpdateManyWithoutEntityTypeInput>;
 };
-export type ModelDefinitionScalarWhereInput = {
-    AND?: Prisma.ModelDefinitionScalarWhereInput | Prisma.ModelDefinitionScalarWhereInput[];
-    OR?: Prisma.ModelDefinitionScalarWhereInput[];
-    NOT?: Prisma.ModelDefinitionScalarWhereInput | Prisma.ModelDefinitionScalarWhereInput[];
-    id?: Prisma.StringFilter<"ModelDefinition"> | string;
-    name?: Prisma.StringFilter<"ModelDefinition"> | string;
-    entityTypeId?: Prisma.StringFilter<"ModelDefinition"> | string;
-    description?: Prisma.StringNullableFilter<"ModelDefinition"> | string | null;
-    inputFields?: Prisma.JsonFilter<"ModelDefinition">;
-    outputField?: Prisma.StringFilter<"ModelDefinition"> | string;
-    createdAt?: Prisma.DateTimeFilter<"ModelDefinition"> | Date | string;
-};
 export type ModelDefinitionCreateWithoutVersionsInput = {
     id?: string;
     name: string;
@@ -413,6 +519,7 @@ export type ModelDefinitionCreateWithoutVersionsInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    project: Prisma.ProjectCreateNestedOneWithoutModelDefinitionsInput;
     entityType: Prisma.EntityTypeCreateNestedOneWithoutModelDefinitionsInput;
 };
 export type ModelDefinitionUncheckedCreateWithoutVersionsInput = {
@@ -423,6 +530,7 @@ export type ModelDefinitionUncheckedCreateWithoutVersionsInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type ModelDefinitionCreateOrConnectWithoutVersionsInput = {
     where: Prisma.ModelDefinitionWhereUniqueInput;
@@ -444,9 +552,49 @@ export type ModelDefinitionUpdateWithoutVersionsInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutModelDefinitionsNestedInput;
     entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutModelDefinitionsNestedInput;
 };
 export type ModelDefinitionUncheckedUpdateWithoutVersionsInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    outputField?: Prisma.StringFieldUpdateOperationsInput | string;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
+};
+export type ModelDefinitionCreateManyProjectInput = {
+    id?: string;
+    name: string;
+    entityTypeId: string;
+    description?: string | null;
+    inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    outputField: string;
+    createdAt?: Date | string;
+};
+export type ModelDefinitionUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    outputField?: Prisma.StringFieldUpdateOperationsInput | string;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    entityType?: Prisma.EntityTypeUpdateOneRequiredWithoutModelDefinitionsNestedInput;
+    versions?: Prisma.ModelVersionUpdateManyWithoutModelDefinitionNestedInput;
+};
+export type ModelDefinitionUncheckedUpdateWithoutProjectInput = {
+    id?: Prisma.StringFieldUpdateOperationsInput | string;
+    name?: Prisma.StringFieldUpdateOperationsInput | string;
+    entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
+    description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    outputField?: Prisma.StringFieldUpdateOperationsInput | string;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    versions?: Prisma.ModelVersionUncheckedUpdateManyWithoutModelDefinitionNestedInput;
+};
+export type ModelDefinitionUncheckedUpdateManyWithoutProjectInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
     entityTypeId?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -462,6 +610,7 @@ export type ModelDefinitionCreateManyEntityTypeInput = {
     inputFields: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField: string;
     createdAt?: Date | string;
+    projectId: string;
 };
 export type ModelDefinitionUpdateWithoutEntityTypeInput = {
     id?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -470,6 +619,7 @@ export type ModelDefinitionUpdateWithoutEntityTypeInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    project?: Prisma.ProjectUpdateOneRequiredWithoutModelDefinitionsNestedInput;
     versions?: Prisma.ModelVersionUpdateManyWithoutModelDefinitionNestedInput;
 };
 export type ModelDefinitionUncheckedUpdateWithoutEntityTypeInput = {
@@ -479,6 +629,7 @@ export type ModelDefinitionUncheckedUpdateWithoutEntityTypeInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
     versions?: Prisma.ModelVersionUncheckedUpdateManyWithoutModelDefinitionNestedInput;
 };
 export type ModelDefinitionUncheckedUpdateManyWithoutEntityTypeInput = {
@@ -488,6 +639,7 @@ export type ModelDefinitionUncheckedUpdateManyWithoutEntityTypeInput = {
     inputFields?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     outputField?: Prisma.StringFieldUpdateOperationsInput | string;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    projectId?: Prisma.StringFieldUpdateOperationsInput | string;
 };
 /**
  * Count Type ModelDefinitionCountOutputType
@@ -521,6 +673,8 @@ export type ModelDefinitionSelect<ExtArgs extends runtime.Types.Extensions.Inter
     inputFields?: boolean;
     outputField?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     versions?: boolean | Prisma.ModelDefinition$versionsArgs<ExtArgs>;
     _count?: boolean | Prisma.ModelDefinitionCountOutputTypeDefaultArgs<ExtArgs>;
@@ -533,6 +687,8 @@ export type ModelDefinitionSelectCreateManyAndReturn<ExtArgs extends runtime.Typ
     inputFields?: boolean;
     outputField?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["modelDefinition"]>;
 export type ModelDefinitionSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -543,6 +699,8 @@ export type ModelDefinitionSelectUpdateManyAndReturn<ExtArgs extends runtime.Typ
     inputFields?: boolean;
     outputField?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["modelDefinition"]>;
 export type ModelDefinitionSelectScalar = {
@@ -553,22 +711,27 @@ export type ModelDefinitionSelectScalar = {
     inputFields?: boolean;
     outputField?: boolean;
     createdAt?: boolean;
+    projectId?: boolean;
 };
-export type ModelDefinitionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "entityTypeId" | "description" | "inputFields" | "outputField" | "createdAt", ExtArgs["result"]["modelDefinition"]>;
+export type ModelDefinitionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "name" | "entityTypeId" | "description" | "inputFields" | "outputField" | "createdAt" | "projectId", ExtArgs["result"]["modelDefinition"]>;
 export type ModelDefinitionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
     versions?: boolean | Prisma.ModelDefinition$versionsArgs<ExtArgs>;
     _count?: boolean | Prisma.ModelDefinitionCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type ModelDefinitionIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
 export type ModelDefinitionIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>;
     entityType?: boolean | Prisma.EntityTypeDefaultArgs<ExtArgs>;
 };
 export type $ModelDefinitionPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "ModelDefinition";
     objects: {
+        project: Prisma.$ProjectPayload<ExtArgs>;
         entityType: Prisma.$EntityTypePayload<ExtArgs>;
         versions: Prisma.$ModelVersionPayload<ExtArgs>[];
     };
@@ -580,6 +743,7 @@ export type $ModelDefinitionPayload<ExtArgs extends runtime.Types.Extensions.Int
         inputFields: runtime.JsonValue;
         outputField: string;
         createdAt: Date;
+        projectId: string;
     }, ExtArgs["result"]["modelDefinition"]>;
     composites: {};
 };
@@ -909,6 +1073,7 @@ export interface ModelDefinitionDelegate<ExtArgs extends runtime.Types.Extension
  */
 export interface Prisma__ModelDefinitionClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
+    project<T extends Prisma.ProjectDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProjectDefaultArgs<ExtArgs>>): Prisma.Prisma__ProjectClient<runtime.Types.Result.GetResult<Prisma.$ProjectPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     entityType<T extends Prisma.EntityTypeDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.EntityTypeDefaultArgs<ExtArgs>>): Prisma.Prisma__EntityTypeClient<runtime.Types.Result.GetResult<Prisma.$EntityTypePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     versions<T extends Prisma.ModelDefinition$versionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ModelDefinition$versionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ModelVersionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
@@ -943,6 +1108,7 @@ export interface ModelDefinitionFieldRefs {
     readonly inputFields: Prisma.FieldRef<"ModelDefinition", 'Json'>;
     readonly outputField: Prisma.FieldRef<"ModelDefinition", 'String'>;
     readonly createdAt: Prisma.FieldRef<"ModelDefinition", 'DateTime'>;
+    readonly projectId: Prisma.FieldRef<"ModelDefinition", 'String'>;
 }
 /**
  * ModelDefinition findUnique

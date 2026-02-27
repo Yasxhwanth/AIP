@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
     Map as MapIcon,
     Layers,
@@ -18,228 +18,373 @@ import {
     Eye,
     EyeOff,
     Maximize2,
-    Loader2
+    Loader2,
+    Satellite,
+    Plane,
+    Radio,
+
+    Zap,
+    Monitor,
+    Sun,
+    Thermometer,
+    Tv2,
+    Navigation,
+    Globe,
+    MapPin,
+    SlidersHorizontal,
+    X,
 } from "lucide-react";
-import { ApiClient } from "@/lib/apiClient";
-import * as T from '@/lib/types';
+import dynamic from "next/dynamic";
+import { LANDMARKS, VisualMode } from "@/components/BattlefieldOverview";
 
-const COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500', 'bg-red-500', 'bg-blue-500', 'bg-purple-500'];
+// Dynamic import to avoid SSR issues with CesiumJS
+const BattlefieldOverview = dynamic(
+    () => import("@/components/BattlefieldOverview").then(m => ({ default: m.BattlefieldOverview })),
+    { ssr: false, loading: () => <MapLoadingScreen /> }
+);
 
+function MapLoadingScreen() {
+    return (
+        <div className="w-full h-full flex items-center justify-center bg-slate-950">
+            <div className="flex flex-col items-center gap-4">
+                <div className="relative w-16 h-16">
+                    <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 animate-ping" />
+                    <div className="absolute inset-2 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+                    <Globe className="absolute inset-4 text-cyan-400 w-8 h-8" />
+                </div>
+                <p className="text-slate-400 text-sm font-mono tracking-widest uppercase">Initializing 3D Engine</p>
+            </div>
+        </div>
+    );
+}
+
+// ─── Layer Config ───────────────────────────────────────────────────────────
+const LAYER_CONFIG = [
+    { id: 'aip', label: 'AIP Entities', icon: Crosshair, color: 'text-cyan-400', dot: 'bg-cyan-400' },
+    { id: 'flights', label: 'Live Flights', icon: Plane, color: 'text-yellow-400', dot: 'bg-yellow-400' },
+    { id: 'satellites', label: 'Satellites', icon: Satellite, color: 'text-lime-400', dot: 'bg-lime-400' },
+    { id: 'military', label: 'Military ADS-B', icon: Radio, color: 'text-red-400', dot: 'bg-red-400' },
+];
+
+// ─── Visual Mode Config ─────────────────────────────────────────────────────
+const VISUAL_MODES: { id: VisualMode; label: string; icon: any; desc: string }[] = [
+    { id: 'normal', label: 'Standard', icon: Sun, desc: 'Default RGB view' },
+    { id: 'nightvision', label: 'Night Vision', icon: Eye, desc: 'Green amplified' },
+    { id: 'flir', label: 'FLIR Thermal', icon: Thermometer, desc: 'Thermal false-color' },
+    { id: 'crt', label: 'CRT Mode', icon: Tv2, desc: 'Retro scanlines' },
+];
+
+// ─── Main Component ─────────────────────────────────────────────────────────
 export default function GeoExplorer() {
+    // Map state
+    const flyToRef = useRef<((lat: number, lng: number, alt: number) => void) | null>(null);
+    const [visualMode, setVisualMode] = useState<VisualMode>('normal');
+    const [layers, setLayers] = useState<Record<string, boolean>>({
+        aip: true, flights: false, satellites: false, military: false,
+    });
+    const [layerCounts, setLayerCounts] = useState<Record<string, number>>({});
+
+    // UI state
+    const [showLayerPanel, setShowLayerPanel] = useState(true);
+    const [showShaderPanel, setShowShaderPanel] = useState(false);
+    const [showNavPanel, setShowNavPanel] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const [isPlaying, setIsPlaying] = useState(false);
-    const [currentDate, setCurrentDate] = useState("2026-02-22T14:30:00Z");
 
-    // Live API Data
-    const [layers, setLayers] = useState<any[]>([]);
-    const [renderedDots, setRenderedDots] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    // Timeline
+    const [currentDate] = useState(new Date().toISOString().slice(0, 19) + 'Z');
 
-    useEffect(() => {
-        async function loadData() {
-            try {
-                const types = await ApiClient.get<T.EntityType[]>('/entity-types');
-
-                const layerPromises = types.map(async (t, idx) => {
-                    const insts = await ApiClient.get<T.EntityInstance[]>(`/entity-types/${t.id}/instances`);
-                    return {
-                        id: t.id,
-                        name: t.name,
-                        visible: true,
-                        count: insts.length,
-                        instances: insts,
-                        color: COLORS[idx % COLORS.length]
-                    };
-                });
-
-                const loadedLayers = await Promise.all(layerPromises);
-                setLayers(loadedLayers);
-                updateDots(loadedLayers);
-            } catch (err) {
-                console.error("Failed to fetch geo data", err);
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadData();
+    const toggleLayer = useCallback((id: string) => {
+        setLayers(prev => ({ ...prev, [id]: !prev[id] }));
     }, []);
 
-    const toggleLayer = (layerId: string) => {
-        const newLayers = layers.map(l => l.id === layerId ? { ...l, visible: !l.visible } : l);
-        setLayers(newLayers);
-        updateDots(newLayers);
-    };
+    const handleLayerCount = useCallback((id: string, count: number) => {
+        setLayerCounts(prev => ({ ...prev, [id]: count }));
+    }, []);
 
-    const updateDots = (currentLayers: any[]) => {
-        // Here we simulate converting lat/lon to screen coordinates.
-        // If data has actual lat/lon, we use it to seed a stable random visual dot.
-        const dots: any[] = [];
-        currentLayers.filter(l => l.visible).forEach(l => {
-            l.instances.forEach((inst: any) => {
-                // Generate a pseudo-random deterministic position based on logicalId
-                // (or real lat/lon if they existed in the mock data later).
-                const hash = inst.logicalId.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-                const x = 20 + (hash % 60); // 20% to 80% screen width
-                const y = 20 + ((hash * 13) % 60); // 20% to 80% screen height
+    const handleFlyTo = useCallback((landmark: typeof LANDMARKS[0]) => {
+        flyToRef.current?.(landmark.lat, landmark.lng, landmark.alt);
+        setShowNavPanel(false);
+    }, []);
 
-                dots.push({
-                    id: inst.logicalId,
-                    type: l.name,
-                    x, y,
-                    color: l.color
-                });
-            });
-        });
-        setRenderedDots(dots);
-    };
+    // Search landmark
+    const filteredLandmarks = LANDMARKS.filter(l =>
+        l.label.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const activeLayerCount = Object.values(layers).filter(Boolean).length;
+    const totalTracks = Object.entries(layerCounts).reduce((sum, [id, c]) => layers[id] ? sum + c : sum, 0);
+
+    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
     return (
-        <div className="h-full w-full flex bg-slate-100 text-slate-900 border-t border-slate-200 relative overflow-hidden">
+        <div
+            className="font-sans bg-transparent"
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, pointerEvents: 'none', overflow: 'hidden' }}
+        >
 
-            {/* 1. Underlying Map Canvas (Full Bleed) */}
-            <div className="absolute inset-0 z-0 bg-[#e2e8f0] flex flex-col items-center justify-center">
-                <div className="absolute inset-0 opacity-[0.4] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHBhdGggZD0iTTAgMGg0MHY0MEgweiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0wIDM5LjVsNDAtLjVNNDAgMGwuNSA0MCIgc3Ryb2tlPSIjY2JkNWUxIiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')]"></div>
+            {/* BattlefieldOverview renders nothing here — Cesium lives on document.body at z-index 0 */}
+            <BattlefieldOverview
+                layers={layers}
+                visualMode={visualMode}
+                onLayerCountChange={handleLayerCount}
+                flyToRef={flyToRef}
+            />
 
-                {loading ? (
-                    <div className="bg-white/90 backdrop-blur border border-slate-300 shadow-xl rounded-lg p-6 max-w-sm text-center z-10 flex flex-col items-center">
-                        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-3" />
-                        <h2 className="text-lg font-bold text-slate-800">Fetching Geospatial Assets...</h2>
-                        <p className="text-sm text-slate-500 mt-2">Connecting to Entity Data Service.</p>
-                    </div>
-                ) : (
-                    <>
-                        <div className="bg-white/90 backdrop-blur border border-slate-300 shadow-xl rounded-lg p-6 max-w-sm text-center z-10 pointer-events-none opacity-40 hover:opacity-100 transition-opacity">
-                            <MapIcon className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                            <h2 className="text-lg font-bold text-slate-800">Map GL Engine Pending</h2>
-                            <p className="text-sm text-slate-500 mt-2 mb-4 leading-relaxed">
-                                {renderedDots.length} live assets plotted. Waiting for 3D Mapbox/MapLibre token input to render the extrusions and bi-temporal ontology overlays.
-                            </p>
-                        </div>
-
-                        {/* Live Data Plotted on Canvas */}
-                        {renderedDots.map(dot => (
-                            <div
-                                key={dot.id}
-                                className={`absolute w-3 h-3 rounded-full ${dot.color} border-2 border-white shadow-md transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer hover:scale-150 transition-all z-20`}
-                                style={{ top: `${dot.y}%`, left: `${dot.x}%` }}
-                            >
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-max bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-90 shadow-xl z-30">
-                                    <div className="font-bold">{dot.id}</div>
-                                    <div className="text-slate-400">{dot.type}</div>
-                                </div>
-                            </div>
-                        ))}
-                    </>
-                )}
-            </div>
-
-            {/* 2. Floating Top Left: Search & Layer Panel */}
-            <div className="absolute top-4 left-4 z-10 w-80 space-y-4">
-                <div className="bg-white rounded border border-slate-200 shadow-md flex items-center overflow-hidden h-10">
-                    <Search className="w-4 h-4 text-slate-400 ml-3 shrink-0" />
-                    <input
-                        type="text"
-                        placeholder="Search coordinates, specific entities..."
-                        className="flex-1 w-full bg-transparent border-none px-3 py-2 text-sm focus:outline-none text-slate-800 placeholder-slate-400 font-medium"
-                    />
-                    <div className="h-full w-10 border-l border-slate-200 flex items-center justify-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
-                        <Filter className="w-4 h-4 text-slate-500" />
+            {/* ── Top Bar ────────────────────────────────────────────────── */}
+            <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-2" style={{ pointerEvents: 'none' }}>
+                {/* Left — branding */}
+                <div className="flex items-center gap-3 pointer-events-auto">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-black/70 backdrop-blur border border-white/10 rounded-lg">
+                        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                        <span className="text-[11px] font-bold tracking-widest uppercase text-white">C3 AIP · GEO INTEL</span>
                     </div>
                 </div>
 
-                <div className="bg-white rounded border border-slate-200 shadow-md overflow-hidden flex flex-col max-h-[60vh]">
-                    <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-slate-600" />
-                            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Layers</h3>
-                        </div>
-                        <Settings className="w-4 h-4 text-slate-400 hover:text-slate-700 cursor-pointer" />
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                        {loading && <p className="text-center text-xs text-slate-400 py-4">Loading layers...</p>}
-                        {layers.map((layer) => (
-                            <div key={layer.id} onClick={() => toggleLayer(layer.id)} className="flex items-center justify-between p-2 rounded hover:bg-slate-50 group transition-colors cursor-pointer border border-transparent hover:border-slate-200">
-                                <div className="flex items-center gap-3">
-                                    <button className="text-slate-400 hover:text-slate-700">
-                                        {layer.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                                    </button>
-                                    <div className="flex items-center gap-2">
-                                        <div className={`w-2 h-2 rounded-full ${layer.color} ${!layer.visible && 'opacity-30'}`}></div>
-                                        <span className={`text-xs font-semibold ${layer.visible ? 'text-slate-700' : 'text-slate-400'}`}>
-                                            {layer.name}
-                                        </span>
-                                    </div>
-                                </div>
-                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${layer.visible ? 'bg-white border-slate-200 text-slate-500 shadow-sm' : 'bg-transparent border-transparent text-slate-300'}`}>
-                                    {layer.count}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="px-3 py-2 border-t border-slate-200 bg-slate-50 flex items-center justify-center">
-                        <button className="text-[11px] text-indigo-600 font-semibold hover:text-indigo-800 transition-colors flex items-center gap-1">
-                            Add Overlay Data <ChevronDown className="w-3 h-3" />
+                {/* Center — search */}
+                <div className="flex-1 max-w-md mx-4 pointer-events-auto">
+                    <div className="flex items-center h-9 bg-black/70 backdrop-blur border border-white/10 rounded-lg overflow-hidden">
+                        <Search className="w-4 h-4 text-white/40 ml-3 shrink-0" />
+                        <input
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            onFocus={() => setShowNavPanel(true)}
+                            placeholder="Search locations, entity IDs, flights..."
+                            className="flex-1 bg-transparent border-none px-3 text-sm focus:outline-none text-white placeholder-white/25 font-medium"
+                        />
+                        <button className="h-full w-9 border-l border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 transition-colors">
+                            <Filter className="w-3.5 h-3.5" />
                         </button>
                     </div>
                 </div>
+
+                {/* Right — quick stats */}
+                <div className="flex items-center gap-2 pointer-events-auto">
+                    <div className="flex items-center gap-3 px-3 py-1.5 bg-black/70 backdrop-blur border border-white/10 rounded-lg">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] text-white/40 uppercase font-semibold">Tracks</span>
+                            <span className="text-sm font-mono font-bold text-cyan-400">{totalTracks}</span>
+                        </div>
+                        <div className="w-px h-6 bg-white/10" />
+                        <div className="flex flex-col items-end">
+                            <span className="text-[9px] text-white/40 uppercase font-semibold">Layers</span>
+                            <span className="text-sm font-mono font-bold text-white">{activeLayerCount}</span>
+                        </div>
+                        <div className="w-px h-6 bg-white/10" />
+                        {isDemoMode ? (
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                <span className="text-[9px] text-amber-400 font-bold uppercase">DEMO</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                <span className="text-[9px] text-green-400 font-bold uppercase">LIVE</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
-            {/* 3. Floating Top Right: Map Tools */}
-            <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-                <button className="w-10 h-10 bg-white border border-slate-200 rounded shadow-md flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:border-indigo-300 transition-all">
-                    <Crosshair className="w-5 h-5" />
-                </button>
-                <div className="w-10 bg-white border border-slate-200 rounded shadow-md flex flex-col overflow-hidden">
-                    <button className="h-10 border-b border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-bold text-lg">+</button>
-                    <button className="h-10 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-bold text-lg">-</button>
+            {/* ── Location Nav Panel ─────────────────────────────────────── */}
+            {showNavPanel && (
+                <div className="absolute top-14 left-1/2 -translate-x-1/2 w-96 z-30">
+                    <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                        <div className="px-3 py-2 border-b border-white/5 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Navigation className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Landmarks</span>
+                            </div>
+                            <button onClick={() => setShowNavPanel(false)} className="text-white/30 hover:text-white">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="p-2 grid grid-cols-2 gap-1">
+                            {filteredLandmarks.map(L => (
+                                <button
+                                    key={L.label}
+                                    onClick={() => handleFlyTo(L)}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 text-left transition-colors group"
+                                >
+                                    <MapPin className="w-3.5 h-3.5 text-white/30 group-hover:text-cyan-400 flex-shrink-0" />
+                                    <span className="text-sm text-white/70 group-hover:text-white">{L.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-                <button className="w-10 h-10 bg-white border border-slate-200 rounded shadow-md flex items-center justify-center text-slate-600 hover:text-indigo-600 hover:border-indigo-300 transition-all">
+            )}
+
+            {/* ── Left Panel — Layers ────────────────────────────────────── */}
+            <div className="absolute left-4 top-16 bottom-24 z-20 flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+                {/* Layers Panel */}
+                <div className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl w-60">
+                    <button
+                        onClick={() => setShowLayerPanel(v => !v)}
+                        className="w-full px-4 py-3 flex items-center justify-between border-b border-white/5 hover:bg-white/5 transition-colors"
+                    >
+                        <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-cyan-400" />
+                            <span className="text-xs font-bold uppercase tracking-widest text-white">Data Layers</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${showLayerPanel ? '' : '-rotate-90'}`} />
+                    </button>
+
+                    {showLayerPanel && (
+                        <div className="p-2 flex flex-col gap-0.5">
+                            {LAYER_CONFIG.map(layer => {
+                                const Icon = layer.icon;
+                                const active = !!layers[layer.id];
+                                const count = layerCounts[layer.id] ?? 0;
+                                return (
+                                    <button
+                                        key={layer.id}
+                                        onClick={() => toggleLayer(layer.id)}
+                                        className={`flex items-center justify-between px-3 py-2 rounded-lg transition-all text-left group ${active ? 'bg-white/5 border border-white/10' : 'hover:bg-white/5 border border-transparent'}`}
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`w-2 h-2 rounded-full ${active ? layer.dot : 'bg-white/20'} flex-shrink-0`} />
+                                            <Icon className={`w-3.5 h-3.5 ${active ? layer.color : 'text-white/30'}`} />
+                                            <span className={`text-xs font-medium ${active ? 'text-white' : 'text-white/40'}`}>{layer.label}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {active && count > 0 && (
+                                                <span className={`text-[9px] font-mono ${layer.color} bg-white/5 px-1.5 py-0.5 rounded`}>{count}</span>
+                                            )}
+                                            {active ? <Eye className="w-3 h-3 text-white/40" /> : <EyeOff className="w-3 h-3 text-white/20" />}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+
+                            <div className="mt-1 pt-1 border-t border-white/5">
+                                <button className="w-full text-[11px] text-cyan-400 hover:text-cyan-300 py-1.5 flex items-center justify-center gap-1 transition-colors">
+                                    <span>Add Custom Layer</span>
+                                    <ChevronDown className="w-3 h-3" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Right Panel — Tools ────────────────────────────────────── */}
+            <div className="absolute right-4 top-16 z-20 flex flex-col gap-2" style={{ pointerEvents: 'auto' }}>
+                {/* Zoom */}
+                <div className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+                    <button className="w-10 h-10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 text-xl transition-colors">+</button>
+                    <div className="border-t border-white/10" />
+                    <button className="w-10 h-10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 text-xl transition-colors">−</button>
+                </div>
+
+                {/* Recenter */}
+                <button
+                    onClick={() => flyToRef.current?.(20, 0, 20000000)}
+                    className="w-10 h-10 bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex items-center justify-center text-white/60 hover:text-cyan-400 transition-all"
+                >
+                    <Globe className="w-4 h-4" />
+                </button>
+
+                {/* Crosshair */}
+                <button className="w-10 h-10 bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex items-center justify-center text-white/60 hover:text-cyan-400 transition-all">
+                    <Crosshair className="w-4 h-4" />
+                </button>
+
+                {/* Visual Modes */}
+                <button
+                    onClick={() => setShowShaderPanel(v => !v)}
+                    className={`w-10 h-10 backdrop-blur-xl border rounded-xl shadow-2xl flex items-center justify-center transition-all ${showShaderPanel ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400' : 'bg-black/70 border-white/10 text-white/60 hover:text-cyan-400'}`}
+                >
+                    <SlidersHorizontal className="w-4 h-4" />
+                </button>
+
+                {/* Shader Panel */}
+                {showShaderPanel && (
+                    <div className="absolute right-12 top-[116px] w-52 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                        <div className="px-3 py-2 border-b border-white/5">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Visual Mode</span>
+                        </div>
+                        <div className="p-2 flex flex-col gap-1">
+                            {VISUAL_MODES.map(m => {
+                                const Icon = m.icon;
+                                const active = visualMode === m.id;
+                                return (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => { setVisualMode(m.id); setShowShaderPanel(false); }}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-left ${active ? 'bg-cyan-500/15 border border-cyan-500/30' : 'hover:bg-white/5 border border-transparent'}`}
+                                    >
+                                        <Icon className={`w-4 h-4 ${active ? 'text-cyan-400' : 'text-white/40'}`} />
+                                        <div>
+                                            <p className={`text-xs font-semibold ${active ? 'text-cyan-400' : 'text-white/70'}`}>{m.label}</p>
+                                            <p className="text-[9px] text-white/30">{m.desc}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Maximize */}
+                <button className="w-10 h-10 bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex items-center justify-center text-white/60 hover:text-cyan-400 transition-all">
                     <Maximize2 className="w-4 h-4" />
                 </button>
             </div>
 
-            {/* 4. Floating Bottom: Time-Travel Timeline Slider */}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-11/12 max-w-4xl z-10">
-                <div className="bg-white/95 backdrop-blur border border-slate-200 shadow-lg rounded-xl p-4 flex flex-col gap-3">
+            {/* ── Bottom — Timeline ──────────────────────────────────────── */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-11/12 max-w-4xl z-20" style={{ pointerEvents: 'auto' }}>
+                <div className="bg-black/70 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl p-3 flex flex-col gap-2">
+                    {/* Controls Row */}
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1 bg-slate-100 rounded p-1 border border-slate-200">
-                            <button className="w-7 h-7 rounded hover:bg-white hover:shadow-sm flex items-center justify-center text-slate-600 transition-all">
+                        <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+                            <button className="w-7 h-7 rounded-md hover:bg-white/10 flex items-center justify-center text-white/60 transition-all">
                                 <Rewind className="w-3.5 h-3.5" />
                             </button>
                             <button
-                                onClick={() => setIsPlaying(!isPlaying)}
-                                className="w-8 h-8 rounded bg-white shadow-sm border border-slate-300 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 transition-all"
+                                onClick={() => setIsPlaying(p => !p)}
+                                className="w-8 h-8 rounded-md bg-cyan-500 flex items-center justify-center text-black hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20"
                             >
-                                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                                {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
                             </button>
-                            <button className="w-7 h-7 rounded hover:bg-white hover:shadow-sm flex items-center justify-center text-slate-600 transition-all">
+                            <button className="w-7 h-7 rounded-md hover:bg-white/10 flex items-center justify-center text-white/60 transition-all">
                                 <FastForward className="w-3.5 h-3.5" />
                             </button>
                         </div>
 
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded border border-slate-200">
-                            <Clock className="w-4 h-4 text-indigo-600" />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1 border-l border-slate-300">Evaluating At</span>
-                            <span className="text-sm font-mono font-bold text-slate-800 tracking-tight">{currentDate}</span>
+                        {/* Visual mode badge */}
+                        <div className="flex items-center gap-2">
+                            {visualMode !== 'normal' && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">{visualMode}</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
+                                <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest border-r border-white/10 pr-2">Eval Time</span>
+                                <span className="text-xs font-mono font-bold text-white">{currentDate}</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="px-2 pt-2 pb-1 relative">
-                        <div className="flex justify-between text-[10px] font-mono text-slate-400 mb-2 px-1">
-                            <span>Q1 2025</span>
-                            <span>Q3 2025</span>
-                            <span>Q1 2026</span>
-                            <span className="text-indigo-600 font-bold">TODAY</span>
+                    {/* Timeline Scrubber */}
+                    <div className="relative px-1">
+                        <div className="flex justify-between text-[9px] font-mono text-white/20 mb-1.5 px-0.5">
+                            <span>Q1 2025</span><span>Q2 2025</span><span>Q3 2025</span><span>Q4 2025</span><span className="text-cyan-500 font-bold">NOW</span>
                         </div>
-                        <div className="h-1.5 w-full bg-slate-200 rounded-full cursor-pointer relative">
-                            <div className="absolute top-0 left-0 h-full w-[85%] bg-indigo-500 rounded-full"></div>
-                            <div className="absolute top-1/2 left-[85%] -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-indigo-600 rounded-full shadow cursor-grab hover:scale-110 transition-transform"></div>
+                        <div className="h-1 w-full bg-white/10 rounded-full cursor-pointer relative group">
+                            <div className="absolute top-0 left-0 h-full w-[95%] bg-gradient-to-r from-cyan-600/60 to-cyan-400/80 rounded-full" />
+                            <div className="absolute top-1/2 left-[95%] -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white shadow-lg shadow-cyan-500/30 rounded-full cursor-grab group-hover:scale-125 transition-transform border-2 border-cyan-400" />
                         </div>
                     </div>
                 </div>
             </div>
 
+            {/* ── Click-away for nav panel ───────────────────────────────── */}
+            {showNavPanel && (
+                <div className="absolute inset-0 z-10" onClick={() => setShowNavPanel(false)} />
+            )}
         </div>
     );
 }

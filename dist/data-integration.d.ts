@@ -9,8 +9,13 @@ export declare function upsertEntityInstance(entityType: {
     id: string;
     version: number;
     name: string;
-}, logicalId: string, attrData: Record<string, unknown>, prisma: PrismaClient): Promise<{
+}, logicalId: string, attrData: Record<string, unknown>, prisma: PrismaClient, options?: {
+    sourceSystem: string;
+    sourceRecordId: string;
+    confidence?: number;
+}): Promise<{
     success: boolean;
+    instanceId?: string;
     error?: string;
 }>;
 /**

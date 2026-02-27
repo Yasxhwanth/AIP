@@ -1,0 +1,1 @@
+{"version":3,"file":"provenance-service.d.ts","sourceRoot":"","sources":["../src/provenance-service.ts"],"names":[],"mappings":"AAEA;;;GAGG;AACH,qBAAa,iBAAiB;IAC1B;;OAEG;WACU,aAAa,CACtB,gBAAgB,EAAE,MAAM,EACxB,YAAY,EAAE,MAAM,EACpB,cAAc,EAAE,MAAM,EACtB,eAAe,EAAE,IAAI,EACrB,cAAc,EAAE,MAAM,EAAE,GAAG,IAAI,EAC/B,MAAM,EAAE,GAAG;CA4BlB"}

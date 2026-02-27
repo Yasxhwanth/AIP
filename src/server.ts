@@ -5,6 +5,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Prisma } from './generated/prisma/client';
 import { evaluatePolicies } from './policy-engine';
 import { executeJob, startScheduler } from './data-integration';
+import { SchemaInferenceService } from './schema-inference-service';
+import { RelationshipDerivationService } from './relationship-derivation-service';
 import { evaluateComputedMetrics } from './computed-metrics';
 import { computeRollups, computeAllRecentRollups, startRollupScheduler } from './rollup-engine';
 import { runInference, runInferenceByModel, runAllModelsForEntity } from './inference-engine';
@@ -246,6 +248,96 @@ app.get('/entity-types', async (_req, res) => {
   }
 });
 
+// ── Integration & Inference ───────────────────────────────────────
+
+app.post('/api/v1/integration/infer-schema', async (req, res) => {
+  try {
+    const { sample } = req.body;
+    if (!sample) return res.status(400).json({ error: 'sample JSON is required' });
+    const inferred = SchemaInferenceService.inferAttributes(sample);
+    return res.json({ attributes: inferred });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to infer schema', details: String(error) });
+  }
+});
+
+app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
+  try {
+    const { inferredAttributes, entityTypeId } = req.body;
+    if (!inferredAttributes || !entityTypeId) {
+      return res.status(400).json({ error: 'inferredAttributes and entityTypeId are required' });
+    }
+
+    const entityType = await prisma.entityType.findUnique({
+      where: { id: entityTypeId },
+      include: { attributes: true },
+    });
+
+    if (!entityType) return res.status(404).json({ error: 'entity type not found' });
+
+    const suggestions = SchemaInferenceService.suggestMappings(
+      inferredAttributes,
+      entityType.attributes
+    );
+
+    return res.json({ suggestions });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to suggest mappings', details: String(error) });
+  }
+});
+
+app.post('/api/v1/pipelines', async (req, res) => {
+  try {
+    const { name, description, nodes, edges, projectId } = req.body;
+    const pipeline = await prisma.pipeline.create({
+      data: {
+        name,
+        description,
+        nodes: nodes as any,
+        edges: edges as any,
+        projectId: projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID
+      }
+    });
+    return res.status(201).json(pipeline);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/v1/pipelines', async (req, res) => {
+  try {
+    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    const pipelines = await prisma.pipeline.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(pipelines);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/v1/ontology/derive-relationships', async (req, res) => {
+  try {
+    const { sourceEntityTypeId, targetEntityTypeId, relationshipDefId, maxDistanceKm } = req.body;
+    if (!sourceEntityTypeId || !targetEntityTypeId || !relationshipDefId) {
+      return res.status(400).json({ error: 'sourceEntityTypeId, targetEntityTypeId, and relationshipDefId are required' });
+    }
+
+    const count = await RelationshipDerivationService.deriveProximityLinks(
+      sourceEntityTypeId,
+      targetEntityTypeId,
+      relationshipDefId,
+      maxDistanceKm || 5.0,
+      prisma
+    );
+
+    return res.json({ success: true, derivedLinksCount: count });
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to derive relationships', details: String(error) });
+  }
+});
+
 app.get('/entity-types/:id', async (req, res) => {
   try {
     const entityType = await prisma.entityType.findUnique({
@@ -362,6 +454,29 @@ app.put('/entity-types/:id', async (req, res) => {
 });
 
 // ── Entity Instances ─────────────────────────────────────────────
+
+app.get('/api/v1/ontology/instances/current', async (req, res) => {
+  try {
+    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    const whereClause: any = {};
+    if (projectId) {
+      whereClause.entityType = {
+        projectId: String(projectId)
+      };
+    }
+    const instances = await prisma.currentEntityState.findMany({
+      where: whereClause,
+      include: {
+        entityType: {
+          select: { name: true }
+        }
+      }
+    });
+    return res.json(instances);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
 app.post('/entity-types/:id/instances', async (req, res) => {
   try {
@@ -621,6 +736,18 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
     return res.status(201).json({ success: true, count: results.createdInstances.length });
   } catch (error) {
     return res.status(500).json({ error: 'failed to execute bulk ingestion', details: String(error) });
+  }
+});
+
+app.get('/api/v1/ontology/instances/:id/provenance', async (req, res) => {
+  try {
+    const provenance = await prisma.provenanceRecord.findMany({
+      where: { entityInstanceId: req.params.id },
+      orderBy: { ingestedAt: 'desc' }
+    });
+    return res.json(provenance);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to fetch provenance', details: String(error) });
   }
 });
 

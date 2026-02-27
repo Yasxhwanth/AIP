@@ -26,11 +26,14 @@ export declare const JsonNull: import("@prisma/client-runtime-utils").JsonNullCl
  */
 export declare const AnyNull: import("@prisma/client-runtime-utils").AnyNullClass;
 export declare const ModelName: {
+    readonly Project: "Project";
     readonly EntityType: "EntityType";
     readonly AttributeDefinition: "AttributeDefinition";
     readonly RelationshipDefinition: "RelationshipDefinition";
     readonly RelationshipInstance: "RelationshipInstance";
     readonly EntityInstance: "EntityInstance";
+    readonly EntityAlias: "EntityAlias";
+    readonly ProvenanceRecord: "ProvenanceRecord";
     readonly DomainEvent: "DomainEvent";
     readonly PolicyDefinition: "PolicyDefinition";
     readonly Alert: "Alert";
@@ -38,6 +41,7 @@ export declare const ModelName: {
     readonly CurrentGraph: "CurrentGraph";
     readonly TimeseriesMetric: "TimeseriesMetric";
     readonly DataSource: "DataSource";
+    readonly Pipeline: "Pipeline";
     readonly IntegrationJob: "IntegrationJob";
     readonly JobExecution: "JobExecution";
     readonly ComputedMetricDefinition: "ComputedMetricDefinition";
@@ -50,6 +54,8 @@ export declare const ModelName: {
     readonly ExecutionPlan: "ExecutionPlan";
     readonly DecisionLog: "DecisionLog";
     readonly ApiKey: "ApiKey";
+    readonly Dashboard: "Dashboard";
+    readonly DashboardWidget: "DashboardWidget";
 };
 export type ModelName = (typeof ModelName)[keyof typeof ModelName];
 export declare const TransactionIsolationLevel: {
@@ -59,11 +65,19 @@ export declare const TransactionIsolationLevel: {
     readonly Serializable: "Serializable";
 };
 export type TransactionIsolationLevel = (typeof TransactionIsolationLevel)[keyof typeof TransactionIsolationLevel];
+export declare const ProjectScalarFieldEnum: {
+    readonly id: "id";
+    readonly name: "name";
+    readonly description: "description";
+    readonly createdAt: "createdAt";
+};
+export type ProjectScalarFieldEnum = (typeof ProjectScalarFieldEnum)[keyof typeof ProjectScalarFieldEnum];
 export declare const EntityTypeScalarFieldEnum: {
     readonly id: "id";
     readonly name: "name";
     readonly version: "version";
     readonly createdAt: "createdAt";
+    readonly projectId: "projectId";
 };
 export type EntityTypeScalarFieldEnum = (typeof EntityTypeScalarFieldEnum)[keyof typeof EntityTypeScalarFieldEnum];
 export declare const AttributeDefinitionScalarFieldEnum: {
@@ -100,11 +114,33 @@ export declare const EntityInstanceScalarFieldEnum: {
     readonly entityTypeId: "entityTypeId";
     readonly entityVersion: "entityVersion";
     readonly data: "data";
+    readonly confidenceScore: "confidenceScore";
+    readonly reviewStatus: "reviewStatus";
     readonly validFrom: "validFrom";
     readonly validTo: "validTo";
     readonly transactionTime: "transactionTime";
 };
 export type EntityInstanceScalarFieldEnum = (typeof EntityInstanceScalarFieldEnum)[keyof typeof EntityInstanceScalarFieldEnum];
+export declare const EntityAliasScalarFieldEnum: {
+    readonly id: "id";
+    readonly externalId: "externalId";
+    readonly sourceSystem: "sourceSystem";
+    readonly targetLogicalId: "targetLogicalId";
+    readonly confidence: "confidence";
+    readonly isPrimary: "isPrimary";
+    readonly createdAt: "createdAt";
+};
+export type EntityAliasScalarFieldEnum = (typeof EntityAliasScalarFieldEnum)[keyof typeof EntityAliasScalarFieldEnum];
+export declare const ProvenanceRecordScalarFieldEnum: {
+    readonly id: "id";
+    readonly entityInstanceId: "entityInstanceId";
+    readonly attributeName: "attributeName";
+    readonly sourceSystem: "sourceSystem";
+    readonly sourceRecordId: "sourceRecordId";
+    readonly sourceTimestamp: "sourceTimestamp";
+    readonly ingestedAt: "ingestedAt";
+};
+export type ProvenanceRecordScalarFieldEnum = (typeof ProvenanceRecordScalarFieldEnum)[keyof typeof ProvenanceRecordScalarFieldEnum];
 export declare const DomainEventScalarFieldEnum: {
     readonly id: "id";
     readonly idempotencyKey: "idempotencyKey";
@@ -176,8 +212,20 @@ export declare const DataSourceScalarFieldEnum: {
     readonly connectionConfig: "connectionConfig";
     readonly enabled: "enabled";
     readonly createdAt: "createdAt";
+    readonly projectId: "projectId";
 };
 export type DataSourceScalarFieldEnum = (typeof DataSourceScalarFieldEnum)[keyof typeof DataSourceScalarFieldEnum];
+export declare const PipelineScalarFieldEnum: {
+    readonly id: "id";
+    readonly name: "name";
+    readonly description: "description";
+    readonly nodes: "nodes";
+    readonly edges: "edges";
+    readonly enabled: "enabled";
+    readonly createdAt: "createdAt";
+    readonly projectId: "projectId";
+};
+export type PipelineScalarFieldEnum = (typeof PipelineScalarFieldEnum)[keyof typeof PipelineScalarFieldEnum];
 export declare const IntegrationJobScalarFieldEnum: {
     readonly id: "id";
     readonly name: "name";
@@ -188,6 +236,7 @@ export declare const IntegrationJobScalarFieldEnum: {
     readonly schedule: "schedule";
     readonly enabled: "enabled";
     readonly createdAt: "createdAt";
+    readonly projectId: "projectId";
 };
 export type IntegrationJobScalarFieldEnum = (typeof IntegrationJobScalarFieldEnum)[keyof typeof IntegrationJobScalarFieldEnum];
 export declare const JobExecutionScalarFieldEnum: {
@@ -232,6 +281,7 @@ export declare const ModelDefinitionScalarFieldEnum: {
     readonly inputFields: "inputFields";
     readonly outputField: "outputField";
     readonly createdAt: "createdAt";
+    readonly projectId: "projectId";
 };
 export type ModelDefinitionScalarFieldEnum = (typeof ModelDefinitionScalarFieldEnum)[keyof typeof ModelDefinitionScalarFieldEnum];
 export declare const ModelVersionScalarFieldEnum: {
@@ -266,6 +316,7 @@ export declare const DecisionRuleScalarFieldEnum: {
     readonly confidenceThreshold: "confidenceThreshold";
     readonly enabled: "enabled";
     readonly createdAt: "createdAt";
+    readonly projectId: "projectId";
 };
 export type DecisionRuleScalarFieldEnum = (typeof DecisionRuleScalarFieldEnum)[keyof typeof DecisionRuleScalarFieldEnum];
 export declare const ActionDefinitionScalarFieldEnum: {
@@ -308,6 +359,25 @@ export declare const ApiKeyScalarFieldEnum: {
     readonly createdAt: "createdAt";
 };
 export type ApiKeyScalarFieldEnum = (typeof ApiKeyScalarFieldEnum)[keyof typeof ApiKeyScalarFieldEnum];
+export declare const DashboardScalarFieldEnum: {
+    readonly id: "id";
+    readonly projectId: "projectId";
+    readonly name: "name";
+    readonly createdAt: "createdAt";
+    readonly updatedAt: "updatedAt";
+};
+export type DashboardScalarFieldEnum = (typeof DashboardScalarFieldEnum)[keyof typeof DashboardScalarFieldEnum];
+export declare const DashboardWidgetScalarFieldEnum: {
+    readonly id: "id";
+    readonly dashboardId: "dashboardId";
+    readonly type: "type";
+    readonly configData: "configData";
+    readonly x: "x";
+    readonly y: "y";
+    readonly w: "w";
+    readonly h: "h";
+};
+export type DashboardWidgetScalarFieldEnum = (typeof DashboardWidgetScalarFieldEnum)[keyof typeof DashboardWidgetScalarFieldEnum];
 export declare const SortOrder: {
     readonly asc: "asc";
     readonly desc: "desc";
@@ -327,15 +397,15 @@ export declare const QueryMode: {
     readonly insensitive: "insensitive";
 };
 export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode];
+export declare const NullsOrder: {
+    readonly first: "first";
+    readonly last: "last";
+};
+export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder];
 export declare const JsonNullValueFilter: {
     readonly DbNull: import("@prisma/client-runtime-utils").DbNullClass;
     readonly JsonNull: import("@prisma/client-runtime-utils").JsonNullClass;
     readonly AnyNull: import("@prisma/client-runtime-utils").AnyNullClass;
 };
 export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter];
-export declare const NullsOrder: {
-    readonly first: "first";
-    readonly last: "last";
-};
-export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder];
 //# sourceMappingURL=prismaNamespaceBrowser.d.ts.map
