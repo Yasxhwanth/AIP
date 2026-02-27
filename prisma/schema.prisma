@@ -127,13 +127,55 @@ model EntityAlias {
   sourceSystem    String // e.g. "OPENSKY", "ADSB_EXCHANGE"
   targetLogicalId String // The platform's logicalId this maps to
 
-  confidence Float @default(1.0)
+  confidence Float   @default(1.0)
   isPrimary  Boolean @default(false)
 
   createdAt DateTime @default(now())
 
   @@unique([sourceSystem, externalId])
   @@index([targetLogicalId])
+}
+
+// ── Entity Resolution: Fuzzy Match Candidates ──────────────────────
+
+model MatchCandidate {
+  id             String   @id @default(uuid())
+  logicalIdA     String   // Candidate entity A (canonical logicalId)
+  logicalIdB     String   // Candidate entity B
+  entityTypeId   String   // Both candidates must be same entity type
+  scoreOverall   Float    // 0.0 – 1.0 composite similarity score
+  scoreBreakdown Json     // { "name": 0.9, "address": 0.7, ... }
+  matchReasons   Json     // ["same_name_fuzzy", "same_lat_lon", ...]
+  status         String   @default("PENDING") // PENDING | MERGED | REJECTED
+  reviewedBy     String?  // apiKeyName of the reviewer
+  reviewedAt     DateTime?
+  mergedIntoId   String?  // logicalId this was merged into (when MERGED)
+  sourceJobId    String?  // which integration job triggered this
+  createdAt      DateTime @default(now())
+
+  @@unique([logicalIdA, logicalIdB, entityTypeId])
+  @@index([entityTypeId, status])
+  @@index([logicalIdA])
+  @@index([logicalIdB])
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actor        String   // apiKeyName or "system"
+  actorRole    String   // role at time of action
+  action       String   // e.g. "CREATE_ENTITY", "MERGE_CANDIDATE", "EXECUTE_DECISION"
+  resourceType String   // e.g. "EntityType", "MatchCandidate", "DecisionLog"
+  resourceId   String?  // id of the affected resource
+  before       Json?    // state before (for mutating operations)
+  after        Json?    // state after
+  metadata     Json?    // request metadata (IP, correlationId, etc)
+  occurredAt   DateTime @default(now())
+
+  @@index([actor, occurredAt(sort: Desc)])
+  @@index([resourceType, resourceId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
 }
 
 model ProvenanceRecord {

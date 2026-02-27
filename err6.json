@@ -1,4 +1,0 @@
-{
-  "error": "failed to create entity type",
-  "details": "PrismaClientKnownRequestError: \nInvalid `prisma.entityType.create()` invocation in\nC:\\Users\\YASHWANTH\\Projects\\AIP\\src\\server.ts:50:45\n\n  47 }\n  48 \n  49 try {\n→ 50   const created = await prisma.entityType.create(\n"
-}

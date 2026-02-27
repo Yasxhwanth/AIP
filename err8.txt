@@ -1,7 +1,0 @@
-{
-  "code": "ECONNREFUSED",
-  "meta": {
-    "modelName": "EntityType"
-  },
-  "name": "PrismaClientKnownRequestError"
-}

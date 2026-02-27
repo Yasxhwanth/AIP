@@ -84,17 +84,42 @@ export default function IntegrationsPage() {
         if (!previewData.length) return;
         setInferring(true);
         try {
-            const suggestions = await ApiClient.post<any[]>('/api/v1/integration/suggest-mappings', {
-                sampleData: previewData,
-                targetEntityType: entityName
-            });
+            // Step 1: infer schema attributes from the preview data sample
+            const sample = previewData[0];
+            const inferResult = await ApiClient.post<{ attributes: Array<{ name: string; dataType: string }> }>(
+                '/api/v1/integration/infer-schema',
+                { sample }
+            );
 
-            const newMapping: Record<string, string> = { ...mapping };
-            suggestions.forEach((s: any) => {
-                if (s.suggestedAttribute) {
-                    newMapping[s.sourceField] = s.suggestedAttribute;
+            // Step 2: pass inferred attributes + target entity name to get mapping suggestions
+            const suggestResult = await ApiClient.post<{ suggestions: Record<string, string>; inferredAttributes?: any[] }>(
+                '/api/v1/integration/suggest-mappings',
+                {
+                    inferredAttributes: inferResult.attributes,
+                    sampleData: previewData,
+                    targetEntityType: entityName,
                 }
-            });
+            );
+
+            // Apply suggestions as column type selections
+            const newMapping: Record<string, string> = { ...mapping };
+            const suggestions = suggestResult.suggestions ?? {};
+            // Map each original column name to suggested ontology type
+            for (const col of columns) {
+                const colClean = col.replace(/[^a-zA-Z0-9]/g, '');
+                if (suggestions[colClean]) {
+                    newMapping[col] = suggestions[colClean];
+                } else if (suggestions[col]) {
+                    newMapping[col] = suggestions[col];
+                }
+            }
+            // Also apply inferred data types as fallback
+            for (const attr of inferResult.attributes) {
+                const origCol = columns.find(c => c.replace(/[^a-zA-Z0-9]/g, '') === attr.name || c === attr.name);
+                if (origCol && !newMapping[origCol]) {
+                    newMapping[origCol] = attr.dataType;
+                }
+            }
             setMapping(newMapping);
         } catch (err) {
             console.error("Inference failed", err);

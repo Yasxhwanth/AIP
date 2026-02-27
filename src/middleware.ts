@@ -65,7 +65,8 @@ export function requestLogger() {
 // ── API Key Auth ─────────────────────────────────────────────────
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'c3-aip-dev-secret-change-in-production';
-const AUTH_REQUIRED = false; // Forced false for local testing
+// Auth: set AUTH_REQUIRED=true in production via environment variable
+const AUTH_REQUIRED = process.env.AUTH_REQUIRED === 'true';
 
 export function hashApiKey(rawKey: string): string {
     return createHash('sha256').update(rawKey).digest('hex');

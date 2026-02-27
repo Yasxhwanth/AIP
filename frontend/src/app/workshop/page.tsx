@@ -1,275 +1,199 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
-import { Layout } from "react-grid-layout";
-import 'react-grid-layout/css/styles.css';
-import 'react-resizable/css/styles.css';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Search, X, ExternalLink, Clock, Database, Loader2 } from "lucide-react";
+import { ApiClient } from "@/lib/apiClient";
 import { useWorkspaceStore } from "@/store/workspace";
-import {
-    Network,
-    Map as MapIcon,
-    Activity,
-    Database,
-    MessageSquare,
-    Plus,
-    Save,
-    Trash2,
-    ChevronRight,
-    MonitorPlay
-} from "lucide-react";
 
-// Mock Widget Components (Would be extracted in real app)
-const TelemetryWidget = () => (
-    <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-        <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-2"><Activity className="w-3 h-3 text-blue-500" /> Pump-001 Pressure</span>
-        </div>
-        <div className="flex-1 p-4 bg-dots flex items-center justify-center text-slate-400">
-            [Telemetry Chart UI]
-        </div>
-    </div>
-);
+interface SearchResult {
+    logicalId: string;
+    entityTypeId: string;
+    entityTypeName: string;
+    updatedAt: string;
+    data: Record<string, unknown>;
+}
 
-const OntologyWidget = () => (
-    <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-        <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-2"><Network className="w-3 h-3 text-purple-500" /> Ontology Graph</span>
-        </div>
-        <div className="flex-1 p-4 flex items-center justify-center text-slate-400">
-            [React Flow Graph UI]
-        </div>
-    </div>
-);
-
-const MapWidget = () => (
-    <div className="w-full h-full flex flex-col bg-slate-800 border border-slate-700 rounded-lg overflow-hidden shadow-sm">
-        <div className="px-3 py-2 bg-slate-900 border-b border-slate-700 flex items-center justify-between text-slate-300">
-            <span className="text-xs font-bold flex items-center gap-2"><MapIcon className="w-3 h-3 text-emerald-500" /> GeoExplorer</span>
-        </div>
-        <div className="flex-1 bg-[url('https://maps.wikimedia.org/osm-intl/12/1209/1539.png')] bg-cover bg-center opacity-70">
-        </div>
-    </div>
-);
-
-const CopilotWidget = () => (
-    <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-        <div className="px-3 py-2 bg-blue-600 text-white flex items-center justify-between">
-            <span className="text-xs font-bold flex items-center gap-2"><MessageSquare className="w-3 h-3" /> AIP Assist</span>
-        </div>
-        <div className="flex-1 p-4 flex flex-col justify-end text-sm">
-            <div className="bg-blue-50 text-blue-800 p-2 rounded-lg mb-2 self-start max-w-[80%]">How can I help you analyze this workspace?</div>
-            <div className="bg-slate-100 text-slate-600 p-2 rounded-lg mt-auto flex items-center justify-between cursor-text">
-                Ask a question...
-            </div>
-        </div>
-    </div>
-);
-
-const KernalWidget = () => (
-    <div className="w-full h-full flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden shadow-[0_0_15px_rgba(249,115,22,0.1)]">
-        <div className="px-3 py-2 bg-gradient-to-r from-orange-500 to-orange-400 text-white flex items-center justify-between">
-            <span className="text-xs font-bold flex items-center gap-2"><Database className="w-3 h-3" /> Kernal Data Ingest</span>
-        </div>
-        <div className="flex-1 p-4 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 m-2 rounded bg-slate-50 cursor-pointer hover:bg-orange-50 hover:border-orange-300 transition-colors">
-            <Database className="w-8 h-8 text-slate-300 mb-2" />
-            <p className="text-xs font-bold text-slate-500">Drop CSV/JSON to build Nodes</p>
-        </div>
-    </div>
-);
-
-
-const ResponsiveGridLayout: any = dynamic(
-    async () => {
-        const mod: any = await import("react-grid-layout");
-
-        // ReactGridLayout >=1.5 exports components directly, sometimes wrapped under default
-        const Responsive = mod.Responsive || mod.default?.Responsive;
-        const WidthProvider = mod.WidthProvider || mod.default?.WidthProvider;
-
-        if (!Responsive && !WidthProvider) {
-            // Fallback: no grid available, render a passthrough container
-            return (props: any) => <div {...props} />;
-        }
-
-        if (Responsive && typeof WidthProvider !== "function") {
-            // Library may already export a responsive layout component, no HOC needed
-            return Responsive;
-        }
-
-        if (Responsive && typeof WidthProvider === "function") {
-            return WidthProvider(Responsive);
-        }
-
-        // Last resort fallback
-        return (props: any) => <div {...props} />;
-    },
-    { ssr: false }
-);
-
-export default function WorkshopCanvas() {
-    const { activeProjectId, activeProjectName } = useWorkspaceStore();
-
-    // Widget Type Registry
-    const WIDGET_TYPES = [
-        { type: 'telemetry', name: 'Telemetry Chart', icon: <Activity className="w-4 h-4" />, defaultW: 4, defaultH: 3 },
-        { type: 'ontology', name: 'Graph Explorer', icon: <Network className="w-4 h-4" />, defaultW: 6, defaultH: 4 },
-        { type: 'map', name: '3D Geo Map', icon: <MapIcon className="w-4 h-4" />, defaultW: 6, defaultH: 4 },
-        { type: 'copilot', name: 'AIP Agent Chat', icon: <MessageSquare className="w-4 h-4" />, defaultW: 3, defaultH: 4 },
-        { type: 'kernal', name: 'Data Pipeline (Kernal)', icon: <Database className="w-4 h-4" />, defaultW: 4, defaultH: 3 }
-    ];
-
-    const [layout, setLayout] = useState<any[]>([]);
-    const [widgets, setWidgets] = useState<any[]>([]);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-    // Load saved layout for workspace
-    useEffect(() => {
-        if (!activeProjectId) return;
-        fetch(`http://localhost:3001/dashboards?projectId=${activeProjectId}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.length > 0) {
-                    // we'd parse this in a fully implemented backend, for demo we start fresh or load
-                }
-            })
-            .catch(console.error);
-    }, [activeProjectId]);
-
-    const addWidget = (widgetType: string) => {
-        const config = WIDGET_TYPES.find(w => w.type === widgetType);
-        if (!config) return;
-
-        const newId = `${widgetType}-${Date.now()}`;
-        const newItem: any = {
-            i: newId,
-            x: (layout.length * 2) % 12,
-            y: Infinity, // puts it at the bottom
-            w: config.defaultW,
-            h: config.defaultH,
-        };
-
-        setWidgets([...widgets, { i: newId, type: widgetType }]);
-        setLayout([...layout, newItem]);
-    };
-
-    const removeWidget = (idToRemove: string) => {
-        setLayout(layout.filter(l => l.i !== idToRemove));
-        setWidgets(widgets.filter(w => w.i !== idToRemove));
-    };
-
-    const onLayoutChange = (newLayout: any[]) => {
-        setLayout(newLayout);
-    };
-
-    const saveDashboard = async () => {
-        // Example Save Payload to backend
-        console.log("Saving layout:", layout, widgets);
-        alert("Dashboard Layout Saved parameters logged to console.");
-    };
-
-    const renderWidgetContent = (type: string) => {
-        switch (type) {
-            case 'telemetry': return <TelemetryWidget />;
-            case 'ontology': return <OntologyWidget />;
-            case 'map': return <MapWidget />;
-            case 'copilot': return <CopilotWidget />;
-            case 'kernal': return <KernalWidget />;
-            default: return <div>Unknown Widget</div>;
-        }
-    };
-
+function highlight(text: string, query: string) {
+    if (!query || !text) return text;
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return text;
     return (
-        <div className="flex h-full w-full bg-[#e8ebee]">
+        <>
+            {text.slice(0, idx)}
+            <mark className="bg-cyan-400/20 text-cyan-300 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+            {text.slice(idx + query.length)}
+        </>
+    );
+}
 
-            {/* Workshop Canvas Area */}
-            <div className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Header Bar */}
-                <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10 shrink-0">
-                    <div className="flex items-center gap-3">
-                        <MonitorPlay className="w-5 h-5 text-blue-600" />
-                        <h1 className="font-bold text-slate-800 text-lg">Workshop Canvas</h1>
-                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-500 ml-2 border border-slate-200">
-                            {activeProjectName}
+function ResultCard({ result, query, onSelect }: { result: SearchResult; query: string; onSelect: () => void }) {
+    const previewEntries = Object.entries(result.data).slice(0, 4);
+    return (
+        <div
+            onClick={onSelect}
+            className="group cursor-pointer rounded-xl border px-4 py-3 transition-all hover:border-cyan-500/30"
+            style={{ background: "rgba(255,255,255,0.025)", borderColor: "rgba(255,255,255,0.07)" }}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/20">
+                            {result.entityTypeName}
+                        </span>
+                        <span className="font-mono text-sm text-cyan-300 font-bold truncate">
+                            {highlight(result.logicalId, query)}
                         </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={saveDashboard}
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm font-semibold flex items-center gap-2 transition-colors"
-                        >
-                            <Save className="w-4 h-4" /> Save App
-                        </button>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                        {previewEntries.map(([k, v]) => (
+                            <div key={k} className="flex items-center gap-1.5 text-xs">
+                                <span className="text-slate-500 shrink-0">{k}:</span>
+                                <span className="text-slate-300 truncate">{highlight(String(v ?? ""), query)}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                        <Clock className="w-3 h-3" />
+                        {new Date(result.updatedAt).toLocaleDateString()}
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                </div>
+            </div>
+        </div>
+    );
+}
 
-                {/* The Grid Canvas */}
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                    {layout.length === 0 && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-50">
-                            <MonitorPlay className="w-16 h-16 text-slate-400 mb-4" />
-                            <h2 className="text-xl font-bold text-slate-500">Empty Canvas</h2>
-                            <p className="text-slate-400">Drag widgets from the library panel to build your application.</p>
-                        </div>
+function DetailPanel({ result, query, onClose }: { result: SearchResult; query: string; onClose: () => void }) {
+    return (
+        <div className="w-96 shrink-0 border-l flex flex-col" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b shrink-0" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">{result.entityTypeName}</p>
+                    <p className="font-mono text-sm text-cyan-300 font-bold truncate">{result.logicalId}</p>
+                </div>
+                <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-3">All Attributes</p>
+                {Object.entries(result.data).map(([k, v]) => (
+                    <div key={k} className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.03)" }}>
+                        <div className="text-slate-400 text-[10px] font-semibold mb-0.5">{k}</div>
+                        <div className="text-slate-200 font-mono break-all">{String(v ?? "—")}</div>
+                    </div>
+                ))}
+                <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.03)" }}>
+                    <div className="text-slate-400 text-[10px] font-semibold mb-0.5">Last Updated</div>
+                    <div className="text-slate-200 font-mono">{new Date(result.updatedAt).toLocaleString()}</div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function WorkshopPage() {
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<SearchResult[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [selected, setSelected] = useState<SearchResult | null>(null);
+    const [searched, setSearched] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const doSearch = useCallback(async (q: string) => {
+        if (q.length < 2) { setResults([]); setSearched(false); return; }
+        setLoading(true);
+        setSearched(true);
+        try {
+            const data = await ApiClient.get<SearchResult[]>("/api/v1/search", { q });
+            setResults(data);
+        } catch (e) {
+            setResults([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => doSearch(query), 300);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [query, doSearch]);
+
+    return (
+        <div className="h-full w-full flex flex-col" style={{ background: "linear-gradient(180deg,#070b14 0%,#050910 100%)" }}>
+            {/* Search bar header */}
+            <div className="shrink-0 px-8 pt-10 pb-6">
+                <div className="max-w-3xl mx-auto">
+                    <h1 className="text-2xl font-bold text-white mb-1 flex items-center gap-3">
+                        <Search className="w-6 h-6 text-cyan-400" /> Workshop
+                    </h1>
+                    <p className="text-slate-400 text-sm mb-6">Search across all entity instances in this workspace.</p>
+                    <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                        <input
+                            ref={inputRef}
+                            autoFocus
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            placeholder="Search by logicalId, name, or any attribute value…"
+                            className="w-full pl-12 pr-12 py-4 rounded-2xl text-white placeholder-slate-500 outline-none focus:ring-2 focus:ring-cyan-500/40 transition-all text-sm"
+                            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        />
+                        {query && (
+                            <button
+                                onClick={() => { setQuery(""); setResults([]); setSearched(false); inputRef.current?.focus(); }}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    {results.length > 0 && (
+                        <p className="text-xs text-slate-500 mt-2">{results.length} result{results.length !== 1 ? "s" : ""} found</p>
                     )}
-                    <ResponsiveGridLayout
-                        className="layout min-h-[500px]"
-                        layouts={{ lg: layout }}
-                        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-                        cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-                        rowHeight={60}
-                        onLayoutChange={onLayoutChange}
-                        draggableHandle=".drag-handle"
-                        isDroppable={true}
-                        margin={[16, 16]}
-                    >
-                        {layout.map(l => {
-                            const wType = widgets.find(w => w.i === l.i)?.type;
-                            return (
-                                <div key={l.i} className="group relative">
-                                    {/* Drag Handle Overlay */}
-                                    <div className="drag-handle absolute top-0 left-0 right-0 h-8 z-10 cursor-move opacity-0 group-hover:opacity-100 bg-gradient-to-b from-black/10 to-transparent transition-opacity"></div>
-
-                                    {/* Delete Button */}
-                                    <button
-                                        onClick={() => removeWidget(l.i)}
-                                        className="absolute top-2 right-2 z-20 w-6 h-6 bg-white rounded shadow text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-
-                                    {renderWidgetContent(wType || '')}
-                                </div>
-                            );
-                        })}
-                    </ResponsiveGridLayout>
                 </div>
             </div>
 
-            {/* Right Sidebar: Widget Library (The "Palantir" Palette) */}
-            <div className={`w-72 bg-white border-l border-slate-200 flex flex-col transition-all overflow-hidden ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full absolute right-0'}`}>
-                <div className="h-14 border-b border-slate-200 flex items-center px-4 shrink-0 bg-slate-50">
-                    <h2 className="font-bold text-slate-700 text-sm">Widget Library</h2>
+            {/* Results + detail panel */}
+            <div className="flex flex-1 overflow-hidden">
+                <div className="flex-1 overflow-y-auto px-8 pb-8">
+                    <div className="max-w-3xl mx-auto space-y-2">
+                        {loading && (
+                            <div className="flex items-center justify-center py-16">
+                                <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+                            </div>
+                        )}
+                        {!loading && searched && results.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                <Database className="w-10 h-10 text-slate-600" />
+                                <p className="text-slate-400">No results for "<span className="text-white">{query}</span>"</p>
+                                <p className="text-slate-500 text-sm">Try a different keyword, or check that data has been ingested.</p>
+                            </div>
+                        )}
+                        {!loading && !searched && (
+                            <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-50">
+                                <Search className="w-12 h-12 text-slate-600" />
+                                <p className="text-slate-400">Start typing to search across all ontology data</p>
+                            </div>
+                        )}
+                        {!loading && results.map(r => (
+                            <ResultCard
+                                key={r.logicalId}
+                                result={r}
+                                query={query}
+                                onSelect={() => setSelected(r.logicalId === selected?.logicalId ? null : r)}
+                            />
+                        ))}
+                    </div>
                 </div>
-                <div className="p-4 flex-1 overflow-y-auto space-y-3">
-                    <p className="text-xs text-slate-500 mb-4">Click to add interactive modules to the current dashboard grid.</p>
 
-                    {WIDGET_TYPES.map(w => (
-                        <div
-                            key={w.type}
-                            onClick={() => addWidget(w.type)}
-                            className="flex items-center p-3 border border-slate-200 rounded-lg hover:border-blue-500 hover:shadow-md hover:bg-blue-50 cursor-pointer transition-all group"
-                        >
-                            <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-500 group-hover:text-blue-600 group-hover:bg-blue-100 transition-colors mr-3 shrink-0">
-                                {w.icon}
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="text-sm font-semibold text-slate-800 group-hover:text-blue-700">{w.name}</h3>
-                            </div>
-                            <Plus className="w-4 h-4 text-slate-300 group-hover:text-blue-500" />
-                        </div>
-                    ))}
-                </div>
+                {selected && (
+                    <DetailPanel result={selected} query={query} onClose={() => setSelected(null)} />
+                )}
             </div>
         </div>
     );

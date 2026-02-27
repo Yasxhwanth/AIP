@@ -16,6 +16,7 @@ import {
     Activity,
     Search,
     Inbox,
+    GitMerge,
 } from "lucide-react";
 
 // Hide sidebar completely on these routes (geo is fullscreen map)
@@ -31,6 +32,7 @@ const TOP_NAV: NavItem[] = [
     { href: '/', icon: <MapIcon className="w-[18px] h-[18px]" />, label: 'Dashboard' },
     { href: '/workshop', icon: <Search className="w-[18px] h-[18px]" />, label: 'Workshop' },
     { href: '/inbox', icon: <Inbox className="w-[18px] h-[18px]" />, label: 'Decision Inbox' },
+    { href: '/resolve', icon: <GitMerge className="w-[18px] h-[18px]" />, label: 'Identity Resolution' },
     { href: '/geo', icon: <Globe className="w-[18px] h-[18px]" />, label: 'Geo Intel' },
 ];
 

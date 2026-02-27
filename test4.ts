@@ -1,1 +1,0 @@
-import 'dotenv/config'; import { PrismaClient } from './src/generated/prisma/client'; const prisma = new PrismaClient(); async function main() { try { await prisma.entityType.findFirst({ where: { name: 'Asset' } }); console.log('success'); } catch (e) { require('fs').writeFileSync('err4.txt', e.message); console.error('error'); } } main();

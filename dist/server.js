@@ -16,6 +16,7 @@ const computed_metrics_1 = require("./computed-metrics");
 const rollup_engine_1 = require("./rollup-engine");
 const inference_engine_1 = require("./inference-engine");
 const decision_engine_1 = require("./decision-engine");
+const identity_service_1 = require("./identity-service");
 const helmet_1 = __importDefault(require("helmet"));
 const cors_1 = __importDefault(require("cors"));
 const logger_1 = __importDefault(require("./logger"));
@@ -234,18 +235,44 @@ app.post('/api/v1/integration/infer-schema', async (req, res) => {
 });
 app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
     try {
-        const { inferredAttributes, entityTypeId } = req.body;
-        if (!inferredAttributes || !entityTypeId) {
-            return res.status(400).json({ error: 'inferredAttributes and entityTypeId are required' });
+        // Accept BOTH formats:
+        //   New: { inferredAttributes: [{name,dataType}], entityTypeId }
+        //   Legacy (frontend wizard): { sampleData: [...], targetEntityType: "name" }
+        let { inferredAttributes, entityTypeId, sampleData, targetEntityType } = req.body;
+        // If legacy format: infer attributes from sample data first
+        if (!inferredAttributes && sampleData) {
+            const sample = Array.isArray(sampleData) ? sampleData[0] : sampleData;
+            inferredAttributes = sample ? schema_inference_service_1.SchemaInferenceService.inferAttributes(sample) : [];
         }
-        const entityType = await prisma.entityType.findUnique({
-            where: { id: entityTypeId },
-            include: { attributes: true },
-        });
-        if (!entityType)
-            return res.status(404).json({ error: 'entity type not found' });
-        const suggestions = schema_inference_service_1.SchemaInferenceService.suggestMappings(inferredAttributes, entityType.attributes);
-        return res.json({ suggestions });
+        if (!inferredAttributes) {
+            return res.status(400).json({ error: 'inferredAttributes (or sampleData) is required' });
+        }
+        // If entityTypeId not provided, try to look up by name
+        if (!entityTypeId && targetEntityType) {
+            const projectId = req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+            const found = await prisma.entityType.findFirst({
+                where: { name: targetEntityType, projectId },
+                orderBy: { version: 'desc' }
+            });
+            entityTypeId = found?.id;
+        }
+        // If we have an entityTypeId, do precise attribute mapping
+        if (entityTypeId) {
+            const entityType = await prisma.entityType.findUnique({
+                where: { id: entityTypeId },
+                include: { attributes: true },
+            });
+            if (!entityType)
+                return res.status(404).json({ error: 'entity type not found' });
+            const suggestions = schema_inference_service_1.SchemaInferenceService.suggestMappings(inferredAttributes, entityType.attributes);
+            return res.json({ suggestions });
+        }
+        // Fallback: return the inferred attributes as auto-mapping suggestions (identity mapping)
+        const autoMap = {};
+        for (const attr of inferredAttributes) {
+            autoMap[attr.name] = attr.name;
+        }
+        return res.json({ suggestions: autoMap, inferredAttributes });
     }
     catch (error) {
         return res.status(500).json({ error: 'failed to suggest mappings', details: String(error) });
@@ -1972,7 +1999,259 @@ app.post('/decision-logs/:id/execute', async (req, res) => {
         return res.status(500).json({ error: 'failed to execute logic', details: String(error) });
     }
 });
-// ── Error Handler ────────────────────────────────────────────────
+// ── Recent Domain Events (Dashboard Feed) ────────────────────────
+app.get('/api/v1/events/recent', async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+        const events = await prisma.domainEvent.findMany({
+            orderBy: { occurredAt: 'desc' },
+            take: limit,
+        });
+        return res.json(events);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── Attribute-Equality Relationship Derivation ────────────────────
+// Derive edges between entities that share the same field value
+// e.g. all Aircraft that have the same "airportCode" → "OPERATES_FROM" edges
+app.post('/api/v1/ontology/derive-relationships/attribute-match', async (req, res) => {
+    try {
+        const { sourceEntityTypeId, targetEntityTypeId, relationshipDefId, matchField } = req.body;
+        if (!sourceEntityTypeId || !targetEntityTypeId || !relationshipDefId || !matchField) {
+            return res.status(400).json({ error: 'sourceEntityTypeId, targetEntityTypeId, relationshipDefId, matchField required' });
+        }
+        // Fetch current states for source and target
+        const sources = await prisma.currentEntityState.findMany({ where: { entityTypeId: sourceEntityTypeId } });
+        const targets = await prisma.currentEntityState.findMany({ where: { entityTypeId: targetEntityTypeId } });
+        // Build index on target field value → target logicalId
+        const targetIndex = new Map();
+        for (const t of targets) {
+            const fieldVal = String(t.data[matchField] ?? '');
+            if (fieldVal)
+                targetIndex.set(fieldVal, t.logicalId);
+        }
+        let created = 0;
+        const now = new Date();
+        for (const source of sources) {
+            const fieldVal = String(source.data[matchField] ?? '');
+            if (!fieldVal)
+                continue;
+            const targetLogicalId = targetIndex.get(fieldVal);
+            if (!targetLogicalId || targetLogicalId === source.logicalId)
+                continue;
+            // Upsert relationship instance
+            const existing = await prisma.relationshipInstance.findFirst({
+                where: {
+                    relationshipDefinitionId: relationshipDefId,
+                    sourceLogicalId: source.logicalId,
+                    targetLogicalId,
+                    validTo: null,
+                }
+            });
+            if (!existing) {
+                await prisma.relationshipInstance.create({
+                    data: {
+                        relationshipDefinitionId: relationshipDefId,
+                        sourceLogicalId: source.logicalId,
+                        targetLogicalId,
+                        validFrom: now,
+                    }
+                });
+                // Keep CurrentGraph projection up to date
+                await prisma.currentGraph.upsert({
+                    where: {
+                        relationshipDefinitionId_sourceLogicalId_targetLogicalId: {
+                            relationshipDefinitionId: relationshipDefId,
+                            sourceLogicalId: source.logicalId,
+                            targetLogicalId,
+                        }
+                    },
+                    create: { relationshipDefinitionId: relationshipDefId, relationshipName: matchField, sourceLogicalId: source.logicalId, targetLogicalId },
+                    update: {}
+                });
+                created++;
+            }
+        }
+        return res.json({ success: true, derivedLinksCount: created });
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── Entity Resolution API ──────────────────────────────────────────
+// List all PENDING match candidates (with optional entity type filter)
+app.get('/api/v1/identity/candidates', async (req, res) => {
+    try {
+        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        const status = req.query.status || 'PENDING';
+        const entityTypeId = req.query.entityTypeId;
+        // Build where clause — filter by project via entityType relation
+        const where = { status };
+        if (entityTypeId) {
+            where.entityTypeId = entityTypeId;
+        }
+        else if (projectId) {
+            where.entityType = { projectId };
+        }
+        const candidates = await prisma.matchCandidate.findMany({
+            where,
+            include: { entityType: { select: { name: true } } },
+            orderBy: { scoreOverall: 'desc' },
+            take: 100,
+        });
+        // Fetch snapshot data for both entities
+        const enriched = await Promise.all(candidates.map(async (c) => {
+            const [stateA, stateB] = await Promise.all([
+                prisma.currentEntityState.findUnique({ where: { logicalId: c.logicalIdA } }),
+                prisma.currentEntityState.findUnique({ where: { logicalId: c.logicalIdB } }),
+            ]);
+            return { ...c, dataA: stateA?.data ?? null, dataB: stateB?.data ?? null };
+        }));
+        return res.json(enriched);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// Trigger fuzzy match job for an entity type
+app.post('/api/v1/identity/run-match', async (req, res) => {
+    try {
+        const { entityTypeId, threshold } = req.body;
+        if (!entityTypeId)
+            return res.status(400).json({ error: 'entityTypeId is required' });
+        const count = await identity_service_1.IdentityService.runFuzzyMatchJob(entityTypeId, prisma, {
+            threshold: threshold ?? 0.75,
+        });
+        return res.json({ success: true, newCandidatesCreated: count });
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// Merge two candidates (human review: approve merge)
+app.post('/api/v1/identity/candidates/:id/merge', async (req, res) => {
+    try {
+        const reviewerName = req.auth?.apiKeyName ?? 'system';
+        await identity_service_1.IdentityService.mergeEntities(req.params.id, reviewerName, prisma);
+        // Audit log
+        await prisma.auditLog.create({
+            data: {
+                actor: reviewerName,
+                actorRole: req.auth?.role ?? 'UNKNOWN',
+                action: 'MERGE_CANDIDATE',
+                resourceType: 'MatchCandidate',
+                resourceId: req.params.id,
+                metadata: { correlationId: req.correlationId },
+            }
+        });
+        return res.json({ success: true });
+    }
+    catch (err) {
+        return res.status(400).json({ error: err.message ?? String(err) });
+    }
+});
+// Reject a match candidate
+app.post('/api/v1/identity/candidates/:id/reject', async (req, res) => {
+    try {
+        const reviewerName = req.auth?.apiKeyName ?? 'system';
+        await prisma.matchCandidate.update({
+            where: { id: req.params.id },
+            data: {
+                status: 'REJECTED',
+                reviewedBy: reviewerName,
+                reviewedAt: new Date(),
+            }
+        });
+        await prisma.auditLog.create({
+            data: {
+                actor: reviewerName,
+                actorRole: req.auth?.role ?? 'UNKNOWN',
+                action: 'REJECT_CANDIDATE',
+                resourceType: 'MatchCandidate',
+                resourceId: req.params.id,
+                metadata: { correlationId: req.correlationId },
+            }
+        });
+        return res.json({ success: true });
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// List entity aliases (source → canonical mappings)
+app.get('/api/v1/identity/aliases', async (req, res) => {
+    try {
+        const logicalId = req.query.logicalId;
+        const where = logicalId ? { targetLogicalId: logicalId } : {};
+        const aliases = await prisma.entityAlias.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+        });
+        return res.json(aliases);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── Audit Log API ──────────────────────────────────────────────────
+app.get('/api/v1/audit', async (req, res) => {
+    try {
+        const { action, resourceType, resourceId, actor, limit } = req.query;
+        const where = {};
+        if (action)
+            where.action = action;
+        if (resourceType)
+            where.resourceType = resourceType;
+        if (resourceId)
+            where.resourceId = resourceId;
+        if (actor)
+            where.actor = actor;
+        const logs = await prisma.auditLog.findMany({
+            where,
+            orderBy: { occurredAt: 'desc' },
+            take: parseInt(limit) || 100,
+        });
+        return res.json(logs);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── Global Search API ──────────────────────────────────────────────
+// Full-text search across CurrentEntityState (searches JSON data fields)
+app.get('/api/v1/search', async (req, res) => {
+    try {
+        const q = req.query.q?.trim();
+        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        if (!q || q.length < 2)
+            return res.json([]);
+        // Use PostgreSQL ILIKE on the JSON text representation
+        const results = await prisma.$queryRaw `
+      SELECT
+        ces."logicalId",
+        ces."entityTypeId",
+        ces."updatedAt",
+        ces."data",
+        et."name" AS "entityTypeName"
+      FROM "CurrentEntityState" ces
+      JOIN "EntityType" et ON et."id" = ces."entityTypeId"
+      WHERE et."projectId" = ${projectId}
+        AND (ces."data"::text ILIKE ${'%' + q + '%'}
+          OR ces."logicalId" ILIKE ${'%' + q + '%'})
+      ORDER BY ces."updatedAt" DESC
+      LIMIT ${limit}
+    `;
+        return res.json(results);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── Error Handler (must be last middleware) ──────────────────────
 app.use((0, middleware_1.errorHandler)());
 // ── Server & Graceful Shutdown ───────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3000', 10);
