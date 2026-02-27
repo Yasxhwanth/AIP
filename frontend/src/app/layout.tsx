@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Inter } from "next/font/google";
 import Sidebar from "@/components/Sidebar";
 import WorkspaceGuard from "@/components/WorkspaceGuard";
-
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
   title: " AIP Workspace",
   description: "Artificial Intelligence Platform Ontology Workspace",
@@ -18,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} h-screen flex overflow-hidden bg-black text-slate-100`}>
+      <body className="h-screen flex overflow-hidden bg-black text-slate-100 font-sans" style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
 
         {/* Extracted Client Sidebar */}
         <Sidebar />

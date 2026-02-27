@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { LANDMARKS, VisualMode } from "@/components/BattlefieldOverview";
+import { ApiClient } from "@/lib/apiClient";
 
 // Dynamic import to avoid SSR issues with CesiumJS
 const BattlefieldOverview = dynamic(
@@ -91,11 +92,38 @@ export default function GeoExplorer() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isPlaying, setIsPlaying] = useState(false);
 
+    // Selected Entity State
+    const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+    const [entityDetails, setEntityDetails] = useState<any>(null);
+    const [trackedEntities, setTrackedEntities] = useState<string[]>([]);
+
     // Timeline
     const [currentDate] = useState(new Date().toISOString().slice(0, 19) + 'Z');
 
     const toggleLayer = useCallback((id: string) => {
         setLayers(prev => ({ ...prev, [id]: !prev[id] }));
+    }, []);
+
+    const handleEntitySelect = useCallback((id: string | null) => {
+        if (!id) {
+            setSelectedEntityId(null);
+            setEntityDetails(null);
+            return;
+        }
+
+        // Strip prefixes like aip- or fl- or sat-
+        const rawId = id.replace(/^(aip|fl|sat)-/, '');
+        setSelectedEntityId(rawId);
+
+        if (id.startsWith('aip-')) {
+            // Fetch AIP Entity Detail
+            ApiClient.get(`/api/v1/search?q=${rawId}`).then((res: any) => {
+                const match = res.find((r: any) => r.logicalId === rawId);
+                setEntityDetails(match || { logicalId: rawId, data: { status: 'Unknown', source: 'AIP CurrentState' } });
+            }).catch(console.error);
+        } else if (id.startsWith('fl-')) {
+            setEntityDetails({ logicalId: rawId, type: 'Flight Track', data: { callsign: rawId, source: 'OpenSky Network' } });
+        }
     }, []);
 
     const handleLayerCount = useCallback((id: string, count: number) => {
@@ -129,6 +157,8 @@ export default function GeoExplorer() {
                 visualMode={visualMode}
                 onLayerCountChange={handleLayerCount}
                 flyToRef={flyToRef}
+                onEntitySelect={handleEntitySelect}
+                trackedEntities={trackedEntities}
             />
 
             {/* ── Top Bar ────────────────────────────────────────────────── */}
@@ -285,6 +315,19 @@ export default function GeoExplorer() {
                     <Globe className="w-4 h-4" />
                 </button>
 
+                {/* Tracking Trail Toggle */}
+                <button
+                    onClick={() => {
+                        if (selectedEntityId) {
+                            setTrackedEntities(prev => prev.includes(selectedEntityId) ? prev.filter(id => id !== selectedEntityId) : [...prev, selectedEntityId]);
+                        }
+                    }}
+                    className={`w-10 h-10 backdrop-blur-xl border rounded-xl shadow-2xl flex items-center justify-center transition-all group ${(selectedEntityId && trackedEntities.includes(selectedEntityId)) ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-400' : 'bg-black/70 border-white/10 text-white/60 hover:text-cyan-400'}`}
+                    title="Toggle Historical Trails for Selected Entity"
+                >
+                    <Activity className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                </button>
+
                 {/* Crosshair */}
                 <button className="w-10 h-10 bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex items-center justify-center text-white/60 hover:text-cyan-400 transition-all">
                     <Crosshair className="w-4 h-4" />
@@ -380,6 +423,39 @@ export default function GeoExplorer() {
                     </div>
                 </div>
             </div>
+
+            {/* ── Entity Details Panel (Bottom Right) ──────────────────────── */}
+            {selectedEntityId && entityDetails && (
+                <div className="absolute right-4 bottom-24 w-80 z-30 pointer-events-auto">
+                    <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl p-4 flex flex-col gap-3">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <div className="flex items-center gap-2">
+                                <Activity className="w-4 h-4 text-cyan-400" />
+                                <span className="text-sm font-bold text-white">{selectedEntityId}</span>
+                            </div>
+                            <button onClick={() => setSelectedEntityId(null)} className="text-white/40 hover:text-white">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1 text-xs">
+                            {Object.entries(entityDetails.data || {}).map(([key, val]) => (
+                                <div key={key} className="flex justify-between border-b border-white/5 pb-1">
+                                    <span className="text-slate-400">{key}</span>
+                                    <span className="text-white font-mono break-all text-right max-w-[60%]">{String(val)}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                            <button className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded py-1.5 text-xs font-semibold transition-colors">
+                                Track Object
+                            </button>
+                            <button className="flex-1 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded py-1.5 text-xs font-semibold transition-colors">
+                                Full History
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Click-away for nav panel ───────────────────────────────── */}
             {showNavPanel && (

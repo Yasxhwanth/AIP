@@ -36,6 +36,8 @@ interface Props {
     visualMode: VisualMode;
     onLayerCountChange?: (id: string, count: number) => void;
     flyToRef?: React.MutableRefObject<((lat: number, lng: number, alt: number) => void) | null>;
+    onEntitySelect?: (id: string | null) => void;
+    trackedEntities?: string[]; // array of raw IDs to render time trails for
 }
 
 // ─── Visual Filters ───────────────────────────────────────────────────────────
@@ -109,7 +111,7 @@ let _renderSeq = 0;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export const BattlefieldOverview: React.FC<Props> = ({
-    layers, visualMode, onLayerCountChange, flyToRef,
+    layers, visualMode, onLayerCountChange, flyToRef, onEntitySelect, trackedEntities = []
 }) => {
     const viewerRef = useRef<any>(null);
 
@@ -205,46 +207,102 @@ export const BattlefieldOverview: React.FC<Props> = ({
             _viewer = viewer;
             viewerRef.current = viewer;
 
-            // ── Click handler: highlight selected satellite orbit ─────────────
+            // ── Click handler ─────────────────────────────────────────────────
+            const _clickContext: { selectedOrbitId: string | null } = { selectedOrbitId: null };
+
             new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
                 .setInputAction((click: any) => {
                     const picked = viewer.scene.pick(click.position);
-                    if (!picked?.id?.id) return;
+
+                    // Clicked NOTHING (reset)
+                    if (!picked?.id?.id) {
+                        try {
+                            if (_clickContext.selectedOrbitId) {
+                                const oldOrbit = viewer.entities.getById(_clickContext.selectedOrbitId);
+                                if (oldOrbit) {
+                                    oldOrbit.polyline!.material = new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.1, color: Cesium.Color.fromCssColorString('#4ade80').withAlpha(0.35) });
+                                    oldOrbit.polyline!.width = new Cesium.ConstantProperty(1);
+                                    (oldOrbit as any).__highlighted = false;
+                                }
+                                _clickContext.selectedOrbitId = null;
+                            }
+                        } catch (e) { }
+
+                        // Fire React event (unselect)
+                        if (onEntitySelect) {
+                            setTimeout(() => onEntitySelect(null), 0);
+                        }
+                        return;
+                    }
+
+                    // Clicked SOMETHING
                     const id: string = picked.id.id;
-                    if (!id.startsWith('sat-')) return;
 
-                    // Toggle highlight on the corresponding orbit entity
-                    const orbitId = `orbit-${id}`;
-                    const orbitEntity = viewer.entities.getById(orbitId);
-                    if (!orbitEntity) return;
+                    // 1. Pass selection to React
+                    if (onEntitySelect) {
+                        setTimeout(() => onEntitySelect(id), 0);
+                    }
 
-                    const isHighlighted = (orbitEntity as any).__highlighted;
-                    if (isHighlighted) {
-                        // Dim it back
-                        orbitEntity.polyline!.material = new Cesium.PolylineGlowMaterialProperty({
-                            glowPower: 0.1,
-                            color: Cesium.Color.fromCssColorString('#4ade80').withAlpha(0.35),
-                        });
-                        orbitEntity.polyline!.width = new Cesium.ConstantProperty(1);
-                        (orbitEntity as any).__highlighted = false;
+                    // 2. Satellite specific: toggle highlight on the corresponding orbit entity
+                    if (id.startsWith('sat-')) {
+                        const orbitId = `orbit-${id}`;
+                        const orbitEntity = viewer.entities.getById(orbitId);
+                        if (!orbitEntity) return;
+
+                        // Un-highlight previous orbit if it exists and is different
+                        if (_clickContext.selectedOrbitId && _clickContext.selectedOrbitId !== orbitId) {
+                            const oldOrbit = viewer.entities.getById(_clickContext.selectedOrbitId);
+                            if (oldOrbit) {
+                                oldOrbit.polyline!.material = new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.1, color: Cesium.Color.fromCssColorString('#4ade80').withAlpha(0.35) });
+                                oldOrbit.polyline!.width = new Cesium.ConstantProperty(1);
+                                (oldOrbit as any).__highlighted = false;
+                            }
+                        }
+
+                        const isHighlighted = (orbitEntity as any).__highlighted;
+                        if (isHighlighted) {
+                            // Dim it back
+                            orbitEntity.polyline!.material = new Cesium.PolylineGlowMaterialProperty({
+                                glowPower: 0.1,
+                                color: Cesium.Color.fromCssColorString('#4ade80').withAlpha(0.35),
+                            });
+                            orbitEntity.polyline!.width = new Cesium.ConstantProperty(1);
+                            (orbitEntity as any).__highlighted = false;
+                            _clickContext.selectedOrbitId = null;
+                        } else {
+                            // Highlight: bright green, fly to satellite
+                            orbitEntity.polyline!.material = new Cesium.PolylineGlowMaterialProperty({
+                                glowPower: 0.3,
+                                color: Cesium.Color.fromCssColorString('#84cc16').withAlpha(0.9),
+                            });
+                            orbitEntity.polyline!.width = new Cesium.ConstantProperty(2.5);
+                            (orbitEntity as any).__highlighted = true;
+                            _clickContext.selectedOrbitId = orbitId;
+
+                            const satEntity = viewer.entities.getById(id);
+                            const pos = satEntity?.position?.getValue(Cesium.JulianDate.now());
+                            if (pos) {
+                                viewer.camera.flyTo({
+                                    destination: Cesium.Cartesian3.fromElements(
+                                        (pos as any).x, (pos as any).y, (pos as any).z
+                                    ),
+                                    duration: 2,
+                                });
+                            }
+                        }
                     } else {
-                        // Highlight: bright green, fly to satellite
-                        orbitEntity.polyline!.material = new Cesium.PolylineGlowMaterialProperty({
-                            glowPower: 0.3,
-                            color: Cesium.Color.fromCssColorString('#84cc16').withAlpha(0.9),
-                        });
-                        orbitEntity.polyline!.width = new Cesium.ConstantProperty(2.5);
-                        (orbitEntity as any).__highlighted = true;
-
-                        const satEntity = viewer.entities.getById(id);
-                        const pos = satEntity?.position?.getValue(Cesium.JulianDate.now());
-                        if (pos) {
+                        // Zoom to Non-satellite entity
+                        const ent = viewer.entities.getById(id);
+                        const pos = ent?.position?.getValue(Cesium.JulianDate.now());
+                        if (pos && !id.startsWith('orbit-')) {
                             viewer.camera.flyTo({
                                 destination: Cesium.Cartesian3.fromElements(
                                     (pos as any).x, (pos as any).y, (pos as any).z
                                 ),
                                 duration: 2,
-                            });
+                                // Provide offset so it doesn't zoom INSIDE the entity
+                                offset: new Cesium.HeadingPitchRange(0, -Math.PI / 4, 25000)
+                            } as any);
                         }
                     }
                     viewer.scene.requestRender();
@@ -302,7 +360,23 @@ export const BattlefieldOverview: React.FC<Props> = ({
             fetchPromises.push(fetch('/api/tle?group=visual').then(r => r.ok ? r.text() : '').catch(() => ''));
         } else { fetchPromises.push(Promise.resolve('')); }
 
-        const [aipRaw, flightsRaw, tleRaw] = await Promise.all(fetchPromises);
+        // Fetch telemetry paths for tracked entities
+        if (trackedEntities.length > 0) {
+            // For real implementation: fetchPromises.push(ApiClient.post('/api/v1/telemetry/paths', { ids: trackedEntities }));
+            // Mocking trails for now since we don't have a telemetry endpoints strictly for this yet
+            const mockTrails = trackedEntities.map(id => {
+                const ent = MOCK_ENTITIES.find(m => m.logicalId === id) || { data: { latitude: 0, longitude: 0, altitude: 0 } };
+                const { latitude: lat, longitude: lng, altitude: alt } = ent.data;
+                const pts = [];
+                for (let i = 0; i < 10; i++) pts.push({ lat: lat - i * 0.1, lng: lng - i * 0.1, alt: (alt || 0) + i * 1000 });
+                return { id, points: pts };
+            });
+            fetchPromises.push(Promise.resolve(mockTrails));
+        } else {
+            fetchPromises.push(Promise.resolve([]));
+        }
+
+        const [aipRaw, flightsRaw, tleRaw, trailsRaw] = await Promise.all(fetchPromises);
         if (seq !== _renderSeq) return;
 
         // 2. Data Processing (Synchronous)
@@ -322,6 +396,26 @@ export const BattlefieldOverview: React.FC<Props> = ({
                     position: Cesium.Cartesian3.fromDegrees(lng, lat, alt ?? 0),
                     point: { pixelSize: 10, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
                     label: { text: ent.logicalId, font: '10px monospace', fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#0f172a99'), pixelOffset: new Cesium.Cartesian2(0, -20), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                });
+            }
+        }
+
+        // ── Trails Processing ──────────────────────────────────────────────────
+        if (trailsRaw && (trailsRaw as any[]).length > 0) {
+            for (const trail of (trailsRaw as any[])) {
+                if (!trail.points || trail.points.length < 2) continue;
+                const pts = trail.points.map((p: any) => Cesium.Cartesian3.fromDegrees(p.lng, p.lat, p.alt));
+                entitiesToAdd.push({
+                    id: `trail-${trail.id}`,
+                    polyline: {
+                        positions: pts,
+                        width: 3,
+                        material: new Cesium.PolylineGlowMaterialProperty({
+                            glowPower: 0.2,
+                            color: Cesium.Color.fromCssColorString('#06b6d4').withAlpha(0.7)
+                        }),
+                        arcType: Cesium.ArcType.NONE
+                    },
                 });
             }
         }

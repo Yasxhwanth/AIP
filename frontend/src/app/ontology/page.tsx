@@ -38,11 +38,16 @@ import * as T from '@/lib/types';
 export default function OntologyBuilder() {
     const [entityTypes, setEntityTypes] = useState<T.EntityType[]>([]);
     const [selectedObj, setSelectedObj] = useState<any>(null);
-    const [activeTab, setActiveTab] = useState<'properties' | 'links' | 'graph'>('properties');
+    const [activeTab, setActiveTab] = useState<'properties' | 'links' | 'graph' | 'instances'>('properties');
     const [links, setLinks] = useState<T.RelationshipDefinition[]>([]);
     const [isCreatingLink, setIsCreatingLink] = useState(false);
     const [newLinkParams, setNewLinkParams] = useState({ name: '', targetId: '' });
     const [loading, setLoading] = useState(true);
+
+    // Instances State
+    const [instances, setInstances] = useState<any[]>([]);
+    const [selectedInstance, setSelectedInstance] = useState<any>(null);
+    const [provenance, setProvenance] = useState<any[]>([]);
 
     // AI Inference State
     const [showImportModal, setShowImportModal] = useState(false);
@@ -170,8 +175,34 @@ export default function OntologyBuilder() {
     useEffect(() => {
         if (activeTab === 'graph') {
             buildGraph();
+        } else if (activeTab === 'instances' && selectedObj) {
+            fetchInstances();
         }
-    }, [activeTab, buildGraph]);
+    }, [activeTab, buildGraph, selectedObj]);
+
+    const fetchInstances = async () => {
+        if (!selectedObj) return;
+        try {
+            const data = await ApiClient.get<any[]>('/api/v1/search', { q: selectedObj.name });
+            // Filter purely to this entity type just in case search is fuzzy
+            const exact = data.filter((d: any) => d.entityTypeId === selectedObj.id);
+            setInstances(exact);
+            setSelectedInstance(null);
+            setProvenance([]);
+        } catch (e) {
+            setInstances([]);
+        }
+    };
+
+    const handleSelectInstance = async (inst: any) => {
+        setSelectedInstance(inst);
+        try {
+            const prov = await ApiClient.get<any[]>(`/api/v1/ontology/instances/${inst.logicalId}/field-provenance`);
+            setProvenance(prov || []);
+        } catch (e) {
+            setProvenance([]);
+        }
+    };
 
     return (
         <div className="h-full w-full flex flex-col bg-white text-slate-900 border-t border-slate-200">
@@ -263,13 +294,13 @@ export default function OntologyBuilder() {
                             <div className="p-5 border-b border-slate-200">
                                 <h1 className="text-xl font-bold text-slate-900 mb-1">{selectedObj.name}</h1>
                                 <div className="flex gap-4 mt-4 border-b border-slate-200">
-                                    {['properties', 'links', 'graph'].map(tab => (
+                                    {['properties', 'links', 'graph', 'instances'].map(tab => (
                                         <button
                                             key={tab}
                                             onClick={() => setActiveTab(tab as any)}
-                                            className={`px-1 pb-2 text-sm font-semibold capitalize \${activeTab === tab ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}
+                                            className={`px-1 pb-2 text-sm font-semibold capitalize ${activeTab === tab ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}
                                         >
-                                            {tab}
+                                            {tab === 'instances' ? 'Data Browser & Lineage' : tab}
                                         </button>
                                     ))}
                                 </div>
@@ -315,6 +346,98 @@ export default function OntologyBuilder() {
                                                 <div className="text-xs text-slate-500">Target: {link.targetEntityName || 'Unknown'}</div>
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+                                {activeTab === 'instances' && (
+                                    <div className="flex h-full gap-4">
+                                        {/* Instances List */}
+                                        <div className="w-1/3 flex flex-col border border-slate-200 rounded bg-white overflow-hidden">
+                                            <div className="p-2 bg-slate-50 border-b font-bold text-xs uppercase text-slate-500 flex justify-between items-center">
+                                                <span>Data Records ({instances.length})</span>
+                                                <button onClick={fetchInstances} className="text-indigo-600 hover:text-indigo-800"><Activity className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto">
+                                                {instances.length === 0 ? (
+                                                    <div className="p-4 text-sm text-slate-500 text-center">No data found</div>
+                                                ) : (
+                                                    instances.map(inst => (
+                                                        <div
+                                                            key={inst.logicalId}
+                                                            onClick={() => handleSelectInstance(inst)}
+                                                            className={`p-3 border-b text-sm cursor-pointer transition-colors ${selectedInstance?.logicalId === inst.logicalId ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-slate-50 border-l-4 border-l-transparent'}`}
+                                                        >
+                                                            <div className="font-bold text-slate-800 font-mono text-xs">{inst.logicalId}</div>
+                                                            <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(inst.updatedAt).toLocaleDateString()}</div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Provenance Panel */}
+                                        <div className="flex-1 flex flex-col border border-slate-200 rounded bg-white overflow-hidden">
+                                            <div className="p-3 bg-slate-50 border-b font-bold text-sm text-slate-800 flex items-center gap-2">
+                                                <Shield className="w-4 h-4 text-emerald-600" />
+                                                Field-Level Provenance & Lineage
+                                            </div>
+                                            {selectedInstance ? (
+                                                <div className="flex-1 overflow-y-auto p-4">
+                                                    <div className="mb-6 grid grid-cols-2 gap-4">
+                                                        {Object.entries(selectedInstance.data).map(([k, v]) => (
+                                                            <div key={k} className="p-3 bg-slate-50 rounded border border-slate-100">
+                                                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{k}</div>
+                                                                <div className="text-sm font-mono text-slate-800 break-all">{String(v)}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    <h3 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2 border-b pb-2">
+                                                        <Database className="w-4 h-4 text-slate-400" />
+                                                        Source Systems & Lineage History
+                                                    </h3>
+                                                    {provenance.length === 0 ? (
+                                                        <div className="text-sm text-slate-500 italic p-4 bg-slate-50 rounded text-center">No provenance history recorded yet for this instance.</div>
+                                                    ) : (
+                                                        <div className="border border-slate-200 rounded overflow-hidden">
+                                                            <table className="w-full text-left">
+                                                                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                                                                    <tr>
+                                                                        <th className="px-3 py-2">Field</th>
+                                                                        <th className="px-3 py-2">Source System</th>
+                                                                        <th className="px-3 py-2">Time</th>
+                                                                        <th className="px-3 py-2 text-right">Confidence</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="text-xs divide-y">
+                                                                    {provenance.map(prov => (
+                                                                        <tr key={prov.id} className="hover:bg-slate-50">
+                                                                            <td className="px-3 py-2 font-mono text-indigo-700 font-semibold">{prov.fieldName}</td>
+                                                                            <td className="px-3 py-2">
+                                                                                <div className="font-medium text-slate-700">{prov.sourceName}</div>
+                                                                                <div className="text-[10px] text-slate-400 truncate w-32" title={prov.sourceRecordId}>{prov.sourceRecordId}</div>
+                                                                            </td>
+                                                                            <td className="px-3 py-2 text-slate-500 flex items-center gap-1">
+                                                                                <Clock className="w-3 h-3" />
+                                                                                {new Date(prov.provenanceTime).toLocaleString()}
+                                                                            </td>
+                                                                            <td className="px-3 py-2 text-right">
+                                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${prov.confidenceScore > 0.8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                                                    {Math.round(prov.confidenceScore * 100)}%
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="flex-1 flex items-center justify-center text-slate-400 text-sm p-8">
+                                                    Select a record from the list to view its source lineage and provenance history.
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
