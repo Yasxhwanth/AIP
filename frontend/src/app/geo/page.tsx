@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import {
     Map as MapIcon,
     Layers,
@@ -78,7 +78,7 @@ const VISUAL_MODES: { id: VisualMode; label: string; icon: any; desc: string }[]
 ];
 
 // ─── Main Component ─────────────────────────────────────────────────────────
-export default function GeoExplorer() {
+function GeoExplorerInner() {
     const searchParams = useSearchParams();
     // Map state
     const flyToRef = useRef<((lat: number, lng: number, alt: number) => void) | null>(null);
@@ -455,5 +455,13 @@ export default function GeoExplorer() {
                 <div className="absolute inset-0 z-10" onClick={() => setShowNavPanel(false)} />
             )}
         </div>
+    );
+}
+
+export default function GeoExplorer() {
+    return (
+        <Suspense fallback={<MapLoadingScreen />}>
+            <GeoExplorerInner />
+        </Suspense>
     );
 }
