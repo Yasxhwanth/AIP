@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// This function can be marked `async` if using `await` inside
 export function middleware(request: NextRequest) {
-    return NextResponse.next()
+    const url = new URL(request.url);
+    const headers = new Headers(request.headers);
+    headers.set('x-invoke-path', url.pathname);
+
+    return NextResponse.next({
+        request: {
+            headers
+        }
+    });
 }
 
 // See "Matching Paths" below to learn more

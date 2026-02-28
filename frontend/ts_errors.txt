@@ -1,0 +1,2 @@
+src/app/build/ontology/page.tsx(721,54): error TS2304: Cannot find name 'Zap'.
+src/app/build/ontology/page.tsx(806,137): error TS2304: Cannot find name 'Zap'.

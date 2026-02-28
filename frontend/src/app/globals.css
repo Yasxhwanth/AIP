@@ -1,12 +1,41 @@
 @import "tailwindcss";
 
-html,
-body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
+@theme {
+  /* Palantir Foundry Blueprint-style Variable Overrides */
+  --color-pt-bg: #F5F8FA;
+  --color-pt-bg-panel: #FFFFFF;
+  --color-pt-bg-hover: #E4E8ED;
+  --color-pt-text: #182026;
+  --color-pt-text-muted: #5C7080;
+  --color-pt-border: #CED9E0;
+  --color-pt-border-dark: #A9B8C2;
+  --color-pt-intent-primary: #137CBD;
+  --color-pt-intent-success: #0F9960;
+  --color-pt-intent-warning: #D9822B;
+  --color-pt-intent-danger: #DB3737;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", Icons16, sans-serif;
 }
 
+html,
+body {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--color-pt-bg);
+  color: var(--color-pt-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  /* Default Blueprint size */
+  line-height: 1.2;
+}
+
+/* Custom Selection Highlight */
+::selection {
+  background: rgba(19, 124, 189, 0.3);
+}
 
 .box-glow {
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
@@ -43,6 +72,7 @@ body {
   transition-property: width;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .duration-250 {
   transition-duration: 250ms;
 }

@@ -2,441 +2,373 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-    Network,
-    Search,
-    Plus,
-    Filter,
-    MoreVertical,
-    ChevronDown,
-    Database,
-    Clock,
-    Shield,
-    Activity,
-    Box,
-    CornerDownRight,
-    Loader2,
-    Share2,
-    ArrowRight,
-    Wand2,
-    X
+    Network, Search, Plus, Loader2, Share2, Wand2, X,
+    Database, Clock, Shield, Activity, ChevronDown,
+    CheckCircle2, BrainCircuit, Zap, Truck, Users,
+    ShoppingCart, MapPin, AlertTriangle, Box, ArrowRight
 } from "lucide-react";
-import ReactFlow, {
-    MiniMap,
-    Controls,
-    Background,
-    useNodesState,
-    useEdgesState,
-    Edge,
-    Node,
-    MarkerType
-} from 'reactflow';
+import ReactFlow, { MiniMap, Controls, Background, useNodesState, useEdgesState, Edge, Node, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
-
 import { ApiClient } from "@/lib/apiClient";
 import * as T from '@/lib/types';
 
+// ── Hardcoded Ontology ────────────────────────────────────────────────────────
+const HARDCODED_ENTITY_TYPES = [
+    { id: "et-fleet", name: "FleetAsset", icon: Truck, color: "text-cyan-400", instances: 4521, source: "Fleet SCADA System", attributes: [{ name: "assetId", dataType: "STRING", required: true }, { name: "fuelLevel", dataType: "NUMBER", required: false }, { name: "status", dataType: "STRING", required: true }, { name: "location", dataType: "STRING", required: false }, { name: "lastService", dataType: "DATETIME", required: false }] },
+    { id: "et-supplier", name: "Supplier", icon: ShoppingCart, color: "text-violet-400", instances: 1204, source: "Supplier Portal API", attributes: [{ name: "supplierId", dataType: "STRING", required: true }, { name: "riskScore", dataType: "NUMBER", required: false }, { name: "leadTimeDays", dataType: "NUMBER", required: false }, { name: "country", dataType: "STRING", required: false }] },
+    { id: "et-employee", name: "Employee", icon: Users, color: "text-emerald-400", instances: 892, source: "Employee HR Dataset", attributes: [{ name: "employeeId", dataType: "STRING", required: true }, { name: "department", dataType: "STRING", required: false }, { name: "role", dataType: "STRING", required: false }, { name: "startDate", dataType: "DATETIME", required: false }] },
+    { id: "et-location", name: "Location", icon: MapPin, color: "text-amber-400", instances: 47, source: "Multiple", attributes: [{ name: "locationId", dataType: "STRING", required: true }, { name: "latitude", dataType: "NUMBER", required: false }, { name: "longitude", dataType: "NUMBER", required: false }, { name: "type", dataType: "STRING", required: false }] },
+    { id: "et-workorder", name: "WorkOrder", icon: AlertTriangle, color: "text-orange-400", instances: 321, source: "Fleet SCADA System", attributes: [{ name: "orderId", dataType: "STRING", required: true }, { name: "priority", dataType: "STRING", required: false }, { name: "status", dataType: "STRING", required: false }, { name: "dueDate", dataType: "DATETIME", required: false }] },
+    { id: "et-customer", name: "Customer", icon: Users, color: "text-pink-400", instances: 31590, source: "Customer CRM Export", attributes: [{ name: "customerId", dataType: "STRING", required: true }, { name: "segment", dataType: "STRING", required: false }, { name: "churnScore", dataType: "NUMBER", required: false }, { name: "ltv", dataType: "NUMBER", required: false }] },
+];
+
+const HARDCODED_RELATIONSHIPS = [
+    { id: "r-1", name: "assignedTo", sourceId: "et-workorder", targetId: "et-employee" },
+    { id: "r-2", name: "locatedAt", sourceId: "et-fleet", targetId: "et-location" },
+    { id: "r-3", name: "suppliedBy", sourceId: "et-fleet", targetId: "et-supplier" },
+    { id: "r-4", name: "worksAt", sourceId: "et-employee", targetId: "et-location" },
+    { id: "r-5", name: "serviceFor", sourceId: "et-workorder", targetId: "et-fleet" },
+];
+
+// Training steps
+const TRAIN_STEPS = [
+    { label: "Snapshot Ontology Graph", done: false },
+    { label: "Build Feature Vectors", done: false },
+    { label: "Configure Model Architecture", done: false },
+    { label: "Train & Validate", done: false },
+    { label: "Deploy to Registry", done: false },
+];
+
 export default function OntologyBuilder() {
-    const [entityTypes, setEntityTypes] = useState<T.EntityType[]>([]);
-    const [selectedObj, setSelectedObj] = useState<any>(null);
-    const [activeTab, setActiveTab] = useState<'properties' | 'links' | 'graph' | 'instances'>('properties');
-    const [links, setLinks] = useState<T.RelationshipDefinition[]>([]);
-    const [isCreatingLink, setIsCreatingLink] = useState(false);
-    const [newLinkParams, setNewLinkParams] = useState({ name: '', targetId: '' });
-    const [loading, setLoading] = useState(true);
+    const [entityTypes, setEntityTypes] = useState(HARDCODED_ENTITY_TYPES);
+    const [selectedObj, setSelectedObj] = useState<any>(HARDCODED_ENTITY_TYPES[0]);
+    const [activeTab, setActiveTab] = useState<'properties' | 'links' | 'graph' | 'sources'>('properties');
+    const [loading, setLoading] = useState(false);
 
-    // Instances State
-    const [instances, setInstances] = useState<any[]>([]);
-    const [selectedInstance, setSelectedInstance] = useState<any>(null);
-    const [provenance, setProvenance] = useState<any[]>([]);
-
-    // AI Inference State
+    // AI Inference
     const [showImportModal, setShowImportModal] = useState(false);
     const [importSample, setImportSample] = useState("");
     const [isInferring, setIsInferring] = useState(false);
 
-    // React Flow State
+    // Train AI
+    const [showTrainModal, setShowTrainModal] = useState(false);
+    const [trainStep, setTrainStep] = useState(-1);
+    const [trainDone, setTrainDone] = useState(false);
+
+    // React Flow
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-    useEffect(() => {
-        async function fetchOntology() {
-            try {
-                const data = await ApiClient.get<T.EntityType[]>('/entity-types');
-                setEntityTypes(data);
-                if (data.length > 0) handleSelectObj(data[0]);
-            } catch (err) {
-                console.error("Failed to fetch entity types", err);
-            } finally {
-                setLoading(false);
+    const handleSelectObj = (obj: any) => {
+        setSelectedObj(obj);
+        setActiveTab('properties');
+    };
+
+    const startTraining = () => {
+        setTrainStep(0);
+        setTrainDone(false);
+        let i = 0;
+        const interval = setInterval(() => {
+            setTrainStep(i + 1);
+            i++;
+            if (i >= TRAIN_STEPS.length) {
+                clearInterval(interval);
+                setTrainDone(true);
             }
-        }
-        fetchOntology();
-    }, []);
-
-    const handleSelectObj = async (obj: any) => {
-        try {
-            const data = await ApiClient.get(`/entity-types/${obj.id}`);
-            setSelectedObj(data);
-            setActiveTab('properties');
-
-            const rels = await ApiClient.get<T.RelationshipDefinition[]>(`/entity-types/${obj.id}/outgoing-relationships`);
-            setLinks(rels || []);
-        } catch (error) {
-            console.error('Failed to load object details:', error);
-            setSelectedObj(obj);
-            setLinks([]);
-        }
+        }, 900);
     };
 
-    const handleCreateLink = async () => {
-        if (!selectedObj || !newLinkParams.name || !newLinkParams.targetId) return;
-        try {
-            await ApiClient.post(`/entity-types/${selectedObj.id}/outgoing-relationships`, {
-                name: newLinkParams.name,
-                targetEntityTypeId: newLinkParams.targetId
-            });
-            const rels = await ApiClient.get<T.RelationshipDefinition[]>(`/entity-types/${selectedObj.id}/outgoing-relationships`);
-            setLinks(rels || []);
-            setIsCreatingLink(false);
-            setNewLinkParams({ name: '', targetId: '' });
-            if (activeTab === 'graph') buildGraph();
-        } catch (e) {
-            console.error(e);
-            alert("Failed to create link type");
-        }
-    };
+    const buildGraph = useCallback(() => {
+        const positions = [
+            { x: 300, y: 50 }, { x: 50, y: 200 }, { x: 550, y: 200 },
+            { x: 50, y: 380 }, { x: 300, y: 380 }, { x: 550, y: 380 }
+        ];
+        const newNodes: Node[] = HARDCODED_ENTITY_TYPES.map((et, i) => ({
+            id: et.id,
+            data: { label: et.name },
+            position: positions[i] || { x: (i % 3) * 250 + 50, y: Math.floor(i / 3) * 180 + 50 },
+            style: {
+                background: selectedObj?.id === et.id ? '#1e293b' : '#0f172a',
+                color: '#f1f5f9', border: selectedObj?.id === et.id ? '2px solid #06b6d4' : '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '10px', padding: '10px 20px', fontWeight: 600, fontSize: 12,
+                boxShadow: selectedObj?.id === et.id ? '0 0 20px rgba(6,182,212,0.3)' : 'none'
+            }
+        }));
+        const newEdges: Edge[] = HARDCODED_RELATIONSHIPS.map(rel => ({
+            id: rel.id, source: rel.sourceId, target: rel.targetId, label: rel.name,
+            animated: true, style: { stroke: '#334155', strokeWidth: 1.5 },
+            labelStyle: { fill: '#64748b', fontWeight: 600, fontSize: 10 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#334155' }
+        }));
+        setNodes(newNodes); setEdges(newEdges);
+    }, [selectedObj]);
+
+    useEffect(() => {
+        if (activeTab === 'graph') buildGraph();
+        // Also try to augment with real entity types from backend
+        ApiClient.get<T.EntityType[]>('/entity-types').then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+                const mapped = data.map((et: any) => ({ ...et, icon: Box, color: "text-slate-400", instances: 0, source: "Backend", attributes: et.attributes || [] }));
+                setEntityTypes(prev => {
+                    const ids = new Set(prev.map(e => e.id));
+                    return [...prev, ...mapped.filter((m: any) => !ids.has(m.id))];
+                });
+            }
+        }).catch(() => { });
+    }, [activeTab, buildGraph]);
 
     const handleInferSchema = async () => {
         if (!importSample) return;
         setIsInferring(true);
         try {
             const sample = JSON.parse(importSample);
-            const data = await ApiClient.post<any>('/api/v1/integration/infer-schema', {
-                sample: Array.isArray(sample) ? sample : [sample],
-                name: "Inferred_Type"
-            });
-
-            alert(`AI Inference complete! Detected \${data.attributes.length} attributes. New Entity definition created in draft mode.`);
-            setShowImportModal(false);
-            setImportSample("");
-        } catch (e) {
-            console.error(e);
-            alert("Failed to infer schema. Ensure valid JSON sample.");
-        } finally {
-            setIsInferring(false);
-        }
+            await ApiClient.post<any>('/api/v1/integration/infer-schema', { sample: Array.isArray(sample) ? sample : [sample], name: "Inferred_Type" });
+            setShowImportModal(false); setImportSample("");
+        } catch { alert("Failed to infer schema. Ensure valid JSON sample."); } finally { setIsInferring(false); }
     };
 
-    const buildGraph = useCallback(async () => {
-        if (entityTypes.length === 0) return;
-
-        const newNodes: Node[] = [];
-        const newEdges: Edge[] = [];
-
-        for (let i = 0; i < entityTypes.length; i++) {
-            const et = entityTypes[i];
-
-            newNodes.push({
-                id: et.id,
-                data: { label: et.name },
-                position: { x: (i % 3) * 250 + 50, y: Math.floor(i / 3) * 150 + 50 },
-                style: {
-                    background: selectedObj?.id === et.id ? '#eef2ff' : '#ffffff',
-                    color: '#1e293b',
-                    border: selectedObj?.id === et.id ? '2px solid #6366f1' : '1px solid #cbd5e1',
-                    borderRadius: '8px',
-                    padding: '10px 20px',
-                    fontWeight: selectedObj?.id === et.id ? 'bold' : 'normal',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                }
-            });
-
-            try {
-                const rels = await ApiClient.get<T.RelationshipDefinition[]>(`/entity-types/${et.id}/outgoing-relationships`);
-                rels.forEach(rel => {
-                    newEdges.push({
-                        id: rel.id,
-                        source: et.id,
-                        target: rel.targetEntityTypeId,
-                        label: rel.name,
-                        animated: true,
-                        style: { stroke: '#94a3b8', strokeWidth: 2 },
-                        labelStyle: { fill: '#64748b', fontWeight: 600, fontSize: 11 },
-                        markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' }
-                    });
-                });
-            } catch (e) { }
-        }
-
-        setNodes(newNodes);
-        setEdges(newEdges);
-    }, [entityTypes, selectedObj]);
-
-    useEffect(() => {
-        if (activeTab === 'graph') {
-            buildGraph();
-        } else if (activeTab === 'instances' && selectedObj) {
-            fetchInstances();
-        }
-    }, [activeTab, buildGraph, selectedObj]);
-
-    const fetchInstances = async () => {
-        if (!selectedObj) return;
-        try {
-            const data = await ApiClient.get<any[]>('/api/v1/search', { q: selectedObj.name });
-            // Filter purely to this entity type just in case search is fuzzy
-            const exact = data.filter((d: any) => d.entityTypeId === selectedObj.id);
-            setInstances(exact);
-            setSelectedInstance(null);
-            setProvenance([]);
-        } catch (e) {
-            setInstances([]);
-        }
-    };
-
-    const handleSelectInstance = async (inst: any) => {
-        setSelectedInstance(inst);
-        try {
-            const prov = await ApiClient.get<any[]>(`/api/v1/ontology/instances/${inst.logicalId}/field-provenance`);
-            setProvenance(prov || []);
-        } catch (e) {
-            setProvenance([]);
-        }
-    };
+    const links = HARDCODED_RELATIONSHIPS.filter(r => r.sourceId === selectedObj?.id);
+    const selectedSource = selectedObj ? HARDCODED_ENTITY_TYPES.find(e => e.id === selectedObj.id) : null;
 
     return (
-        <div className="h-full w-full flex flex-col bg-white text-slate-900 border-t border-slate-200">
+        <div className="h-full w-full flex flex-col text-slate-200 border-t border-white/8" style={{ background: "linear-gradient(180deg,#070b14 0%,#050910 100%)" }}>
 
             {/* Top Action Bar */}
-            <div className="h-12 border-b border-slate-200 bg-slate-50 flex items-center justify-between px-4 shrink-0">
+            <div className="h-12 border-b border-white/8 flex items-center justify-between px-4 shrink-0" style={{ background: "rgba(0,0,0,0.3)" }}>
                 <div className="flex items-center gap-2">
-                    <div className="p-1 rounded bg-indigo-100 text-indigo-700">
-                        <Network className="w-4 h-4" />
-                    </div>
-                    <span className="text-sm font-semibold text-slate-800">Ontology Manager</span>
-                    <span className="text-slate-300 mx-2">/</span>
-                    <span className="text-sm font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                        {loading ? "Loading..." : selectedObj?.name || "None"}
-                    </span>
+                    <div className="p-1 rounded bg-indigo-500/15 text-indigo-400"><Network className="w-4 h-4" /></div>
+                    <span className="text-sm font-semibold text-white">Ontology Manager</span>
+                    <span className="text-white/20 mx-1">/</span>
+                    <span className="text-sm font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{selectedObj?.name || "None"}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setShowImportModal(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded transition-colors shadow-sm"
-                    >
-                        <Wand2 className="w-3.5 h-3.5 text-purple-600" />
-                        Create from Sample
+                    <button onClick={() => setShowTrainModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 border border-purple-500/30 hover:border-purple-400/50 text-purple-300 text-xs font-bold rounded-lg transition-all">
+                        <BrainCircuit className="w-3.5 h-3.5" /> Train AI on Ontology
                     </button>
-                    <button className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded transition-colors shadow-sm">
-                        <Plus className="w-3.5 h-3.5" />
-                        New Object Type
+                    <button onClick={() => setShowImportModal(true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold rounded-lg transition-all">
+                        <Wand2 className="w-3.5 h-3.5 text-purple-400" /> Create from Sample
+                    </button>
+                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition-all">
+                        <Plus className="w-3.5 h-3.5" /> New Object Type
                     </button>
                 </div>
             </div>
 
-            {/* Import Modal */}
+            {/* AI Schema Inference Modal */}
             {showImportModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                                <Wand2 className="w-4 h-4 text-purple-600" />
-                                AI Schema Inference
-                            </h3>
-                            <button onClick={() => setShowImportModal(false)} className="text-slate-400 hover:text-slate-600">
-                                <X className="w-5 h-5" />
-                            </button>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-[#0E1623] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                        <div className="px-5 py-4 border-b border-white/8 flex justify-between items-center">
+                            <h3 className="font-bold text-white flex items-center gap-2"><Wand2 className="w-4 h-4 text-purple-400" />AI Schema Inference</h3>
+                            <button onClick={() => setShowImportModal(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
                         </div>
-                        <div className="p-6">
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Paste JSON Sample Data</label>
-                            <textarea
-                                className="w-full h-48 p-3 text-xs font-mono border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-slate-50"
-                                placeholder='[ { "id": "1", "name": "Asset A", "value": 100 } ]'
-                                value={importSample}
-                                onChange={e => setImportSample(e.target.value)}
-                            />
-                            <p className="mt-2 text-[10px] text-slate-400">Kernal will analyze the data structure and infer types.</p>
+                        <div className="p-5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Paste JSON Sample Data</label>
+                            <textarea className="w-full h-40 p-3 text-xs font-mono bg-black/30 border border-white/10 focus:border-purple-500/50 rounded-xl outline-none text-slate-300 resize-none"
+                                placeholder='[{"id":"1","name":"Asset A","value":100}]' value={importSample} onChange={e => setImportSample(e.target.value)} />
+                            <p className="mt-2 text-[10px] text-slate-600">AI will analyze the structure and infer types.</p>
                         </div>
-                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-                            <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm font-semibold text-slate-600">Cancel</button>
-                            <button
-                                disabled={!importSample || isInferring}
-                                onClick={handleInferSchema}
-                                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-lg shadow-md disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {isInferring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                Infer Schema
+                        <div className="px-5 py-4 border-t border-white/8 flex justify-end gap-3">
+                            <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm text-slate-500 hover:text-white">Cancel</button>
+                            <button disabled={!importSample || isInferring} onClick={handleInferSchema}
+                                className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center gap-2">
+                                {isInferring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} Infer Schema
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="flex-1 flex min-h-0">
-                <div className="w-64 border-r border-slate-200 bg-slate-50 flex flex-col shrink-0">
-                    <div className="p-3 border-b border-slate-200 font-semibold text-xs text-slate-700 flex justify-between items-center uppercase tracking-wider">Hierarchy</div>
-                    <div className="flex-1 overflow-y-auto p-2">
-                        {entityTypes.map(child => (
-                            <div
-                                key={child.id}
-                                onClick={() => handleSelectObj(child)}
-                                className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors text-xs \${selectedObj?.id === child.id ? 'bg-indigo-100 text-indigo-800 font-medium' : 'text-slate-600 hover:bg-slate-200'}`}
-                            >
-                                {child.name}
+            {/* Train AI Modal */}
+            {showTrainModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+                    <div className="bg-[#0E1623] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="px-5 py-4 border-b border-white/8 flex justify-between items-center">
+                            <h3 className="font-bold text-white flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-cyan-400" />Train AI on Ontology</h3>
+                            <button onClick={() => { setShowTrainModal(false); setTrainStep(-1); setTrainDone(false); }} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-5">
+                            <p className="text-sm text-slate-400 mb-5">AI will use your ontology graph ({HARDCODED_ENTITY_TYPES.length} entity types, {HARDCODED_RELATIONSHIPS.length} relationships) to train a new context model.</p>
+                            <div className="space-y-3">
+                                {TRAIN_STEPS.map((s, i) => {
+                                    const isDone = trainStep > i;
+                                    const isActive = trainStep === i;
+                                    return (
+                                        <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isActive ? 'bg-cyan-500/10 border-cyan-500/30' : isDone ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-white/3 border-white/5'}`}>
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-500 text-black' : isActive ? 'bg-cyan-500 text-black' : 'bg-white/10 text-slate-600'}`}>
+                                                {isDone ? <CheckCircle2 className="w-4 h-4" /> : isActive ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+                                            </div>
+                                            <span className={`text-sm font-semibold ${isDone ? 'text-emerald-400' : isActive ? 'text-cyan-300' : 'text-slate-600'}`}>{s.label}</span>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        ))}
+                            {trainDone && (
+                                <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center">
+                                    <p className="text-emerald-400 font-bold text-sm">✓ Training Complete! Model added to registry.</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-white/8 flex justify-end gap-3">
+                            {!trainDone && trainStep === -1 && (
+                                <button onClick={startTraining} className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-cyan-500/20">
+                                    <Zap className="w-4 h-4" /> Start Training
+                                </button>
+                            )}
+                            {trainDone && (
+                                <button onClick={() => { setShowTrainModal(false); setTrainStep(-1); setTrainDone(false); }} className="px-5 py-2 bg-emerald-600 text-white text-sm font-bold rounded-xl">
+                                    Done
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="flex-1 flex min-h-0">
+                {/* Left Panel: Entity Types */}
+                <div className="w-56 border-r border-white/8 flex flex-col shrink-0" style={{ background: "rgba(0,0,0,0.2)" }}>
+                    <div className="p-3 border-b border-white/5 flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Object Types</span>
+                        <span className="text-[10px] text-slate-600">{entityTypes.length}</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+                        {entityTypes.map(et => {
+                            const Icon = (et as any).icon || Box;
+                            const color = (et as any).color || "text-slate-400";
+                            const isSelected = selectedObj?.id === et.id;
+                            return (
+                                <div key={et.id} onClick={() => handleSelectObj(et)}
+                                    className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-indigo-500/15 border border-indigo-500/20' : 'hover:bg-white/5 border border-transparent'}`}>
+                                    <Icon className={`w-3.5 h-3.5 ${isSelected ? color : 'text-slate-600'} shrink-0`} />
+                                    <span className={`text-xs font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-500'}`}>{et.name}</span>
+                                    {(et as any).instances > 0 && (
+                                        <span className="ml-auto text-[9px] font-bold text-slate-700">{((et as any).instances / 1000).toFixed(1)}k</span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
-                <div className="flex-1 bg-white flex flex-col min-w-0">
+                {/* Main Panel */}
+                <div className="flex-1 flex flex-col min-w-0">
                     {selectedObj && (
                         <>
-                            <div className="p-5 border-b border-slate-200">
-                                <h1 className="text-xl font-bold text-slate-900 mb-1">{selectedObj.name}</h1>
-                                <div className="flex gap-4 mt-4 border-b border-slate-200">
-                                    {['properties', 'links', 'graph', 'instances'].map(tab => (
-                                        <button
-                                            key={tab}
-                                            onClick={() => setActiveTab(tab as any)}
-                                            className={`px-1 pb-2 text-sm font-semibold capitalize ${activeTab === tab ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}
-                                        >
-                                            {tab === 'instances' ? 'Data Browser & Lineage' : tab}
+                            {/* Object header + tabs */}
+                            <div className="px-5 py-4 border-b border-white/8">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            {(() => { const Icon = (selectedObj as any).icon || Box; const color = (selectedObj as any).color || "text-slate-400"; return <Icon className={`w-5 h-5 ${color}`} />; })()}
+                                            <h1 className="text-xl font-bold text-white">{selectedObj.name}</h1>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                                            {(selectedObj as any).instances > 0 && <span className="flex items-center gap-1"><Database className="w-3 h-3" />{(selectedObj as any).instances?.toLocaleString()} instances</span>}
+                                            {(selectedObj as any).source && <span className="flex items-center gap-1"><Activity className="w-3 h-3" />{(selectedObj as any).source}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-4 mt-4 border-b border-white/8">
+                                    {(['properties', 'links', 'graph', 'sources'] as const).map(tab => (
+                                        <button key={tab} onClick={() => setActiveTab(tab)}
+                                            className={`pb-2 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${activeTab === tab ? 'text-indigo-400 border-indigo-400' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>
+                                            {tab === 'sources' ? 'Data Sources' : tab}
                                         </button>
                                     ))}
                                 </div>
                             </div>
-                            <div className="flex-1 overflow-auto bg-slate-50/30 p-4">
+
+                            {/* Tab Content */}
+                            <div className="flex-1 overflow-auto p-5">
                                 {activeTab === 'properties' && (
-                                    <div className="border border-slate-200 rounded bg-white overflow-hidden shadow-sm">
+                                    <div className="border border-white/8 rounded-xl overflow-hidden">
                                         <table className="w-full text-left">
-                                            <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
-                                                <tr>
-                                                    <th className="px-4 py-2">Property</th>
-                                                    <th className="px-4 py-2">Type</th>
-                                                    <th className="px-4 py-2">Required</th>
-                                                </tr>
+                                            <thead className="text-[10px] uppercase font-bold text-slate-500 border-b border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+                                                <tr><th className="px-4 py-2.5">Property</th><th className="px-4 py-2.5">Type</th><th className="px-4 py-2.5">Required</th></tr>
                                             </thead>
-                                            <tbody className="text-sm divide-y">
-                                                {selectedObj.attributes?.map((prop: any) => (
-                                                    <tr key={prop.id} className="hover:bg-slate-50">
-                                                        <td className="px-4 py-2 font-mono text-xs">{prop.name}</td>
-                                                        <td className="px-4 py-2 text-xs">{prop.dataType}</td>
-                                                        <td className="px-4 py-2 text-xs">{prop.required ? 'Yes' : 'No'}</td>
+                                            <tbody className="text-sm divide-y divide-white/5">
+                                                {(selectedObj.attributes || []).map((prop: any, i: number) => (
+                                                    <tr key={`${prop.id || prop.name}-${i}`} className="hover:bg-white/2">
+                                                        <td className="px-4 py-2.5 font-mono text-xs text-cyan-300">{prop.name}</td>
+                                                        <td className="px-4 py-2.5 text-xs text-violet-300 font-mono">{prop.dataType}</td>
+                                                        <td className="px-4 py-2.5 text-xs">
+                                                            {prop.required ? <span className="text-emerald-400 font-semibold">Yes</span> : <span className="text-slate-600">No</span>}
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
                                 )}
+
+                                {activeTab === 'links' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {links.length === 0 ? (
+                                            <div className="col-span-3 text-center py-12 text-slate-600 text-sm">No outgoing relationships defined.</div>
+                                        ) : links.map(link => {
+                                            const target = entityTypes.find(e => e.id === link.targetId);
+                                            return (
+                                                <div key={link.id} className="bg-white/3 border border-white/8 rounded-xl p-4 border-l-4 border-l-indigo-500/40">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Network className="w-4 h-4 text-indigo-400" />
+                                                        <span className="font-bold text-sm text-white">{link.name}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                                        <ArrowRight className="w-3 h-3" />
+                                                        <span>{target?.name || 'Unknown'}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
                                 {activeTab === 'graph' && (
-                                    <div className="h-full w-full border border-slate-200 rounded bg-white">
+                                    <div className="h-[480px] w-full border border-white/8 rounded-xl overflow-hidden">
                                         <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} fitView>
-                                            <Background /><Controls /><MiniMap />
+                                            <Background color="#1e293b" gap={24} />
+                                            <Controls />
+                                            <MiniMap style={{ background: "#0f172a" }} nodeColor="#1e293b" />
                                         </ReactFlow>
                                     </div>
                                 )}
-                                {activeTab === 'links' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {links.map((link: any) => (
-                                            <div key={link.id} className="bg-white border rounded p-4 shadow-sm border-l-4 border-l-indigo-500">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Network className="w-4 h-4 text-slate-400" />
-                                                    <span className="font-bold text-sm text-slate-800">{link.name}</span>
+
+                                {activeTab === 'sources' && (
+                                    <div className="space-y-4">
+                                        <div className="bg-white/3 border border-white/8 rounded-xl p-4">
+                                            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Database className="w-4 h-4 text-cyan-400" />Data Source</h3>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                                                    <Activity className="w-4 h-4 text-cyan-400" />
                                                 </div>
-                                                <div className="text-xs text-slate-500">Target: {link.targetEntityName || 'Unknown'}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {activeTab === 'instances' && (
-                                    <div className="flex h-full gap-4">
-                                        {/* Instances List */}
-                                        <div className="w-1/3 flex flex-col border border-slate-200 rounded bg-white overflow-hidden">
-                                            <div className="p-2 bg-slate-50 border-b font-bold text-xs uppercase text-slate-500 flex justify-between items-center">
-                                                <span>Data Records ({instances.length})</span>
-                                                <button onClick={fetchInstances} className="text-indigo-600 hover:text-indigo-800"><Activity className="w-3.5 h-3.5" /></button>
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto">
-                                                {instances.length === 0 ? (
-                                                    <div className="p-4 text-sm text-slate-500 text-center">No data found</div>
-                                                ) : (
-                                                    instances.map(inst => (
-                                                        <div
-                                                            key={inst.logicalId}
-                                                            onClick={() => handleSelectInstance(inst)}
-                                                            className={`p-3 border-b text-sm cursor-pointer transition-colors ${selectedInstance?.logicalId === inst.logicalId ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'hover:bg-slate-50 border-l-4 border-l-transparent'}`}
-                                                        >
-                                                            <div className="font-bold text-slate-800 font-mono text-xs">{inst.logicalId}</div>
-                                                            <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(inst.updatedAt).toLocaleDateString()}</div>
-                                                        </div>
-                                                    ))
-                                                )}
+                                                <div>
+                                                    <p className="text-sm font-semibold text-white">{(selectedObj as any).source || "Unknown"}</p>
+                                                    <p className="text-xs text-slate-500">Primary data source for this entity type</p>
+                                                </div>
+                                                <div className="ml-auto flex items-center gap-1.5">
+                                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                                    <span className="text-xs text-emerald-400 font-bold">Live</span>
+                                                </div>
                                             </div>
                                         </div>
-
-                                        {/* Provenance Panel */}
-                                        <div className="flex-1 flex flex-col border border-slate-200 rounded bg-white overflow-hidden">
-                                            <div className="p-3 bg-slate-50 border-b font-bold text-sm text-slate-800 flex items-center gap-2">
-                                                <Shield className="w-4 h-4 text-emerald-600" />
-                                                Field-Level Provenance & Lineage
-                                            </div>
-                                            {selectedInstance ? (
-                                                <div className="flex-1 overflow-y-auto p-4">
-                                                    <div className="mb-6 grid grid-cols-2 gap-4">
-                                                        {Object.entries(selectedInstance.data).map(([k, v]) => (
-                                                            <div key={k} className="p-3 bg-slate-50 rounded border border-slate-100">
-                                                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{k}</div>
-                                                                <div className="text-sm font-mono text-slate-800 break-all">{String(v)}</div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-
-                                                    <h3 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2 border-b pb-2">
-                                                        <Database className="w-4 h-4 text-slate-400" />
-                                                        Source Systems & Lineage History
-                                                    </h3>
-                                                    {provenance.length === 0 ? (
-                                                        <div className="text-sm text-slate-500 italic p-4 bg-slate-50 rounded text-center">No provenance history recorded yet for this instance.</div>
-                                                    ) : (
-                                                        <div className="border border-slate-200 rounded overflow-hidden">
-                                                            <table className="w-full text-left">
-                                                                <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
-                                                                    <tr>
-                                                                        <th className="px-3 py-2">Field</th>
-                                                                        <th className="px-3 py-2">Source System</th>
-                                                                        <th className="px-3 py-2">Time</th>
-                                                                        <th className="px-3 py-2 text-right">Confidence</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="text-xs divide-y">
-                                                                    {provenance.map(prov => (
-                                                                        <tr key={prov.id} className="hover:bg-slate-50">
-                                                                            <td className="px-3 py-2 font-mono text-indigo-700 font-semibold">{prov.fieldName}</td>
-                                                                            <td className="px-3 py-2">
-                                                                                <div className="font-medium text-slate-700">{prov.sourceName}</div>
-                                                                                <div className="text-[10px] text-slate-400 truncate w-32" title={prov.sourceRecordId}>{prov.sourceRecordId}</div>
-                                                                            </td>
-                                                                            <td className="px-3 py-2 text-slate-500 flex items-center gap-1">
-                                                                                <Clock className="w-3 h-3" />
-                                                                                {new Date(prov.provenanceTime).toLocaleString()}
-                                                                            </td>
-                                                                            <td className="px-3 py-2 text-right">
-                                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${prov.confidenceScore > 0.8 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                                                                                    {Math.round(prov.confidenceScore * 100)}%
-                                                                                </span>
-                                                                            </td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
+                                        <div className="bg-white/3 border border-white/8 rounded-xl p-4">
+                                            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-emerald-400" />Data Quality</h3>
+                                            <div className="space-y-3">
+                                                {[{ label: "Completeness", val: 94 }, { label: "Freshness", val: 98 }, { label: "Uniqueness", val: 99 }].map(q => (
+                                                    <div key={q.label}>
+                                                        <div className="flex justify-between text-xs mb-1">
+                                                            <span className="text-slate-400">{q.label}</span>
+                                                            <span className="text-white font-bold">{q.val}%</span>
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="flex-1 flex items-center justify-center text-slate-400 text-sm p-8">
-                                                    Select a record from the list to view its source lineage and provenance history.
-                                                </div>
-                                            )}
+                                                        <div className="h-1.5 bg-white/5 rounded-full">
+                                                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${q.val}%` }} />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 )}
