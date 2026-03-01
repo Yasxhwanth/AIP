@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import CommandPalette from "@/components/CommandPalette";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "Palantir AIP",
@@ -18,7 +19,10 @@ export default function RootLayout({
         {/* Global Command Palette (Cmd+K) */}
         <CommandPalette />
         <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden relative w-full">
-          {children}
+          <Sidebar />
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+            {children}
+          </div>
         </div>
       </body>
     </html>

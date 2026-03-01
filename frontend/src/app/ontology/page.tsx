@@ -1,381 +1,525 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import ReactFlow, {
+    Background, Controls, Node, Edge, useNodesState, useEdgesState,
+    Handle, Position, BackgroundVariant, NodeProps, MiniMap,
+    BaseEdge, getSmoothStepPath
+} from "reactflow";
+import "reactflow/dist/style.css";
 import {
-    Network, Search, Plus, Loader2, Share2, Wand2, X,
-    Database, Clock, Shield, Activity, ChevronDown,
-    CheckCircle2, BrainCircuit, Zap, Truck, Users,
-    ShoppingCart, MapPin, AlertTriangle, Box, ArrowRight
+    MousePointer2, LayoutGrid, Undo2, Eraser, Maximize2,
+    Palette, Search, Trash2, AlignCenter, Eye, ChevronRight,
+    ChevronLeft, Layers, History, Code2, Activity, AlertCircle,
+    ArrowRightLeft, Plus, X, Filter, BookOpen, Settings, Link2,
+    Database, GitBranch, RefreshCw, Zap, Monitor
 } from "lucide-react";
-import ReactFlow, { MiniMap, Controls, Background, useNodesState, useEdgesState, Edge, Node, MarkerType } from 'reactflow';
-import 'reactflow/dist/style.css';
-import { ApiClient } from "@/lib/apiClient";
-import * as T from '@/lib/types';
 
-// ── Hardcoded Ontology ────────────────────────────────────────────────────────
-const HARDCODED_ENTITY_TYPES = [
-    { id: "et-fleet", name: "FleetAsset", icon: Truck, color: "text-cyan-400", instances: 4521, source: "Fleet SCADA System", attributes: [{ name: "assetId", dataType: "STRING", required: true }, { name: "fuelLevel", dataType: "NUMBER", required: false }, { name: "status", dataType: "STRING", required: true }, { name: "location", dataType: "STRING", required: false }, { name: "lastService", dataType: "DATETIME", required: false }] },
-    { id: "et-supplier", name: "Supplier", icon: ShoppingCart, color: "text-violet-400", instances: 1204, source: "Supplier Portal API", attributes: [{ name: "supplierId", dataType: "STRING", required: true }, { name: "riskScore", dataType: "NUMBER", required: false }, { name: "leadTimeDays", dataType: "NUMBER", required: false }, { name: "country", dataType: "STRING", required: false }] },
-    { id: "et-employee", name: "Employee", icon: Users, color: "text-emerald-400", instances: 892, source: "Employee HR Dataset", attributes: [{ name: "employeeId", dataType: "STRING", required: true }, { name: "department", dataType: "STRING", required: false }, { name: "role", dataType: "STRING", required: false }, { name: "startDate", dataType: "DATETIME", required: false }] },
-    { id: "et-location", name: "Location", icon: MapPin, color: "text-amber-400", instances: 47, source: "Multiple", attributes: [{ name: "locationId", dataType: "STRING", required: true }, { name: "latitude", dataType: "NUMBER", required: false }, { name: "longitude", dataType: "NUMBER", required: false }, { name: "type", dataType: "STRING", required: false }] },
-    { id: "et-workorder", name: "WorkOrder", icon: AlertTriangle, color: "text-orange-400", instances: 321, source: "Fleet SCADA System", attributes: [{ name: "orderId", dataType: "STRING", required: true }, { name: "priority", dataType: "STRING", required: false }, { name: "status", dataType: "STRING", required: false }, { name: "dueDate", dataType: "DATETIME", required: false }] },
-    { id: "et-customer", name: "Customer", icon: Users, color: "text-pink-400", instances: 31590, source: "Customer CRM Export", attributes: [{ name: "customerId", dataType: "STRING", required: true }, { name: "segment", dataType: "STRING", required: false }, { name: "churnScore", dataType: "NUMBER", required: false }, { name: "ltv", dataType: "NUMBER", required: false }] },
+// ─── Palantir AIP style constants ─────────────────────────────────────────────
+// Matches /build/ontology and /build/actions
+const C = {
+    bg: "#F5F8FA",
+    white: "#FFFFFF",
+    border: "#CED9E0",
+    text: "#182026",
+    sub: "#5C7080",
+    accent: "#137CBD",
+    pill: "#EBF1F5",
+    red: "#DB3737",
+    green: "#0F9960",
+    amber: "#D9822B",
+};
+
+// ─── Node type styling (for graph canvas — stays dark for readability) ────────
+const NODE_TYPES: Record<string, { border: string; bg: string; text: string; label: string }> = {
+    raw: { border: "#3B82F6", bg: "#EBF1F5", text: "#1D4ED8", label: "Dataset" },
+    transform: { border: "#BE185D", bg: "#FDF2F8", text: "#9D174D", label: "Transform" },
+    ontology: { border: "#059669", bg: "#ECFDF5", text: "#065F46", label: "Ontology Output" },
+    training: { border: "#6B7280", bg: "#F9FAFB", text: "#374151", label: "Training Object" },
+    workshop: { border: "#D97706", bg: "#FFFBEB", text: "#92400E", label: "Workshop App" },
+};
+
+// ─── Source bead groups ───────────────────────────────────────────────────────
+const SOURCE_GROUPS = [
+    { id: "gcss", name: "GCSS-A", color: "#E87678", count: 4 },
+    { id: "fms", name: "FMS", color: "#A78BFA", count: 54 },
+    { id: "dtms", name: "DTMS", color: "#60A5FA", count: 10 },
+    { id: "atrrs", name: "ATRRS", color: "#34D399", count: 22 },
+    { id: "gomo", name: "GOMO", color: "#FBBF24", count: 2 },
+    { id: "core", name: "CORE ELEMENTS", color: "#818CF8", count: 10 },
+    { id: "liw", name: "LIW", color: "#F472B6", count: 14 },
+    { id: "tapdb", name: "TAPDB", color: "#C084FC", count: 196 },
+    { id: "medpros", name: "MEDPROS/MODS", color: "#86EFAC", count: 25 },
+    { id: "dapmis", name: "DAPMIS", color: "#FCA5A5", count: 2 },
+    { id: "iperms", name: "iPerms", color: "#4ADE80", count: 2 },
+    { id: "integ", name: "Integration", color: "#FB7185", count: 62 },
+];
+const SRC_MAP = Object.fromEntries(SOURCE_GROUPS.map(s => [s.id, s]));
+
+// ─── Lineage graph data ───────────────────────────────────────────────────────
+const LINEAGE_NODES: Node[] = [
+    { id: "n1", position: { x: 40, y: 50 }, data: { label: "airports/timeseries", type: "raw" }, type: "lineage" },
+    { id: "n2", position: { x: 40, y: 100 }, data: { label: "enriched_airports", type: "raw" }, type: "lineage" },
+    { id: "n3", position: { x: 40, y: 150 }, data: { label: "airport.Planes", type: "raw" }, type: "lineage" },
+    { id: "n4", position: { x: 40, y: 220 }, data: { label: "precomputed.reports", type: "raw" }, type: "lineage" },
+    { id: "n5", position: { x: 40, y: 320 }, data: { label: "enrichedFlights_ts_nonexp", type: "raw" }, type: "lineage" },
+    { id: "n6", position: { x: 40, y: 390 }, data: { label: "raw_flights", type: "raw" }, type: "lineage" },
+    { id: "n7", position: { x: 40, y: 460 }, data: { label: "class/flight_alerts", type: "raw" }, type: "lineage" },
+    { id: "t1", position: { x: 260, y: 100 }, data: { label: "Ontology Proj: AvroMeta", type: "transform" }, type: "lineage" },
+    { id: "t2", position: { x: 260, y: 200 }, data: { label: "Transform: Flight Delays", type: "transform" }, type: "lineage" },
+    { id: "t3", position: { x: 260, y: 340 }, data: { label: "Ontology: AircraftFlights", type: "transform" }, type: "lineage" },
+    { id: "t4", position: { x: 430, y: 270 }, data: { label: "flight_alerts_solved", type: "raw" }, type: "lineage" },
+    { id: "t5", position: { x: 260, y: 430 }, data: { label: "envSched/flight_alerts", type: "transform" }, type: "lineage" },
+    { id: "t6", position: { x: 430, y: 380 }, data: { label: "Transform: FlightDelays/fights", type: "transform" }, type: "lineage" },
+    { id: "t7", position: { x: 430, y: 460 }, data: { label: "airline_codes", type: "raw" }, type: "lineage" },
+    { id: "t8", position: { x: 430, y: 540 }, data: { label: "Strategy: AircraftRoutes", type: "transform" }, type: "lineage" },
+    { id: "t9", position: { x: 260, y: 540 }, data: { label: "class/Aircraft", type: "raw" }, type: "lineage" },
+    { id: "o1", position: { x: 620, y: 50 }, data: { label: "[Training] Airport", type: "ontology" }, type: "lineage" },
+    { id: "o2", position: { x: 620, y: 120 }, data: { label: "[Training] Runway", type: "ontology" }, type: "lineage" },
+    { id: "o3", position: { x: 620, y: 190 }, data: { label: "Ontology: AircraftFlight", type: "ontology" }, type: "lineage" },
+    { id: "o4", position: { x: 620, y: 270 }, data: { label: "[Training] Flight Alert", type: "ontology" }, type: "lineage" },
+    { id: "o5", position: { x: 620, y: 350 }, data: { label: "[Training] Delay", type: "ontology" }, type: "lineage" },
+    { id: "o6", position: { x: 620, y: 420 }, data: { label: "[Training] Flight", type: "ontology" }, type: "lineage" },
+    { id: "o7", position: { x: 620, y: 490 }, data: { label: "[Training] Aircraft", type: "ontology" }, type: "lineage" },
+    { id: "o8", position: { x: 620, y: 560 }, data: { label: "[Training] Airline", type: "ontology" }, type: "lineage" },
+    { id: "w1", position: { x: 840, y: 50 }, data: { label: "Aircraft Overview Tab", type: "workshop" }, type: "lineage" },
+    { id: "w2", position: { x: 840, y: 270 }, data: { label: "Sample Workshop Module", type: "workshop" }, type: "lineage" },
+    { id: "w3", position: { x: 840, y: 420 }, data: { label: "Route Context Tab", type: "workshop" }, type: "lineage" },
+    { id: "w4", position: { x: 840, y: 560 }, data: { label: "Refine Fleet...", type: "workshop" }, type: "lineage" },
 ];
 
-const HARDCODED_RELATIONSHIPS = [
-    { id: "r-1", name: "assignedTo", sourceId: "et-workorder", targetId: "et-employee" },
-    { id: "r-2", name: "locatedAt", sourceId: "et-fleet", targetId: "et-location" },
-    { id: "r-3", name: "suppliedBy", sourceId: "et-fleet", targetId: "et-supplier" },
-    { id: "r-4", name: "worksAt", sourceId: "et-employee", targetId: "et-location" },
-    { id: "r-5", name: "serviceFor", sourceId: "et-workorder", targetId: "et-fleet" },
+const LINEAGE_EDGES: Edge[] = [
+    { id: "e1", source: "n1", target: "t1" }, { id: "e2", source: "n2", target: "t1" }, { id: "e3", source: "n3", target: "t1" },
+    { id: "e4", source: "n4", target: "t2" }, { id: "e5", source: "t1", target: "o1" }, { id: "e6", source: "t1", target: "o2" },
+    { id: "e7", source: "t2", target: "o3" }, { id: "e8", source: "t2", target: "t4" }, { id: "e9", source: "t4", target: "o4" },
+    { id: "e10", source: "n5", target: "t3" }, { id: "e11", source: "t3", target: "o5" }, { id: "e12", source: "t6", target: "o6" },
+    { id: "e13", source: "t5", target: "t6" }, { id: "e14", source: "n6", target: "t5" }, { id: "e15", source: "n7", target: "t5" },
+    { id: "e16", source: "t7", target: "o8" }, { id: "e17", source: "t8", target: "o7" }, { id: "e18", source: "t9", target: "t8" },
+    { id: "e19", source: "o1", target: "w1" }, { id: "e20", source: "o4", target: "w2" }, { id: "e21", source: "o5", target: "w3" },
+    { id: "e22", source: "o6", target: "w4" },
+].map(e => ({ ...e, type: "lineage", data: {} }));
+
+// ─── Object types for grouped view ───────────────────────────────────────────
+const OBJECT_TYPES = [
+    {
+        id: "esn", name: "Equipment Serial Number", icon: Settings,
+        chains: [
+            ["gcss", "fms", "dtms", "atrrs", "gomo", "core", "liw", "tapdb", "medpros", "dapmis", "iperms", "integ"],
+            ["gcss", "fms", "dtms", "atrrs", "gomo"],
+        ],
+        relCount: 1, relTarget: "Unit",
+        totalObjects: 116534,
+        preview: [
+            { BASE: "KIRTLAND", COMPONENT: "Reserve", CONDITION: "FMC", COUNTRY: "USA", STATE: "NEW MEXICO" },
+            { BASE: "HOHENFELS", COMPONENT: "Active", CONDITION: "FMC", COUNTRY: "GERMANY", STATE: "Unlisted" },
+            { BASE: "HOHENFELS", COMPONENT: "Active", CONDITION: "FMC", COUNTRY: "GERMANY", STATE: "Unlisted" },
+        ]
+    },
+    {
+        id: "unit", name: "Unit", icon: GitBranch,
+        chains: [["gcss", "fms", "dtms", "atrrs", "gomo", "core", "liw", "tapdb"]],
+        relCount: 2, relTarget: "Soldier",
+        totalObjects: 8342,
+        preview: [
+            { BASE: "FORSCOM", COMPONENT: "Active", CONDITION: "FMC", COUNTRY: "USA", STATE: "GEORGIA" },
+            { BASE: "USAREUR", COMPONENT: "Active", CONDITION: "FMC", COUNTRY: "GERMANY", STATE: "Unlisted" },
+        ]
+    },
+    {
+        id: "soldier", name: "Soldier", icon: Eye,
+        chains: [["dtms", "atrrs", "core", "liw", "medpros", "dapmis", "iperms", "integ"]],
+        relCount: null, relTarget: null,
+        totalObjects: 479281,
+        preview: [
+            { BASE: "BRAGG", COMPONENT: "Active", CONDITION: "FMC", COUNTRY: "USA", STATE: "NORTH CAROLINA" },
+        ]
+    },
 ];
 
-// Training steps
-const TRAIN_STEPS = [
-    { label: "Snapshot Ontology Graph", done: false },
-    { label: "Build Feature Vectors", done: false },
-    { label: "Configure Model Architecture", done: false },
-    { label: "Train & Validate", done: false },
-    { label: "Deploy to Registry", done: false },
-];
+// ─── Custom ReactFlow nodes ───────────────────────────────────────────────────
+const LineageNode = ({ data, selected }: NodeProps) => {
+    const d = data as any;
+    const st = NODE_TYPES[d.type] || NODE_TYPES.raw;
+    return (
+        <div style={{
+            padding: "3px 10px", borderRadius: 3, fontSize: 10, fontWeight: 600,
+            background: st.bg, border: `1.5px solid ${selected ? C.accent : st.border}`,
+            color: st.text, whiteSpace: "nowrap", maxWidth: 220,
+            boxShadow: selected ? `0 0 0 2px ${C.accent}40` : "0 1px 3px rgba(0,0,0,0.08)",
+            cursor: "pointer", fontFamily: "Inter, sans-serif"
+        }}>
+            <Handle type="target" position={Position.Left}
+                style={{ background: st.border, width: 6, height: 6, left: -3, border: `1px solid white` }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{d.label}</span>
+            <Handle type="source" position={Position.Right}
+                style={{ background: st.border, width: 6, height: 6, right: -3, border: `1px solid white` }} />
+        </div>
+    );
+};
 
-export default function OntologyBuilder() {
-    const [entityTypes, setEntityTypes] = useState(HARDCODED_ENTITY_TYPES);
-    const [selectedObj, setSelectedObj] = useState<any>(HARDCODED_ENTITY_TYPES[0]);
-    const [activeTab, setActiveTab] = useState<'properties' | 'links' | 'graph' | 'sources'>('properties');
-    const [loading, setLoading] = useState(false);
+const LineageEdge = ({ id, sourceX, sourceY, targetX, targetY, markerEnd }: any) => {
+    const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, borderRadius: 4 });
+    return <BaseEdge id={id} path={path} style={{ stroke: C.border, strokeWidth: 1.5 }} markerEnd={markerEnd} />;
+};
 
-    // AI Inference
-    const [showImportModal, setShowImportModal] = useState(false);
-    const [importSample, setImportSample] = useState("");
-    const [isInferring, setIsInferring] = useState(false);
+const nodeTypes = { lineage: LineageNode };
+const edgeTypes = { lineage: LineageEdge };
 
-    // Train AI
-    const [showTrainModal, setShowTrainModal] = useState(false);
-    const [trainStep, setTrainStep] = useState(-1);
-    const [trainDone, setTrainDone] = useState(false);
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function DataLineagePage() {
+    const [view, setView] = useState<"lineage" | "grouped">("lineage");
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [bottomTab, setBottomTab] = useState<"preview" | "history" | "code" | "build" | "health">("preview");
+    const [showBottom, setShowBottom] = useState(false);
+    const [showLegend, setShowLegend] = useState(true);
+    const [searchTerm, setSearchTerm] = useState("");
 
-    // React Flow
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const edgesWithMarker = LINEAGE_EDGES.map(e => ({
+        ...e, markerEnd: { type: "arrowclosed" as any, color: C.border, width: 12, height: 12 }
+    }));
 
-    const handleSelectObj = (obj: any) => {
-        setSelectedObj(obj);
-        setActiveTab('properties');
-    };
+    const [nodes, , onNodesChange] = useNodesState(LINEAGE_NODES);
+    const [edges, , onEdgesChange] = useEdgesState(edgesWithMarker);
 
-    const startTraining = () => {
-        setTrainStep(0);
-        setTrainDone(false);
-        let i = 0;
-        const interval = setInterval(() => {
-            setTrainStep(i + 1);
-            i++;
-            if (i >= TRAIN_STEPS.length) {
-                clearInterval(interval);
-                setTrainDone(true);
-            }
-        }, 900);
-    };
+    const onNodeClick = useCallback((_: any, node: Node) => {
+        setSelectedId(prev => prev === node.id ? null : node.id);
+        setShowBottom(true);
+        setBottomTab("preview");
+    }, []);
 
-    const buildGraph = useCallback(() => {
-        const positions = [
-            { x: 300, y: 50 }, { x: 50, y: 200 }, { x: 550, y: 200 },
-            { x: 50, y: 380 }, { x: 300, y: 380 }, { x: 550, y: 380 }
-        ];
-        const newNodes: Node[] = HARDCODED_ENTITY_TYPES.map((et, i) => ({
-            id: et.id,
-            data: { label: et.name },
-            position: positions[i] || { x: (i % 3) * 250 + 50, y: Math.floor(i / 3) * 180 + 50 },
-            style: {
-                background: selectedObj?.id === et.id ? '#1e293b' : '#0f172a',
-                color: '#f1f5f9', border: selectedObj?.id === et.id ? '2px solid #06b6d4' : '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '10px', padding: '10px 20px', fontWeight: 600, fontSize: 12,
-                boxShadow: selectedObj?.id === et.id ? '0 0 20px rgba(6,182,212,0.3)' : 'none'
-            }
-        }));
-        const newEdges: Edge[] = HARDCODED_RELATIONSHIPS.map(rel => ({
-            id: rel.id, source: rel.sourceId, target: rel.targetId, label: rel.name,
-            animated: true, style: { stroke: '#334155', strokeWidth: 1.5 },
-            labelStyle: { fill: '#64748b', fontWeight: 600, fontSize: 10 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#334155' }
-        }));
-        setNodes(newNodes); setEdges(newEdges);
-    }, [selectedObj]);
+    const selectedOT = OBJECT_TYPES.find(o => o.id === selectedId);
+    const selectedLN = LINEAGE_NODES.find(n => n.id === selectedId);
 
-    useEffect(() => {
-        if (activeTab === 'graph') buildGraph();
-        // Also try to augment with real entity types from backend
-        ApiClient.get<T.EntityType[]>('/entity-types').then(data => {
-            if (Array.isArray(data) && data.length > 0) {
-                const mapped = data.map((et: any) => ({ ...et, icon: Box, color: "text-slate-400", instances: 0, source: "Backend", attributes: et.attributes || [] }));
-                setEntityTypes(prev => {
-                    const ids = new Set(prev.map(e => e.id));
-                    return [...prev, ...mapped.filter((m: any) => !ids.has(m.id))];
-                });
-            }
-        }).catch(() => { });
-    }, [activeTab, buildGraph]);
-
-    const handleInferSchema = async () => {
-        if (!importSample) return;
-        setIsInferring(true);
-        try {
-            const sample = JSON.parse(importSample);
-            await ApiClient.post<any>('/api/v1/integration/infer-schema', { sample: Array.isArray(sample) ? sample : [sample], name: "Inferred_Type" });
-            setShowImportModal(false); setImportSample("");
-        } catch { alert("Failed to infer schema. Ensure valid JSON sample."); } finally { setIsInferring(false); }
-    };
-
-    const links = HARDCODED_RELATIONSHIPS.filter(r => r.sourceId === selectedObj?.id);
-    const selectedSource = selectedObj ? HARDCODED_ENTITY_TYPES.find(e => e.id === selectedObj.id) : null;
+    const TOOL_GROUPS = [
+        [MousePointer2, "Tools"], [LayoutGrid, "Layout"], [Undo2, "Undo/redo"],
+        [Eraser, "Clean"], [MousePointer2, "Select"], [Maximize2, "Expand"],
+        [Palette, "Color"], [Search, "Find"], [Trash2, "Remove"],
+        [AlignCenter, "Align"], [ArrowRightLeft, "Flow"],
+    ] as const;
 
     return (
-        <div className="h-full w-full flex flex-col text-slate-200 border-t border-white/8" style={{ background: "linear-gradient(180deg,#070b14 0%,#050910 100%)" }}>
+        <div className="flex flex-col h-full w-full overflow-hidden"
+            style={{ background: C.bg, color: C.text, fontFamily: "Inter, sans-serif" }}>
 
-            {/* Top Action Bar */}
-            <div className="h-12 border-b border-white/8 flex items-center justify-between px-4 shrink-0" style={{ background: "rgba(0,0,0,0.3)" }}>
-                <div className="flex items-center gap-2">
-                    <div className="p-1 rounded bg-indigo-500/15 text-indigo-400"><Network className="w-4 h-4" /></div>
-                    <span className="text-sm font-semibold text-white">Ontology Manager</span>
-                    <span className="text-white/20 mx-1">/</span>
-                    <span className="text-sm font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{selectedObj?.name || "None"}</span>
+            {/* ── TOOLBAR ── */}
+            <div className="h-11 shrink-0 flex items-center px-2 gap-0.5 border-b bg-white"
+                style={{ borderColor: C.border }}>
+
+                {/* View toggle - same style as /build/ontology mode toggle */}
+                <div className="flex bg-[#F5F8FA] border border-[#CED9E0] rounded overflow-hidden text-[11px] mr-2">
+                    {(["lineage", "grouped"] as const).map(m => (
+                        <button key={m} onClick={() => { setView(m); setSelectedId(null); setShowBottom(false); }}
+                            className={`px-3 h-7 font-bold capitalize transition-colors ${view === m ? "bg-[#137CBD] text-white" : "text-[#5C7080] hover:bg-[#E4E8ED]"}`}>
+                            {m === "lineage" ? "Full Lineage" : "Grouped by Source"}
+                        </button>
+                    ))}
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={() => setShowTrainModal(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 border border-purple-500/30 hover:border-purple-400/50 text-purple-300 text-xs font-bold rounded-lg transition-all">
-                        <BrainCircuit className="w-3.5 h-3.5" /> Train AI on Ontology
+
+                {/* Tool buttons */}
+                <div className="flex items-center h-full border-r border-[#CED9E0] pr-2 mr-1">
+                    {TOOL_GROUPS.map(([Icon, label]) => (
+                        <button key={label} title={label}
+                            className="flex flex-col items-center justify-center w-10 h-full gap-0.5 hover:bg-[#F5F8FA] hover:text-[#182026] rounded"
+                            style={{ fontSize: 9, color: C.sub, fontWeight: 700 }}>
+                            <Icon className="w-3.5 h-3.5" />{label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Right controls */}
+                <div className="ml-auto flex items-center gap-2">
+                    <div className="flex items-center h-7 border rounded px-1 gap-1" style={{ borderColor: C.border }}>
+                        <button title="Layout by color" className="p-1 rounded hover:bg-[#F5F8FA]"><LayoutGrid className="w-3.5 h-3.5 text-[#5C7080]" /></button>
+                        <button title="Group by color" className="p-1 rounded hover:bg-[#F5F8FA]"><Layers className="w-3.5 h-3.5 text-[#5C7080]" /></button>
+                        <button title="Legend" onClick={() => setShowLegend(v => !v)} className="p-1 rounded hover:bg-[#F5F8FA]">
+                            <Eye className={`w-3.5 h-3.5 ${showLegend ? "text-[#137CBD]" : "text-[#5C7080]"}`} />
+                        </button>
+                        <div className="w-px h-4 bg-[#CED9E0] mx-0.5" />
+                        <span className="text-[9px] font-bold text-[#5C7080] pr-1">Node color options</span>
+                    </div>
+                    <button className="h-7 flex items-center gap-1 px-3 rounded text-[11px] font-bold text-white"
+                        style={{ background: C.green }}>
+                        Custom color <ChevronRight className="w-3 h-3" />
                     </button>
-                    <button onClick={() => setShowImportModal(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-white/10 hover:border-white/20 text-slate-300 text-xs font-semibold rounded-lg transition-all">
-                        <Wand2 className="w-3.5 h-3.5 text-purple-400" /> Create from Sample
-                    </button>
-                    <button className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition-all">
-                        <Plus className="w-3.5 h-3.5" /> New Object Type
-                    </button>
+                    {view === "lineage" && (
+                        <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#5C7080]" />
+                            <input placeholder="Search…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                className="h-7 pl-6 pr-2 text-[11px] border rounded focus:outline-none focus:border-[#137CBD]"
+                                style={{ borderColor: C.border }} />
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* AI Schema Inference Modal */}
-            {showImportModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                    <div className="bg-[#0E1623] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                        <div className="px-5 py-4 border-b border-white/8 flex justify-between items-center">
-                            <h3 className="font-bold text-white flex items-center gap-2"><Wand2 className="w-4 h-4 text-purple-400" />AI Schema Inference</h3>
-                            <button onClick={() => setShowImportModal(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
-                        </div>
-                        <div className="p-5">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Paste JSON Sample Data</label>
-                            <textarea className="w-full h-40 p-3 text-xs font-mono bg-black/30 border border-white/10 focus:border-purple-500/50 rounded-xl outline-none text-slate-300 resize-none"
-                                placeholder='[{"id":"1","name":"Asset A","value":100}]' value={importSample} onChange={e => setImportSample(e.target.value)} />
-                            <p className="mt-2 text-[10px] text-slate-600">AI will analyze the structure and infer types.</p>
-                        </div>
-                        <div className="px-5 py-4 border-t border-white/8 flex justify-end gap-3">
-                            <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-sm text-slate-500 hover:text-white">Cancel</button>
-                            <button disabled={!importSample || isInferring} onClick={handleInferSchema}
-                                className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-xl disabled:opacity-50 flex items-center gap-2">
-                                {isInferring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />} Infer Schema
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* ── BODY ── */}
+            <div className="flex-1 flex min-h-0">
 
-            {/* Train AI Modal */}
-            {showTrainModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-                    <div className="bg-[#0E1623] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="px-5 py-4 border-b border-white/8 flex justify-between items-center">
-                            <h3 className="font-bold text-white flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-cyan-400" />Train AI on Ontology</h3>
-                            <button onClick={() => { setShowTrainModal(false); setTrainStep(-1); setTrainDone(false); }} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
-                        </div>
-                        <div className="p-5">
-                            <p className="text-sm text-slate-400 mb-5">AI will use your ontology graph ({HARDCODED_ENTITY_TYPES.length} entity types, {HARDCODED_RELATIONSHIPS.length} relationships) to train a new context model.</p>
-                            <div className="space-y-3">
-                                {TRAIN_STEPS.map((s, i) => {
-                                    const isDone = trainStep > i;
-                                    const isActive = trainStep === i;
+                {/* ── FULL LINEAGE VIEW ── */}
+                {view === "lineage" && (
+                    <div className="flex-1 relative">
+                        <ReactFlow
+                            nodes={nodes.map(n => ({ ...n, data: { ...n.data, selected: n.id === selectedId } }))}
+                            edges={edges}
+                            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+                            onNodeClick={onNodeClick}
+                            nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+                            fitView fitViewOptions={{ padding: 0.15 }}
+                            proOptions={{ hideAttribution: false }}>
+                            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color={C.border} />
+                            <Controls showInteractive={false}
+                                className="!bg-white !border-[#CED9E0] !rounded !shadow-sm" />
+                            <MiniMap nodeColor={n => NODE_TYPES[(n.data as any).type]?.border || C.border}
+                                style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 4 }} />
+                        </ReactFlow>
+
+                        {/* Legend */}
+                        {showLegend && (
+                            <div className="absolute top-3 left-3 z-10 bg-white rounded shadow border text-[10px] p-3"
+                                style={{ borderColor: C.border }}>
+                                <div className="font-bold text-[#5C7080] uppercase tracking-wider mb-2 text-[9px]">Node Types</div>
+                                {Object.values(NODE_TYPES).map(s => (
+                                    <div key={s.label} className="flex items-center gap-2 mb-1">
+                                        <span className="w-3 h-2 rounded-sm shrink-0" style={{ background: s.border }} />
+                                        <span style={{ color: s.text }}>{s.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Node detail panel (right) */}
+                        {selectedLN && (
+                            <div className="absolute top-3 right-3 z-10 bg-white rounded shadow border w-56 p-3"
+                                style={{ borderColor: C.border }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[11px] font-bold text-[#182026]">Node Details</span>
+                                    <button onClick={() => setSelectedId(null)} className="hover:text-[#DB3737]">
+                                        <X className="w-3.5 h-3.5 text-[#5C7080]" />
+                                    </button>
+                                </div>
+                                <div className="text-[10px] text-[#182026] mb-2 font-medium">{(selectedLN.data as any).label}</div>
+                                <span className="inline-block px-2 py-0.5 rounded text-[9px] font-bold"
+                                    style={{ background: NODE_TYPES[(selectedLN.data as any).type]?.bg, color: NODE_TYPES[(selectedLN.data as any).type]?.text, border: `1px solid ${NODE_TYPES[(selectedLN.data as any).type]?.border}` }}>
+                                    {NODE_TYPES[(selectedLN.data as any).type]?.label}
+                                </span>
+                                <div className="mt-2 text-[9px] text-[#5C7080] flex gap-3">
+                                    <span>{edges.filter(e => e.target === selectedId).length} upstream</span>
+                                    <span>{edges.filter(e => e.source === selectedId).length} downstream</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── GROUPED BY SOURCE VIEW ── */}
+                {view === "grouped" && (
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex-1 relative overflow-hidden" style={{ minHeight: showBottom ? "50%" : "100%" }}>
+                            {/* Canvas area */}
+                            <div className="absolute inset-0 overflow-auto p-10" style={{ background: C.bg }}>
+                                {OBJECT_TYPES.map(ot => {
+                                    const Icon = ot.icon;
+                                    const isSelected = selectedId === ot.id;
                                     return (
-                                        <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${isActive ? 'bg-cyan-500/10 border-cyan-500/30' : isDone ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-white/3 border-white/5'}`}>
-                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-500 text-black' : isActive ? 'bg-cyan-500 text-black' : 'bg-white/10 text-slate-600'}`}>
-                                                {isDone ? <CheckCircle2 className="w-4 h-4" /> : isActive ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+                                        <div key={ot.id} className="mb-14 relative">
+                                            {/* Bead chains */}
+                                            {ot.chains.map((chain, ci) => (
+                                                <div key={ci} className="flex items-center mb-2 pl-4">
+                                                    {chain.map((sid, bi) => {
+                                                        const s = SRC_MAP[sid];
+                                                        return (
+                                                            <div key={sid} className="flex items-center">
+                                                                <div title={s?.name}
+                                                                    style={{
+                                                                        width: 12, height: 12, borderRadius: "50%",
+                                                                        background: s?.color || "#888",
+                                                                        border: `1.5px solid white`,
+                                                                        boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                                                                        cursor: "pointer"
+                                                                    }} />
+                                                                {bi < chain.length - 1 && (
+                                                                    <div style={{ width: 10, height: 1.5, background: C.border }} />
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {/* dash line to entity */}
+                                                    <div style={{ flex: 1, height: 1.5, background: C.border, maxWidth: 80, marginLeft: 8 }} />
+                                                </div>
+                                            ))}
+
+                                            {/* Entity pill + relation badge */}
+                                            <div className="flex items-center absolute" style={{ top: "50%", transform: "translateY(-50%)", left: 740 }}>
+                                                {/* Left connector dot */}
+                                                <div className="w-2.5 h-2.5 rounded-full border mr-2"
+                                                    style={{ background: C.bg, borderColor: C.border }} />
+
+                                                {/* Pill */}
+                                                <button
+                                                    onClick={() => { setSelectedId(isSelected ? null : ot.id); setShowBottom(true); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded font-bold text-[12px] transition-all shadow-sm"
+                                                    style={{
+                                                        background: isSelected ? "#EBF5FF" : "white",
+                                                        border: `1.5px solid ${isSelected ? C.accent : C.border}`,
+                                                        color: isSelected ? C.accent : C.text,
+                                                        boxShadow: isSelected ? `0 0 0 2px ${C.accent}30` : "0 1px 3px rgba(0,0,0,0.08)"
+                                                    }}>
+                                                    <ChevronLeft className="w-3 h-3 opacity-50" />
+                                                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>{ot.name}</span>
+                                                    <ChevronRight className="w-3 h-3 opacity-50" />
+                                                    <Settings className="w-3 h-3 opacity-30 ml-1" />
+                                                    <Link2 className="w-3 h-3 opacity-30" />
+                                                </button>
+
+                                                {/* Right connector dot */}
+                                                <div className="w-2.5 h-2.5 rounded-full border ml-2"
+                                                    style={{ background: C.bg, borderColor: C.border }} />
+
+                                                {/* Relationship count */}
+                                                {ot.relCount && (
+                                                    <div className="flex flex-col items-center ml-3 text-[#5C7080]">
+                                                        <div className="text-[9px] font-bold">⇄{ot.relCount}</div>
+                                                        <ArrowRightLeft className="w-3 h-3" />
+                                                        <Link2 className="w-3 h-3" />
+                                                    </div>
+                                                )}
                                             </div>
-                                            <span className={`text-sm font-semibold ${isDone ? 'text-emerald-400' : isActive ? 'text-cyan-300' : 'text-slate-600'}`}>{s.label}</span>
                                         </div>
                                     );
                                 })}
                             </div>
-                            {trainDone && (
-                                <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center">
-                                    <p className="text-emerald-400 font-bold text-sm">✓ Training Complete! Model added to registry.</p>
+
+                            {/* Legend panel */}
+                            {showLegend && (
+                                <div className="absolute top-3 right-3 z-20 bg-white rounded shadow border overflow-hidden"
+                                    style={{ borderColor: C.border, minWidth: 280 }}>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-3">
+                                        {SOURCE_GROUPS.map(sg => (
+                                            <div key={sg.id} className="flex items-center gap-2">
+                                                <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: sg.color }} />
+                                                <span className="text-[11px] text-[#182026]">{sg.name}</span>
+                                                <span className="text-[10px] text-[#5C7080] ml-auto">({sg.count})</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="px-3 py-2 border-t" style={{ borderColor: C.border }}>
+                                        <button className="text-[11px] font-bold flex items-center gap-1 text-[#137CBD]">
+                                            Show Color Group Editor ▾
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 1 node selected badge */}
+                            {selectedId && (
+                                <div className="absolute bottom-3 right-3 px-3 py-1.5 rounded text-[11px] font-bold bg-white shadow border"
+                                    style={{ borderColor: C.accent, color: C.accent }}>
+                                    1 node selected
                                 </div>
                             )}
                         </div>
-                        <div className="px-5 py-4 border-t border-white/8 flex justify-end gap-3">
-                            {!trainDone && trainStep === -1 && (
-                                <button onClick={startTraining} className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-cyan-500/20">
-                                    <Zap className="w-4 h-4" /> Start Training
-                                </button>
-                            )}
-                            {trainDone && (
-                                <button onClick={() => { setShowTrainModal(false); setTrainStep(-1); setTrainDone(false); }} className="px-5 py-2 bg-emerald-600 text-white text-sm font-bold rounded-xl">
-                                    Done
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
 
-            <div className="flex-1 flex min-h-0">
-                {/* Left Panel: Entity Types */}
-                <div className="w-56 border-r border-white/8 flex flex-col shrink-0" style={{ background: "rgba(0,0,0,0.2)" }}>
-                    <div className="p-3 border-b border-white/5 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Object Types</span>
-                        <span className="text-[10px] text-slate-600">{entityTypes.length}</span>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                        {entityTypes.map(et => {
-                            const Icon = (et as any).icon || Box;
-                            const color = (et as any).color || "text-slate-400";
-                            const isSelected = selectedObj?.id === et.id;
-                            return (
-                                <div key={et.id} onClick={() => handleSelectObj(et)}
-                                    className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-indigo-500/15 border border-indigo-500/20' : 'hover:bg-white/5 border border-transparent'}`}>
-                                    <Icon className={`w-3.5 h-3.5 ${isSelected ? color : 'text-slate-600'} shrink-0`} />
-                                    <span className={`text-xs font-semibold truncate ${isSelected ? 'text-white' : 'text-slate-500'}`}>{et.name}</span>
-                                    {(et as any).instances > 0 && (
-                                        <span className="ml-auto text-[9px] font-bold text-slate-700">{((et as any).instances / 1000).toFixed(1)}k</span>
+                        {/* ── BOTTOM PANEL ── */}
+                        <div className="border-t shrink-0 flex flex-col bg-white" style={{ borderColor: C.border, height: showBottom ? 240 : "auto" }}>
+                            <div className="flex items-center h-8 px-2 gap-0.5 border-b shrink-0" style={{ borderColor: C.border }}>
+                                {[
+                                    { id: "preview" as const, label: "Preview", icon: Eye },
+                                    { id: "history" as const, label: "History", icon: History },
+                                    { id: "code" as const, label: "Code", icon: Code2 },
+                                    { id: "build" as const, label: "Build timeline", icon: Activity },
+                                    { id: "health" as const, label: "Data health", icon: AlertCircle },
+                                ].map(t => (
+                                    <button key={t.id}
+                                        onClick={() => { setBottomTab(t.id); setShowBottom(true); }}
+                                        className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold transition-colors border-b-2"
+                                        style={{
+                                            color: bottomTab === t.id && showBottom ? C.accent : C.sub,
+                                            borderColor: bottomTab === t.id && showBottom ? C.accent : "transparent"
+                                        }}>
+                                        <t.icon className="w-3 h-3" />{t.label}
+                                    </button>
+                                ))}
+                                <button onClick={() => setShowBottom(v => !v)} className="ml-auto p-1 hover:bg-[#F5F8FA] rounded">
+                                    <ChevronRight className={`w-3.5 h-3.5 text-[#5C7080] transition-transform ${showBottom ? "rotate-90" : "-rotate-90"}`} />
+                                </button>
+                            </div>
+
+                            {showBottom && bottomTab === "preview" && (
+                                <div className="flex-1 flex flex-col overflow-hidden">
+                                    <div className="flex items-center gap-3 px-4 py-2 border-b shrink-0"
+                                        style={{ borderColor: C.border, background: C.bg }}>
+                                        {selectedOT ? (
+                                            <>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-3 h-3 rounded-sm" style={{ background: C.accent }} />
+                                                    <span className="text-[12px] font-bold text-[#182026]">{selectedOT.name}</span>
+                                                </div>
+                                                <select className="text-[11px] border rounded px-2 py-0.5 ml-auto font-bold focus:outline-none focus:border-[#137CBD]"
+                                                    style={{ borderColor: C.border, color: C.sub, background: "white" }}>
+                                                    <option>Showing all property types</option>
+                                                </select>
+                                                <span className="text-[11px] text-[#5C7080]">
+                                                    Showing 1000 of {selectedOT.totalObjects.toLocaleString()} objects
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <span className="text-[12px] text-[#5C7080]">Click a node to preview its data</span>
+                                        )}
+                                    </div>
+                                    {selectedOT ? (
+                                        <div className="flex-1 overflow-auto">
+                                            <table className="w-full text-[11px]" style={{ borderCollapse: "collapse" }}>
+                                                <thead>
+                                                    <tr style={{ background: C.bg, position: "sticky", top: 0 }}>
+                                                        {Object.keys(selectedOT.preview[0]).map(col => (
+                                                            <th key={col} className="text-left px-4 py-2 border-b font-bold"
+                                                                style={{ color: C.sub, borderColor: C.border }}>
+                                                                {col.replace(/_/g, " ")}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {selectedOT.preview.map((row, i) => (
+                                                        <tr key={i} className="border-b hover:bg-[#F5F8FA]"
+                                                            style={{ borderColor: C.border }}>
+                                                            {Object.values(row).map((v, j) => (
+                                                                <td key={j} className="px-4 py-1.5"
+                                                                    style={{ color: v ? C.text : C.border }}>
+                                                                    {v ? (j === 2
+                                                                        ? <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: "#ECFDF5", color: "#065F46", border: "1px solid #059669" }}>{v as string}</span>
+                                                                        : v as string)
+                                                                        : <span style={{ color: C.border }}>No value</span>}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                    {[0, 1].map(gi => (
+                                                        <tr key={`g${gi}`} className="border-b" style={{ borderColor: C.border, opacity: 0.3 }}>
+                                                            {Object.keys(selectedOT.preview[0]).map(col => (
+                                                                <td key={col} className="px-4 py-1.5 text-[11px]" style={{ color: C.border }}>No value</td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex items-center justify-center text-[#5C7080] text-sm">
+                                            Select a node on the graph to preview its data
+                                        </div>
                                     )}
                                 </div>
-                            );
-                        })}
+                            )}
+                            {showBottom && bottomTab !== "preview" && (
+                                <div className="flex-1 flex items-center justify-center text-[#5C7080] text-sm">
+                                    {bottomTab.charAt(0).toUpperCase() + bottomTab.slice(1)} panel
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-
-                {/* Main Panel */}
-                <div className="flex-1 flex flex-col min-w-0">
-                    {selectedObj && (
-                        <>
-                            {/* Object header + tabs */}
-                            <div className="px-5 py-4 border-b border-white/8">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            {(() => { const Icon = (selectedObj as any).icon || Box; const color = (selectedObj as any).color || "text-slate-400"; return <Icon className={`w-5 h-5 ${color}`} />; })()}
-                                            <h1 className="text-xl font-bold text-white">{selectedObj.name}</h1>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                                            {(selectedObj as any).instances > 0 && <span className="flex items-center gap-1"><Database className="w-3 h-3" />{(selectedObj as any).instances?.toLocaleString()} instances</span>}
-                                            {(selectedObj as any).source && <span className="flex items-center gap-1"><Activity className="w-3 h-3" />{(selectedObj as any).source}</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4 mt-4 border-b border-white/8">
-                                    {(['properties', 'links', 'graph', 'sources'] as const).map(tab => (
-                                        <button key={tab} onClick={() => setActiveTab(tab)}
-                                            className={`pb-2 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${activeTab === tab ? 'text-indigo-400 border-indigo-400' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>
-                                            {tab === 'sources' ? 'Data Sources' : tab}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Tab Content */}
-                            <div className="flex-1 overflow-auto p-5">
-                                {activeTab === 'properties' && (
-                                    <div className="border border-white/8 rounded-xl overflow-hidden">
-                                        <table className="w-full text-left">
-                                            <thead className="text-[10px] uppercase font-bold text-slate-500 border-b border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
-                                                <tr><th className="px-4 py-2.5">Property</th><th className="px-4 py-2.5">Type</th><th className="px-4 py-2.5">Required</th></tr>
-                                            </thead>
-                                            <tbody className="text-sm divide-y divide-white/5">
-                                                {(selectedObj.attributes || []).map((prop: any, i: number) => (
-                                                    <tr key={`${prop.id || prop.name}-${i}`} className="hover:bg-white/2">
-                                                        <td className="px-4 py-2.5 font-mono text-xs text-cyan-300">{prop.name}</td>
-                                                        <td className="px-4 py-2.5 text-xs text-violet-300 font-mono">{prop.dataType}</td>
-                                                        <td className="px-4 py-2.5 text-xs">
-                                                            {prop.required ? <span className="text-emerald-400 font-semibold">Yes</span> : <span className="text-slate-600">No</span>}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-
-                                {activeTab === 'links' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {links.length === 0 ? (
-                                            <div className="col-span-3 text-center py-12 text-slate-600 text-sm">No outgoing relationships defined.</div>
-                                        ) : links.map(link => {
-                                            const target = entityTypes.find(e => e.id === link.targetId);
-                                            return (
-                                                <div key={link.id} className="bg-white/3 border border-white/8 rounded-xl p-4 border-l-4 border-l-indigo-500/40">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Network className="w-4 h-4 text-indigo-400" />
-                                                        <span className="font-bold text-sm text-white">{link.name}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                                        <ArrowRight className="w-3 h-3" />
-                                                        <span>{target?.name || 'Unknown'}</span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {activeTab === 'graph' && (
-                                    <div className="h-[480px] w-full border border-white/8 rounded-xl overflow-hidden">
-                                        <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} fitView>
-                                            <Background color="#1e293b" gap={24} />
-                                            <Controls />
-                                            <MiniMap style={{ background: "#0f172a" }} nodeColor="#1e293b" />
-                                        </ReactFlow>
-                                    </div>
-                                )}
-
-                                {activeTab === 'sources' && (
-                                    <div className="space-y-4">
-                                        <div className="bg-white/3 border border-white/8 rounded-xl p-4">
-                                            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Database className="w-4 h-4 text-cyan-400" />Data Source</h3>
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                                                    <Activity className="w-4 h-4 text-cyan-400" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-white">{(selectedObj as any).source || "Unknown"}</p>
-                                                    <p className="text-xs text-slate-500">Primary data source for this entity type</p>
-                                                </div>
-                                                <div className="ml-auto flex items-center gap-1.5">
-                                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                                    <span className="text-xs text-emerald-400 font-bold">Live</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="bg-white/3 border border-white/8 rounded-xl p-4">
-                                            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-emerald-400" />Data Quality</h3>
-                                            <div className="space-y-3">
-                                                {[{ label: "Completeness", val: 94 }, { label: "Freshness", val: 98 }, { label: "Uniqueness", val: 99 }].map(q => (
-                                                    <div key={q.label}>
-                                                        <div className="flex justify-between text-xs mb-1">
-                                                            <span className="text-slate-400">{q.label}</span>
-                                                            <span className="text-white font-bold">{q.val}%</span>
-                                                        </div>
-                                                        <div className="h-1.5 bg-white/5 rounded-full">
-                                                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${q.val}%` }} />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    )}
-                </div>
+                )}
             </div>
         </div>
     );
