@@ -36,6 +36,7 @@ model Project {
   aipActions          AIPAction[]
   aipMetrics          AIPMetric[]
   workshopApps        WorkshopApp[]
+  automations         AIPAutomate[]
 }
 
 model EntityType {
@@ -922,4 +923,66 @@ model WorkshopApp {
 
   @@index([projectId])
   @@index([status])
+}
+
+// ── Phase 11: AIP Automate — Event & Schedule-Triggered Function Execution ────
+
+model AIPAutomate {
+  id          String   @id @default(uuid())
+  projectId   String
+
+  name        String
+  description String   @default("")
+  status      String   @default("inactive") // active | inactive | paused
+
+  // Trigger configuration
+  triggerType String   @default("schedule") // schedule | event | webhook | manual
+  cronExpr    String?  // cron expression e.g. "0 */5 * * * *" (every 5 min)
+  eventType   String?  // e.g. "entity.created", "entity.updated", "action.executed"
+  eventFilter Json?    // e.g. { objectType: "Drone", property: "batteryLevel", op: "<", value: 20 }
+  webhookPath String?  // unique path for inbound webhook trigger
+
+  // What to execute
+  functionId  String?  // bound AIPFunction id
+  actionId    String?  // or bound AIPAction id
+  inputParams Json?    // default input parameters
+
+  // Run statistics
+  totalRuns   Int      @default(0)
+  successRuns Int      @default(0)
+  failedRuns  Int      @default(0)
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs        AIPAutomateRun[]
+
+  @@index([projectId])
+  @@index([triggerType, status])
+  @@index([eventType])
+}
+
+model AIPAutomateRun {
+  id           String   @id @default(uuid())
+  automationId String
+  projectId    String
+
+  status       String   @default("running") // running | success | failed | timeout
+  trigger      String   @default("schedule") // schedule | event | webhook | manual
+
+  inputData    Json?    // what was passed in
+  outputData   Json?    // what the function returned
+  errorMessage String?
+
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+  duration     Int?     // ms
+
+  automation   AIPAutomate @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId, startedAt(sort: Desc)])
+  @@index([projectId, status])
 }

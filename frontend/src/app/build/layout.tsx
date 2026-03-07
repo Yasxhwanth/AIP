@@ -35,6 +35,7 @@ const NAV_GROUPS = [
         items: [
             { name: "Logic", href: "/build/logic", icon: GitBranch },
             { name: "Actions", href: "/build/actions", icon: Zap },
+            { name: "Automate", href: "/build/automate", icon: Zap },
             { name: "AI", href: "/build/ai", icon: BrainCircuit },
         ]
     },

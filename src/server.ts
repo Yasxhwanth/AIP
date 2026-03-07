@@ -4194,6 +4194,262 @@ app.get('/api/metrics/summary', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PHASE 11: AIP Automate — Event & Schedule-Triggered Function Execution
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── In-process automation execution engine ────────────────────────────────────
+const activeSchedules: Map<string, NodeJS.Timeout> = new Map();
+
+async function runAutomation(automationId: string, triggerType: 'schedule' | 'event' | 'webhook' | 'manual', inputOverride?: any) {
+  const auto = await prisma.aIPAutomate.findUnique({ where: { id: automationId } });
+  if (!auto || auto.status !== 'active') return;
+
+  const runRecord = await prisma.aIPAutomateRun.create({
+    data: { automationId, projectId: auto.projectId, status: 'running', trigger: triggerType, inputData: inputOverride ?? auto.inputParams ?? {} }
+  });
+
+  const start = Date.now();
+  let outputData: any = null;
+  let errorMessage: string | null = null;
+  let runStatus = 'success';
+
+  try {
+    // Resolve function code
+    let code = '';
+    if (auto.functionId) {
+      const fn = await prisma.aIPFunction.findUnique({ where: { id: auto.functionId } });
+      code = fn?.code ?? '';
+    }
+
+    if (code) {
+      // Execute the function code safely
+      const inputData = inputOverride ?? auto.inputParams ?? {};
+      const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
+      const fn = new AsyncFunction('input', 'context', `"use strict";\n${code}`);
+      const context = {
+        projectId: auto.projectId,
+        automationId, triggerType,
+        timestamp: new Date().toISOString(),
+      };
+      outputData = await Promise.race([
+        fn(inputData, context),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Execution timeout (30s)')), 30_000))
+      ]);
+    } else if (auto.actionId) {
+      // Execute an action directly
+      const action = await prisma.aIPAction.findUnique({ where: { id: auto.actionId } });
+      if (action && action.status !== 'deprecated') {
+        outputData = { actionExecuted: action.name, at: new Date().toISOString() };
+      }
+    } else {
+      outputData = { message: 'No function or action bound', at: new Date().toISOString() };
+    }
+  } catch (err: any) {
+    errorMessage = String(err?.message ?? err);
+    runStatus = 'failed';
+  }
+
+  const duration = Date.now() - start;
+
+  // Update run record
+  await prisma.aIPAutomateRun.update({
+    where: { id: runRecord.id },
+    data: { status: runStatus, outputData, errorMessage, finishedAt: new Date(), duration }
+  });
+
+  // Update automation stats
+  await prisma.aIPAutomate.update({
+    where: { id: automationId },
+    data: {
+      totalRuns: { increment: 1 },
+      ...(runStatus === 'success' ? { successRuns: { increment: 1 } } : { failedRuns: { increment: 1 } }),
+      lastRunAt: new Date(),
+    }
+  });
+
+  return { runId: runRecord.id, status: runStatus, duration, outputData, errorMessage };
+}
+
+function scheduleAutomation(auto: { id: string; cronExpr: string | null }) {
+  if (!auto.cronExpr) return;
+
+  // Parse cron to interval (simplified: support "*/N * * * *" patterns)
+  const cronParts = auto.cronExpr.trim().split(' ');
+  let intervalMs = 5 * 60 * 1000; // default 5 min
+
+  if (cronParts.length >= 5) {
+    const minutePart = cronParts[0];
+    const match = minutePart.match(/^\*\/(\d+)$/);
+    if (match) intervalMs = parseInt(match[1]) * 60 * 1000;
+  } else if (cronParts.length >= 6) {
+    // second-level cron "*/N * * * * *"
+    const secPart = cronParts[0];
+    const match = secPart.match(/^\*\/(\d+)$/);
+    if (match) intervalMs = parseInt(match[1]) * 1000;
+  }
+
+  // Clear any existing schedule for this automation
+  if (activeSchedules.has(auto.id)) clearInterval(activeSchedules.get(auto.id)!);
+
+  const handle = setInterval(() => {
+    runAutomation(auto.id, 'schedule').catch(console.error);
+  }, Math.max(intervalMs, 10_000)); // minimum 10s interval
+
+  activeSchedules.set(auto.id, handle);
+  console.log(`[Automate] Scheduled ${auto.id} every ${intervalMs / 1000}s`);
+}
+
+// ── Start active schedule-based automations on server boot ────────────────────
+(async () => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return;
+    const schedules = await prisma.aIPAutomate.findMany({
+      where: { projectId, triggerType: 'schedule', status: 'active' }
+    });
+    schedules.forEach((auto: any) => auto.cronExpr && scheduleAutomation(auto));
+    console.log(`[Automate] Started ${schedules.length} active schedule(s)`);
+  } catch { /* ignore on boot */ }
+})();
+
+// ── Event-trigger dispatcher (called from entity/action write paths) ──────────
+async function dispatchAutomateEvent(projectId: string, eventType: string, payload: any) {
+  try {
+    const automations = await prisma.aIPAutomate.findMany({
+      where: { projectId, triggerType: 'event', status: 'active', eventType }
+    });
+    for (const auto of automations) {
+      const filter = auto.eventFilter as any;
+      if (filter && filter.objectType && payload.objectType !== filter.objectType) continue;
+      runAutomation(auto.id, 'event', { event: eventType, payload }).catch(console.error);
+    }
+  } catch { /* ignore */ }
+}
+// Export for use in entity update routes
+(global as any).dispatchAutomateEvent = dispatchAutomateEvent;
+
+// ── REST routes ───────────────────────────────────────────────────────────────
+
+// GET /api/automate — list all automations for project
+app.get('/api/automate', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const automations = await prisma.aIPAutomate.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' }
+    });
+    return res.json(automations);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/automate — create a new automation
+app.post('/api/automate', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const { name, description, triggerType, cronExpr, eventType, eventFilter, webhookPath, functionId, actionId, inputParams, status } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const automation = await prisma.aIPAutomate.create({
+      data: {
+        projectId, name, description: description || '',
+        triggerType: triggerType || 'schedule',
+        cronExpr: cronExpr || null, eventType: eventType || null,
+        eventFilter: eventFilter || null, webhookPath: webhookPath || null,
+        functionId: functionId || null, actionId: actionId || null,
+        inputParams: inputParams || null,
+        status: status || 'inactive',
+      }
+    });
+    if (automation.status === 'active' && automation.triggerType === 'schedule' && automation.cronExpr) {
+      scheduleAutomation({ id: automation.id, cronExpr: automation.cronExpr });
+    }
+    return res.status(201).json(automation);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// PUT /api/automate/:id — update automation
+app.put('/api/automate/:id', async (req, res) => {
+  try {
+    const prev = await prisma.aIPAutomate.findUnique({ where: { id: req.params.id } });
+    const automation = await prisma.aIPAutomate.update({
+      where: { id: req.params.id },
+      data: req.body,
+    });
+
+    // Re-schedule if cron details changed or status toggled to active
+    if (automation.triggerType === 'schedule') {
+      if (automation.status === 'active' && automation.cronExpr) {
+        scheduleAutomation({ id: automation.id, cronExpr: automation.cronExpr });
+      } else if (automation.status !== 'active' && activeSchedules.has(automation.id)) {
+        clearInterval(activeSchedules.get(automation.id)!);
+        activeSchedules.delete(automation.id);
+      }
+    }
+    return res.json(automation);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// DELETE /api/automate/:id
+app.delete('/api/automate/:id', async (req, res) => {
+  try {
+    if (activeSchedules.has(req.params.id)) {
+      clearInterval(activeSchedules.get(req.params.id)!);
+      activeSchedules.delete(req.params.id);
+    }
+    await prisma.aIPAutomate.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/automate/:id/run — manually trigger an automation
+app.post('/api/automate/:id/run', async (req, res) => {
+  try {
+    const result = await runAutomation(req.params.id, 'manual', req.body?.input);
+    return res.json(result);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/automate/:id/runs — execution history (last 50)
+app.get('/api/automate/:id/runs', async (req, res) => {
+  try {
+    const runs = await prisma.aIPAutomateRun.findMany({
+      where: { automationId: req.params.id },
+      orderBy: { startedAt: 'desc' },
+      take: 50,
+    });
+    return res.json(runs);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/automate/webhook/:path — inbound webhook trigger
+app.post('/api/automate/webhook/:path', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    const automation = await prisma.aIPAutomate.findFirst({
+      where: { projectId, triggerType: 'webhook', status: 'active', webhookPath: req.params.path }
+    });
+    if (!automation) return res.status(404).json({ error: 'No active automation for this webhook path' });
+    const result = await runAutomation(automation.id, 'webhook', req.body);
+    return res.json({ received: true, runId: result?.runId });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/automate/summary — quick stats across all automations
+app.get('/api/automate/summary', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const [total, active, recentRuns] = await Promise.all([
+      prisma.aIPAutomate.count({ where: { projectId } }),
+      prisma.aIPAutomate.count({ where: { projectId, status: 'active' } }),
+      prisma.aIPAutomateRun.findMany({ where: { projectId }, orderBy: { startedAt: 'desc' }, take: 10 })
+    ]);
+    return res.json({ total, active, recentRuns });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE 10: Workshop Apps API — Persistent Application Builder
 // ─────────────────────────────────────────────────────────────────────────────
 
