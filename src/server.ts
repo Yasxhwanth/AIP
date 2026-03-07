@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Prisma } from './generated/prisma';
 import { evaluatePolicies } from './policy-engine';
-import { executeJob, startScheduler } from './data-integration';
+import { executeJob, startScheduler, dryRunJob } from './data-integration';
 import { SchemaInferenceService } from './schema-inference-service';
 import { RelationshipDerivationService, startConfidenceDecayScheduler } from './relationship-derivation-service';
 import { evaluateComputedMetrics } from './computed-metrics';
@@ -28,16 +28,51 @@ import {
   generateJwt,
 } from './middleware';
 import { randomUUID } from 'crypto';
+import amqp from 'amqplib';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error('DATABASE_URL is required');
 }
 
+const app = express();
+const port = process.env.PORT || 3001;
+
+// ── RabbitMQ Publisher Setup ────────────────────────────────────────────────
+let amqpChannel: amqp.Channel | null = null;
+const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
+const QUEUE_NAME = 'data_ingestion_queue';
+
+async function connectToRabbitMQ() {
+  try {
+    const conn = await amqp.connect(RABBITMQ_URL);
+    amqpChannel = await conn.createChannel();
+    await amqpChannel.assertQueue(QUEUE_NAME, { durable: true });
+    console.log('✅ Connected to RabbitMQ Publisher');
+  } catch (err) {
+    console.error('RabbitMQ Publisher Error', err);
+  }
+}
+// Init async without blocking server start
+connectToRabbitMQ();
+
+// ── Redis Setup ─────────────────────────────────────────────────────────────
+const { createClient } = require('redis');
+
+const redisClient = process.env.REDIS_URL
+  ? createClient({ url: process.env.REDIS_URL })
+  : null;
+
+if (redisClient) {
+  redisClient.on('error', (err: any) => console.error('Redis Client Error', err));
+  redisClient.connect().then(() => console.log('✅ Connected to Redis'))
+    .catch(console.error);
+}
+
+// ── Prisma Setup ────────────────────────────────────────────────────────────
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
-const app = express();
 const lineageSvc = new LineageService(prisma);
 
 // ── Enterprise Middleware ─────────────────────────────────────────
@@ -72,8 +107,14 @@ app.get('/projects', async (req, res) => {
 
 app.post('/dashboards', async (req, res) => {
   try {
+    let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') {
+      projectId = (global as any).DEFAULT_PROJECT_ID;
+    }
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
     const dashboard = await prisma.dashboard.create({
-      data: { name: req.body.name, projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID }
+      data: { name: req.body.name, projectId }
     });
     return res.status(201).json(dashboard);
   } catch (err) {
@@ -83,7 +124,12 @@ app.post('/dashboards', async (req, res) => {
 
 app.get('/dashboards', async (req, res) => {
   try {
-    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') {
+      projectId = (global as any).DEFAULT_PROJECT_ID;
+    }
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
     const dashboards = await prisma.dashboard.findMany({
       where: { projectId },
       include: { widgets: true },
@@ -211,9 +257,15 @@ app.post('/entity-types', async (req, res) => {
   }
 
   try {
+    let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') {
+      projectId = (global as any).DEFAULT_PROJECT_ID;
+    }
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
     const created = await prisma.entityType.create({
       data: {
-        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
+        projectId,
         name,
         version: 1,
         attributes: {
@@ -285,7 +337,10 @@ app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
 
     // If entityTypeId not provided, try to look up by name
     if (!entityTypeId && targetEntityType) {
-      const projectId = req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+      let projectId = req.auth?.projectId || req.header('X-Project-Id');
+      if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+      if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
       const found = await prisma.entityType.findFirst({
         where: { name: targetEntityType, projectId },
         orderBy: { version: 'desc' }
@@ -316,14 +371,20 @@ app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
 
 app.post('/api/v1/pipelines', async (req, res) => {
   try {
-    const { name, description, nodes, edges, projectId } = req.body;
+    const { name, description, nodes, edges } = req.body;
+    let projectId = req.auth?.projectId || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') {
+      projectId = (global as any).DEFAULT_PROJECT_ID;
+    }
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
     const pipeline = await prisma.pipeline.create({
       data: {
         name,
         description,
         nodes: nodes as any,
         edges: edges as any,
-        projectId: projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID
+        projectId
       }
     });
     return res.status(201).json(pipeline);
@@ -334,7 +395,12 @@ app.post('/api/v1/pipelines', async (req, res) => {
 
 app.get('/api/v1/pipelines', async (req, res) => {
   try {
-    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') {
+      projectId = (global as any).DEFAULT_PROJECT_ID;
+    }
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
     const pipelines = await prisma.pipeline.findMany({
       where: { projectId },
       orderBy: { createdAt: 'desc' }
@@ -365,6 +431,398 @@ app.post('/api/v1/ontology/derive-relationships', async (req, res) => {
     return res.status(500).json({ error: 'failed to derive relationships', details: String(error) });
   }
 });
+
+// ══════════════════════════════════════════════════════════════════
+// ── No-Code Ontology Builder API (Timbr/Palantir style) ───────────
+// ══════════════════════════════════════════════════════════════════
+
+import { runFullReasoner } from './ontology-reasoner';
+
+function getProjectId(req: express.Request): string | null {
+  let id = (req as any).auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id') || req.body?.projectId;
+  if (!id && process.env.NODE_ENV !== 'production') id = (global as any).DEFAULT_PROJECT_ID;
+  return id ?? null;
+}
+
+// ── GET /api/ontology/entity-types — list all with live object counts ─────────
+app.get('/api/ontology/entity-types', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const types = await prisma.entityType.findMany({
+      where: { projectId },
+      include: {
+        attributes: true,
+        outgoingRelationships: { include: { targetEntityType: { select: { id: true, name: true } } } },
+        incomingRelationships: { include: { sourceEntityType: { select: { id: true, name: true } } } },
+      },
+      orderBy: [{ name: 'asc' }, { version: 'desc' }],
+    });
+
+    // De-duplicate: keep only highest version per name
+    const seen = new Map<string, typeof types[0]>();
+    for (const t of types) {
+      if (!seen.has(t.name) || seen.get(t.name)!.version < t.version) seen.set(t.name, t);
+    }
+    const latest = [...seen.values()];
+
+    // Attach live object counts
+    const withCounts = await Promise.all(latest.map(async (et) => {
+      const count = await prisma.currentEntityState.count({ where: { entityTypeId: et.id } });
+      return { ...et, objectCount: count };
+    }));
+
+    return res.json(withCounts);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/entity-types — create new entity type ──────────────────
+app.post('/api/ontology/entity-types', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const { name, attributes = [] } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const created = await prisma.entityType.create({
+      data: {
+        projectId,
+        name,
+        version: 1,
+        attributes: { create: attributes.map((a: any) => ({ name: a.name, dataType: a.dataType ?? 'STRING', required: a.required ?? false })) },
+      },
+      include: { attributes: true },
+    });
+
+    // Track lineage
+    await lineageSvc.registerEdge({ sourceType: 'Project', sourceId: projectId, targetType: 'EntityType', targetId: created.id, transformation: 'created' });
+
+    return res.status(201).json({ ...created, objectCount: 0 });
+  } catch (err: any) {
+    if (err?.code === 'P2002') return res.status(409).json({ error: 'Entity type name already exists' });
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/entity-types/:id/instances — create data row ──────────
+app.post('/api/ontology/entity-types/:id/instances', async (req, res) => {
+  try {
+    const entityTypeId = req.params.id;
+    const { logicalId, data } = req.body;
+    if (!logicalId) return res.status(400).json({ error: 'Missing logicalId' });
+
+    // Validate type existence once before pushing
+    const et = await prisma.entityType.findUnique({ where: { id: entityTypeId } });
+    if (!et) return res.status(404).json({ error: 'Entity type not found' });
+
+    // Push to Message Queue (Asynchronous write)
+    if (amqpChannel) {
+      const payload = JSON.stringify({ entityTypeId, logicalId, data });
+      amqpChannel.sendToQueue(QUEUE_NAME, Buffer.from(payload), { persistent: true });
+
+      // Invalidate the cache for this entity type immediately
+      if (redisClient) {
+        const keys = await redisClient.keys(`ontology:instances:${entityTypeId}:*`);
+        if (keys.length > 0) await redisClient.del(keys);
+      }
+
+      return res.status(202).json({
+        message: 'Payload accepted for processing',
+        logicalId,
+        status: 'queued'
+      });
+    } else {
+      // Fallback if broker is down: Synchronous insert
+      const newInstance = await prisma.currentEntityState.create({
+        data: { logicalId: String(logicalId), entityTypeId, data: data || {}, updatedAt: new Date() },
+      });
+      await (prisma as any).entityEvent.create({
+        data: { logicalId: String(logicalId), entityTypeId, eventType: 'CREATED', payload: data || {} },
+      });
+
+      if (redisClient) {
+        const keys = await redisClient.keys(`ontology:instances:${entityTypeId}:*`);
+        if (keys.length > 0) await redisClient.del(keys);
+      }
+
+      return res.json(newInstance);
+    }
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── PATCH /api/ontology/entity-types/:id — rename an entity type ──────────────
+app.patch('/api/ontology/entity-types/:id', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const et = await prisma.entityType.findUnique({ where: { id: req.params.id } });
+    if (!et) return res.status(404).json({ error: 'Not found' });
+    // Create a new version with updated name by updating in-place (name field is mutable metadata)
+    // For just a rename we update name directly as it is not a schema-breaking change
+    const updated = await prisma.entityType.update({
+      where: { id: req.params.id },
+      data: { name },
+      include: { attributes: true },
+    });
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── DELETE /api/ontology/entity-types/:id ─────────────────────────────────────
+app.delete('/api/ontology/entity-types/:id', async (req, res) => {
+  try {
+    const instanceCount = await prisma.currentEntityState.count({ where: { entityTypeId: req.params.id } });
+    if (instanceCount > 0) {
+      return res.status(409).json({ error: `Cannot delete: ${instanceCount} live objects exist. Archive them first.` });
+    }
+    await prisma.attributeDefinition.deleteMany({ where: { entityTypeId: req.params.id } });
+    await prisma.entityType.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/entity-types/:id/attributes — add a property ───────────
+app.post('/api/ontology/entity-types/:id/attributes', async (req, res) => {
+  try {
+    const { name, dataType = 'STRING', required = false } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    const attr = await prisma.attributeDefinition.create({
+      data: { entityTypeId: req.params.id, name, dataType, required },
+    });
+    return res.status(201).json(attr);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── DELETE /api/ontology/entity-types/:id/attributes/:attrId ─────────────────
+app.delete('/api/ontology/entity-types/:id/attributes/:attrId', async (req, res) => {
+  try {
+    await prisma.attributeDefinition.delete({ where: { id: req.params.attrId } });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/relationships — all relationship definitions ─────────────
+app.get('/api/ontology/relationships', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const rels = await prisma.relationshipDefinition.findMany({
+      where: { sourceEntityType: { projectId } },
+      include: {
+        sourceEntityType: { select: { id: true, name: true } },
+        targetEntityType: { select: { id: true, name: true } },
+      },
+    });
+    return res.json(rels);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/relationships — create a link type between two entity types ──
+app.post('/api/ontology/relationships', async (req, res) => {
+  try {
+    const { name, sourceEntityTypeId, targetEntityTypeId } = req.body;
+    if (!name || !sourceEntityTypeId || !targetEntityTypeId) {
+      return res.status(400).json({ error: 'name, sourceEntityTypeId, targetEntityTypeId required' });
+    }
+    const rel = await prisma.relationshipDefinition.create({
+      data: { name, sourceEntityTypeId, targetEntityTypeId },
+      include: {
+        sourceEntityType: { select: { id: true, name: true } },
+        targetEntityType: { select: { id: true, name: true } },
+      },
+    });
+    return res.status(201).json(rel);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── DELETE /api/ontology/relationships/:id ────────────────────────────────────
+app.delete('/api/ontology/relationships/:id', async (req, res) => {
+  try {
+    await prisma.relationshipDefinition.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/graph — full ontology graph for ReactFlow ───────────────
+app.get('/api/ontology/graph', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const entityTypes = await prisma.entityType.findMany({
+      where: { projectId },
+      include: { attributes: true },
+    });
+    // De-dup by name
+    const seen = new Map<string, typeof entityTypes[0]>();
+    for (const et of entityTypes) {
+      if (!seen.has(et.name) || seen.get(et.name)!.version < et.version) seen.set(et.name, et);
+    }
+    const nodes = await Promise.all([...seen.values()].map(async (et, i) => {
+      const objectCount = await prisma.currentEntityState.count({ where: { entityTypeId: et.id } });
+      return {
+        id: et.id, type: 'entityCard',
+        position: { x: 80 + (i % 4) * 300, y: 100 + Math.floor(i / 4) * 250 },
+        data: {
+          label: et.name, entityId: et.id,
+          objectCount, attributes: et.attributes,
+        },
+      };
+    }));
+
+    const latestIds = nodes.map(n => n.id);
+    const rels = await prisma.relationshipDefinition.findMany({
+      where: { sourceEntityTypeId: { in: latestIds }, targetEntityTypeId: { in: latestIds } },
+    });
+
+    // Also include derived (reasoner) relationships from CurrentGraph
+    const derivedEdges = await prisma.currentGraph.findMany({
+      where: { relationshipName: { startsWith: '[derived:' } },
+      distinct: ['relationshipDefinitionId'],
+      take: 100,
+    });
+
+    const edges = [
+      ...rels.map(r => ({
+        id: r.id, source: r.sourceEntityTypeId, target: r.targetEntityTypeId,
+        type: 'rel', label: r.name,
+        data: { isDerived: false },
+        style: { stroke: '#0BB68F', strokeWidth: 2 },
+      })),
+      ...derivedEdges.map(d => ({
+        id: `derived-${d.id}`, source: d.sourceLogicalId, target: d.targetLogicalId,
+        type: 'rel', label: d.relationshipName,
+        data: { isDerived: true },
+        style: { stroke: '#137CBD', strokeWidth: 1.5, strokeDasharray: '4 3' },
+      })),
+    ];
+
+    return res.json({ nodes, edges });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/entity-types/:id/instances — live data preview ──────────
+app.get('/api/ontology/entity-types/:id/instances', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
+    const skip = (page - 1) * limit;
+
+    // 1. Check Redis Cache First
+    const cacheKey = `ontology:instances:${req.params.id}:p${page}:l${limit}`;
+    if (redisClient) {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) {
+        return res.json(JSON.parse(cached));
+      }
+    }
+
+    // 2. Cache Miss -> Query Postgres
+    const [total, instances] = await Promise.all([
+      prisma.currentEntityState.count({ where: { entityTypeId: req.params.id } }),
+      prisma.currentEntityState.findMany({
+        where: { entityTypeId: req.params.id },
+        skip, take: limit, orderBy: { updatedAt: 'desc' },
+      }),
+    ]);
+
+    const result = { total, page, limit, data: instances };
+
+    // 3. Set Redis Cache (Expiring in 60 seconds to prevent total staleness)
+    if (redisClient && instances.length > 0) {
+      await redisClient.setEx(cacheKey, 60, JSON.stringify(result));
+    }
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/rules — list OntologyRules ─────────────────────────────
+app.get('/api/ontology/rules', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const rules = await prisma.ontologyRule.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(rules);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/rules — create an OntologyRule ────────────────────────
+app.post('/api/ontology/rules', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const { name, description, antecedent, consequent } = req.body;
+    if (!name || !antecedent || !consequent) {
+      return res.status(400).json({ error: 'name, antecedent[], consequent{} required' });
+    }
+
+    const rule = await prisma.ontologyRule.create({
+      data: { projectId, name, description, antecedent, consequent },
+    });
+    return res.status(201).json(rule);
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── DELETE /api/ontology/rules/:id ───────────────────────────────────────────
+app.delete('/api/ontology/rules/:id', async (req, res) => {
+  try {
+    await prisma.ontologyRule.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/reason — trigger the semantic reasoner ─────────────────
+app.post('/api/ontology/reason', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const result = await runFullReasoner(projectId, prisma);
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── End No-Code Ontology Builder API ────────────────────────────────────────
 
 app.get('/entity-types/:id', async (req, res) => {
   try {
@@ -471,10 +929,14 @@ app.put('/entity-types/:id', async (req, res) => {
 
     const newVersion = (highestVersion?.version ?? existing.version) + 1;
 
+    let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required for version update' });
+
     // Insert-only versioning: create a new EntityType row + new AttributeDefinition rows.
     const createdVersion = await prisma.entityType.create({
       data: {
-        projectId: req.body.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID,
+        projectId,
         name: existing.name,
         version: newVersion,
         attributes: {
@@ -502,7 +964,15 @@ app.put('/entity-types/:id', async (req, res) => {
 
 app.get('/api/v1/ontology/instances/current', async (req, res) => {
   try {
-    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+
+    // In strict enterprise platforms, omitting context might be an error instead of wildcard search,
+    // but some UIs rely on wildcard across permitted tenants. We will enforce single tenant here for safety.
+    if (!projectId && process.env.NODE_ENV === 'production') {
+      return res.status(400).json({ error: 'Project ID context required for instance queries' });
+    }
+
     const whereClause: any = {};
     if (projectId) {
       whereClause.entityType = {
@@ -1650,6 +2120,17 @@ app.post('/integration-jobs/:id/execute', async (req, res) => {
   }
 });
 
+app.post('/integration-jobs/:id/dry-run', async (req, res) => {
+  try {
+    const { data } = req.body ?? {};
+    const result = await dryRunJob(req.params.id, prisma, data);
+    const statusCode = result.status === 'SUCCESS' ? 200 : 500;
+    return res.status(statusCode).json(result);
+  } catch (error) {
+    return res.status(500).json({ error: 'failed to dry-run job', details: String(error) });
+  }
+});
+
 // ── Data Lineage & Provenance ────────────────────────────────────────
 
 app.get('/api/v1/lineage/:type/:id/trace', async (req, res) => {
@@ -2259,24 +2740,123 @@ app.get('/decision-logs', async (req, res) => {
 
 app.post('/decision-logs/:id/execute', async (req, res) => {
   try {
+    const logId = req.params.id;
     const log = await prisma.decisionLog.findUnique({
-      where: { id: req.params.id },
-      include: { decisionRule: true }
+      where: { id: logId },
+      include: {
+        decisionRule: {
+          include: {
+            executionPlans: {
+              orderBy: { stepOrder: 'asc' },
+              include: { actionDefinition: true }
+            }
+          }
+        }
+      }
     });
 
     if (!log) return res.status(404).json({ error: 'decision log not found' });
     if (log.status !== 'PENDING') return res.status(400).json({ error: `Cannot execute log with status ${log.status}` });
 
-    // Mark it as executed. In a full system, we might orchestrate Action Definitions here.
-    // However, Phase 5 requested a "mock" execute state transition:
-    const updated = await prisma.decisionLog.update({
-      where: { id: req.params.id },
-      data: { status: 'COMPLETED' }
+    // 1. Create the ExecutionTrace
+    const trace = await prisma.executionTrace.create({
+      data: { decisionLogId: logId, status: 'RUNNING' }
     });
 
-    return res.json({ success: true, executedLog: updated });
+    // 2. Mark DecisionLog as RUNNING
+    await prisma.decisionLog.update({
+      where: { id: logId },
+      data: { status: 'RUNNING' }
+    });
+
+    // We will run this async to not block the request, returning the trace ID immediately.
+    // In a real C3/Palantir system, this goes into the JobQueue or a Temporal/Cadence workflow.
+    (async () => {
+      let hasFailures = false;
+      const plans = log.decisionRule.executionPlans;
+
+      for (const plan of plans) {
+        const actionDef = plan.actionDefinition;
+
+        // Create the Step Record
+        const step = await prisma.executionStep.create({
+          data: {
+            executionTraceId: trace.id,
+            actionDefinitionId: actionDef.id,
+            stepOrder: plan.stepOrder,
+            status: 'RUNNING',
+            startedAt: new Date(),
+            inputPayload: {
+              logicalId: log.logicalId,
+              triggerData: log.triggerData,
+              actionConfig: actionDef.config
+            }
+          }
+        });
+
+        try {
+          // --- REAL EXECUTION LOGIC GOES HERE ---
+          // Based on actionDef.type (WEBHOOK, UPDATE_ENTITY, etc.)
+          let output: any = { message: 'Execution mocked successfully internally' };
+
+          if (actionDef.type === 'WEBHOOK') {
+            // Example: axios.post((actionDef.config as any).url, step.inputPayload)
+            output = { httpStatus: 200, externalRef: 'web-123' };
+          }
+
+          // Simulate network latency & execution
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          await prisma.executionStep.update({
+            where: { id: step.id },
+            data: {
+              status: 'SUCCESS',
+              completedAt: new Date(),
+              outputPayload: output
+            }
+          });
+
+        } catch (err: any) {
+          hasFailures = true;
+          await prisma.executionStep.update({
+            where: { id: step.id },
+            data: {
+              status: 'FAILED',
+              completedAt: new Date(),
+              errorMessage: err.message ?? String(err)
+            }
+          });
+
+          if (!plan.continueOnFailure) {
+            break; // Stop the DAG
+          }
+        }
+      }
+
+      // Conclude Trace
+      const finalStatus = hasFailures ? 'PARTIAL_FAILURE' : 'COMPLETED';
+      await prisma.executionTrace.update({
+        where: { id: trace.id },
+        data: {
+          status: finalStatus,
+          completedAt: new Date()
+        }
+      });
+      await prisma.decisionLog.update({
+        where: { id: logId },
+        data: { status: finalStatus === 'COMPLETED' ? 'COMPLETED' : 'FAILED' }
+      });
+    })().catch(err => {
+      console.error('Fatal DAG Orchestrator Error:', err);
+      prisma.executionTrace.update({
+        where: { id: trace.id },
+        data: { status: 'FAILED', error: String(err), completedAt: new Date() }
+      }).catch(console.error);
+    });
+
+    return res.json({ success: true, traceId: trace.id, status: 'RUNNING' });
   } catch (error) {
-    return res.status(500).json({ error: 'failed to execute logic', details: String(error) });
+    return res.status(500).json({ error: 'failed to start execution DAG', details: String(error) });
   }
 });
 
@@ -2797,80 +3377,7 @@ app.delete('/api/v1/entities/:logicalId', async (req, res) => {
   }
 });
 
-// ── Data Sources API ─────────────────────────────────────────────────
-
-app.get('/api/v1/data-sources', async (req, res) => {
-  try {
-    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
-    const sources = await prisma.dataSource.findMany({
-      where: { projectId },
-      orderBy: { createdAt: 'desc' }
-    });
-    return res.json(sources);
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
-});
-
-app.post('/api/v1/data-sources', async (req, res) => {
-  try {
-    const { name, type, config } = req.body;
-    const projectId = (req.body.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
-
-    if (!name || !type || !config) {
-      return res.status(400).json({ error: 'name, type, and config are required' });
-    }
-
-    const newSource = await prisma.dataSource.create({
-      data: {
-        projectId,
-        name,
-        type,
-        connectionConfig: config
-      }
-    });
-    return res.json(newSource);
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
-});
-
-// ── Pipelines API ────────────────────────────────────────────────────
-
-app.get('/api/v1/pipelines', async (req, res) => {
-  try {
-    const projectId = (req.query.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
-    const pipelines = await prisma.pipeline.findMany({
-      where: { projectId },
-      orderBy: { createdAt: 'desc' },
-    });
-    return res.json(pipelines);
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
-});
-
-app.post('/api/v1/pipelines', async (req, res) => {
-  try {
-    const { name, description, nodes, edges } = req.body;
-    const projectId = (req.body.projectId as string) || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
-
-    if (!name) return res.status(400).json({ error: 'name is required' });
-
-    const newPipeline = await prisma.pipeline.create({
-      data: {
-        projectId,
-        name,
-        description: description || '',
-        nodes: nodes || [],
-        edges: edges || [],
-      },
-    });
-    return res.json(newPipeline);
-  } catch (err) {
-    return res.status(500).json({ error: String(err) });
-  }
-});
+// duplicates removed
 
 app.put('/api/v1/pipelines/:id', async (req, res) => {
   try {
@@ -2966,6 +3473,117 @@ app.put('/api/v1/dashboards/:id', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// NEW: PHASE 6 - RUNTIME & RELEASE ENGINE
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Creates an immutable snapshot (Release) of the entire project configuration.
+ * This powers the 'Publish Center' UI.
+ */
+app.post('/api/v1/projects/:projectId/publish', apiKeyAuth(prisma), async (req, res) => {
+  try {
+    const projectId = req.params.projectId === 'CURRENT_PROJECT'
+      ? req.auth?.projectId!
+      : req.params.projectId;
+
+    const { environment, version } = req.body; // e.g., "STAGING", "v1.0.0"
+
+    if (!environment || !version) {
+      return res.status(400).json({ error: "environment and version are required fields." });
+    }
+
+    // 1. Gather all the live Draft state configuration
+    logger.info(`Extracting Draft state for Release ${version} in ${environment} [Project: ${projectId}]`);
+
+    const [
+      pipelines,
+      dataSources,
+      entityTypes,
+      decisionRules,
+      dashboards
+    ] = await Promise.all([
+      prisma.pipeline.findMany({ where: { projectId: projectId as string } }),
+      prisma.dataSource.findMany({ where: { projectId: projectId as string } }),
+      prisma.entityType.findMany({
+        where: { projectId: projectId as string },
+        include: { attributes: true, outgoingRelationships: true }
+      }),
+      prisma.decisionRule.findMany({ where: { projectId: projectId as string } }),
+      prisma.dashboard.findMany({
+        where: { projectId: projectId as string },
+        include: { widgets: true }
+      })
+    ]);
+
+    // 2. Package into a monolithic JSON Payload
+    const payload = {
+      pipelines,
+      dataSources,
+      entityTypes,
+      decisionRules,
+      dashboards,
+      metadata: {
+        snapshotTime: new Date().toISOString(),
+        itemCounts: {
+          pipelines: pipelines.length,
+          entityTypes: entityTypes.length,
+          apps: dashboards.length,
+        }
+      }
+    };
+
+    // 3. Freeze into a ProjectRelease atomic record
+    const release = await prisma.projectRelease.create({
+      data: {
+        projectId: projectId as string,
+        environment: environment as string,
+        version: version as string,
+        payload: payload,
+        createdBy: req.auth?.apiKeyName || 'system_fallback'
+      }
+    });
+
+    logger.info(`Successfully Published Release ${release.id}`);
+    return res.json(release);
+
+  } catch (err: any) {
+    logger.error({ err }, "Failed to publish atomic project release.");
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Fetch the latest release for a given environment
+ * Used by the App Runtime to serve frozen state instead of live drafts.
+ */
+app.get('/api/v1/projects/:projectId/releases/active', async (req, res) => {
+  try {
+    const projectId = req.params.projectId === 'CURRENT_PROJECT'
+      ? (req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID)
+      : req.params.projectId;
+    const environment = (req.query.environment as string) || "STAGING";
+
+    const activeRelease = await prisma.projectRelease.findFirst({
+      where: {
+        projectId: projectId as string,
+        environment
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    if (!activeRelease) {
+      return res.status(404).json({ error: `No active release found for ${environment}` });
+    }
+
+    return res.json(activeRelease);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Global Search API ──────────────────────────────────────────────
 
 // Full-text search across CurrentEntityState (searches JSON data fields)
@@ -2995,6 +3613,955 @@ app.get('/api/v1/search', async (req, res) => {
     `;
 
     return res.json(results);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── AI Copilot RAG Pipeline ────────────────────────────────────────
+
+app.post('/api/v1/ai/chat', apiKeyAuth(prisma), async (req, res) => {
+  try {
+    const { message } = req.body;
+    const projectId = req.auth?.projectId || req.header('X-Project-Id') || (global as any).DEFAULT_PROJECT_ID;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    // 1. RAG Retrieval: Fetch Current Entity State for context
+    const allEntities = await prisma.$queryRaw<any[]>`
+      SELECT ces."logicalId", ces."data", et."name" AS "entityTypeName"
+      FROM "CurrentEntityState" ces
+      JOIN "EntityType" et ON et."id" = ces."entityTypeId"
+      WHERE et."projectId" = ${projectId}
+    `;
+
+    // Extract specific entities for the response
+    const threat = allEntities.find(e => e.entityTypeName === 'Threat')?.data || {};
+    const asset = allEntities.find(e => e.entityTypeName === 'Asset')?.data || {};
+    const unit = allEntities.find(e => e.entityTypeName === 'Unit')?.data || {};
+    const javelinCount = allEntities.find(e => e.logicalId === 'resource-javelin-01')?.data?.quantity || 0;
+
+    const lowerMsg = message.toLowerCase();
+
+    let responseText = "";
+
+    // Demo Scenario 1: Initial Threat Query & COA Generation
+    if (lowerMsg.includes('threat') || lowerMsg.includes('units') || lowerMsg.includes('equipment') || lowerMsg.includes('coa')) {
+      responseText = `Based on the latest ontology state, I have identified a potential threat:
+**Enemy Unit:** ${threat.type || 'Main Battle Tank'} (${threat.model || 'T-80'})
+**Affiliation:** ${threat.affiliation || 'Hostile'}
+**Location:** Lat ${threat.location?.lat}, Lng ${threat.location?.lng}
+
+Here are 3 possible Courses of Action (COAs) to target the enemy equipment:
+
+### Course of Action 1: Drone Strike
+Task the ${asset.model || 'MQ-9 Reaper'} (${asset.callsign || 'REAPER-1'}) to engage the target.
+*   **Time to Target:** 15 minutes
+*   **Risk:** Medium (Enemy air defense presence unknown)
+*   **Action:** \`[Action: Task MQ-9 Drone]\`
+
+### Course of Action 2: Ground Assault
+Deploy ${unit.vehicle || 'Stryker ICV'} ${unit.unit_size || 'Platoon'} to intercept.
+*   **Time to Target:** 45 minutes
+*   **Risk:** High 
+*   **Action:** \`[Action: Deploy Ground Forces]\`
+
+### Course of Action 3: Jamming & Anti-Armor (Recommended)
+Initiate Electronic Warfare jamming on enemy comms, then maneuver ${unit.vehicle || 'Stryker ICV'} elements to engage with ${javelinCount}x Javelin missiles.
+*   **Time to Target:** 30 minutes
+*   **Risk:** Low (Enemy comms disrupted)
+*   **Action:** \`[Action: Initiate Jamming & Ground Assault]\`
+
+What would you like to do?`;
+    } else if (lowerMsg.includes('jam') || lowerMsg.includes('3') || lowerMsg.includes('jamming')) {
+      responseText = `Understood. Generating operational plan for **Course of Action 3**.
+
+**Validating Supplies:**
+*   **Javelin Missiles:** ${javelinCount} available (Ready).
+*   **Stryker Platoon:** Readiness status is ${unit.readiness || 'Green'}.
+*   **EW Jammer:** Tactical GNSS Jammer status is Available.
+
+I will formulate the Action payload and submit it to the chain of command for review.`;
+    } else {
+      responseText = `I am your AIP Copilot. Currently tracking ${allEntities.length} entities in the operational theater. How can I assist you?`;
+    }
+
+    // Simulate AI typing delay
+    await new Promise(r => setTimeout(r, 1500));
+
+    return res.json({
+      role: "assistant",
+      content: responseText
+    });
+
+  } catch (err) {
+    logger.error({ err }, "AI Chat Error");
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Data Integration & Pipelines (Foundry Pipeline Builder) ────────
+
+app.get('/api/data/sources', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const sources = await prisma.dataSource.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(sources);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/data/sources/test', async (req, res) => {
+  try {
+    const { type, connectionConfig } = req.body;
+    if (type === 'REST_API') {
+      const url = connectionConfig?.url;
+      if (!url) return res.status(400).json({ error: 'URL is required' });
+      const testRes = await fetch(url, {
+        method: connectionConfig.method || 'GET',
+        headers: connectionConfig.headers || {}
+      });
+      if (!testRes.ok) throw new Error(`HTTP error! status: ${testRes.status}`);
+      return res.json({ success: true, message: 'Connection successful' });
+    }
+    // Simulation for Postgres / CSV for MVP
+    return res.json({ success: true, message: 'Simulated connection successful' });
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/data/sources', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const { name, type, connectionConfig } = req.body;
+    if (!name || !type) return res.status(400).json({ error: 'Name and Type are required' });
+    const source = await prisma.dataSource.create({
+      data: { projectId, name, type, connectionConfig }
+    });
+    return res.json(source);
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/data/pipelines', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const pipelines = await prisma.pipeline.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(pipelines);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/data/pipelines', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const { name, description, nodes, edges } = req.body;
+
+    // We assume single pipeline for MVP, or we can upsert by name
+    let pipeline = await prisma.pipeline.findFirst({ where: { projectId, name } });
+    if (pipeline) {
+      pipeline = await prisma.pipeline.update({
+        where: { id: pipeline.id },
+        data: { description, nodes, edges }
+      });
+    } else {
+      pipeline = await prisma.pipeline.create({
+        data: { projectId, name, description, nodes, edges }
+      });
+    }
+    return res.json(pipeline);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/data/integration-jobs', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const { name, dataSourceId, targetEntityTypeId, fieldMapping, logicalIdField, schedule } = req.body;
+
+    let job = await prisma.integrationJob.findUnique({ where: { name } });
+    if (job) {
+      job = await prisma.integrationJob.update({
+        where: { id: job.id },
+        data: { dataSourceId, targetEntityTypeId, fieldMapping, logicalIdField, schedule }
+      });
+    } else {
+      job = await prisma.integrationJob.create({
+        data: { projectId, name, dataSourceId, targetEntityTypeId, fieldMapping, logicalIdField, schedule }
+      });
+    }
+    return res.json(job);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/data/integration-jobs/:id/run', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const job = await prisma.integrationJob.findUnique({ where: { id } });
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    // Push explicitly to JobQueue
+    const queueJob = await prisma.jobQueue.create({
+      data: {
+        jobType: 'INTEGRATION_SYNC',
+        payload: { integrationJobId: job.id },
+        integrationJobId: job.id
+      }
+    });
+
+    return res.json({ message: 'Integration job queued', queueId: queueJob.id });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── AIP Agent Studio ──────────────────────────────────────────
+
+app.get('/api/agents', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const agents = await prisma.aIPAgent.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(agents);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/agents', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const { id, name, description, systemPrompt, modelConfig, ontologyAccess } = req.body;
+
+    if (!name || !systemPrompt) return res.status(400).json({ error: 'Name and System Prompt are required' });
+
+    let agent;
+    if (id) {
+      agent = await prisma.aIPAgent.update({
+        where: { id },
+        data: { name, description, systemPrompt, modelConfig: modelConfig || {}, ontologyAccess: ontologyAccess || [] }
+      });
+    } else {
+      agent = await prisma.aIPAgent.create({
+        data: { projectId, name, description, systemPrompt, modelConfig: modelConfig || {}, ontologyAccess: ontologyAccess || [] }
+      });
+    }
+    return res.json(agent);
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/agents/:id/chat', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+
+    const agent = await prisma.aIPAgent.findUnique({ where: { id } });
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    // Step 1: Forward the heavy RAG lifting and LLM generation over to the Worker Microservice
+    if (!amqpChannel) {
+      return res.status(503).json({ error: 'Message Broker is offline. Cannot process Agent request.' });
+    }
+
+    // Set up an exclusive, auto-deleted reply-to queue for the RPC pattern
+    const replyQueue = await amqpChannel.assertQueue('', { exclusive: true });
+    const correlationId = randomUUID();
+
+    // Push the inference request to the high-compute worker queue
+    const payload = JSON.stringify({
+      agentId: id,
+      message,
+      correlationId,
+      replyTo: replyQueue.queue
+    });
+
+    console.log(`[API] Offloading chat to worker for Agent ${id}`);
+    amqpChannel.sendToQueue('agent_compute_queue', Buffer.from(payload), {
+      persistent: false, // Chats don't strictly need to survive a sudden broker crash
+    });
+
+    // Wait asynchronously for the worker to finish LLM processing and reply
+    return new Promise((resolve, reject) => {
+      amqpChannel!.consume(replyQueue.queue, (msg) => {
+        if (msg && msg.properties.correlationId === correlationId) {
+          try {
+            const workerResponse = JSON.parse(msg.content.toString());
+            const finalAnswer = workerResponse.response;
+
+            // Cleanup the temporary RPC queue
+            amqpChannel!.deleteQueue(replyQueue.queue);
+
+            // Respond back to the Web Client
+            resolve(res.json({
+              role: 'assistant',
+              content: finalAnswer,
+              _debug_context: `Model Used: ${workerResponse.modelUsed}`
+            }));
+          } catch (e) {
+            reject(res.status(500).json({ error: 'Worker returned invalid response.' }));
+          }
+        }
+      }, { noAck: true });
+    });
+
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Functions (AIP Tools) Router ─────────────────────────────────────────
+
+app.get('/api/functions', async (req, res) => {
+  try {
+    const functions = await prisma.aIPFunction.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(functions);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.post('/api/functions', async (req, res) => {
+  try {
+    const { name, description, parameters, code } = req.body;
+    const proj = await prisma.project.findFirst({ orderBy: { createdAt: 'asc' } });
+
+    const newFunction = await prisma.aIPFunction.create({
+      data: {
+        name,
+        description,
+        parameters: parameters || {},
+        code: code || '',
+        projectId: proj!.id
+      }
+    });
+
+    return res.json(newFunction);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 9: AIP Metrics API — Live Ontology Aggregations
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/metrics — list all metric definitions for project
+app.get('/api/metrics', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const metrics = await prisma.aIPMetric.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return res.json(metrics);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// POST /api/metrics — create a new metric definition
+app.post('/api/metrics', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const { name, objectType, property, unit, aggr, window, threshold, thresholdOp, alertOutputType, status } = req.body;
+    if (!name || !objectType || !property) return res.status(400).json({ error: 'name, objectType, property required' });
+    const metric = await prisma.aIPMetric.create({
+      data: {
+        projectId,
+        name,
+        objectType,
+        property,
+        unit: unit || '',
+        aggr: aggr || 'AVG',
+        window: window || 'Last 1 hr',
+        threshold: threshold ?? 0,
+        thresholdOp: thresholdOp || '>',
+        alertOutputType: alertOutputType || 'streaming',
+        status: status || 'draft',
+      }
+    });
+    return res.status(201).json(metric);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// PUT /api/metrics/:id — update a metric definition
+app.put('/api/metrics/:id', async (req, res) => {
+  try {
+    const metric = await prisma.aIPMetric.update({
+      where: { id: req.params.id },
+      data: req.body,
+    });
+    return res.json(metric);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// DELETE /api/metrics/:id — delete a metric
+app.delete('/api/metrics/:id', async (req, res) => {
+  try {
+    await prisma.aIPMetric.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/metrics/:id/data — compute real live aggregation from CurrentEntityState
+// This is the core endpoint that powers real chart data instead of Math.random()
+app.get('/api/metrics/:id/data', async (req, res) => {
+  try {
+    const metric = await prisma.aIPMetric.findUnique({ where: { id: req.params.id } });
+    if (!metric) return res.status(404).json({ error: 'Metric not found' });
+
+    // Find the EntityType by name (objectType)
+    const entityType = await prisma.entityType.findFirst({
+      where: { name: { equals: metric.objectType, mode: 'insensitive' } },
+    });
+
+    // Build the result series — we'll create 30 time buckets
+    const POINTS = 30;
+    let seriesData: { t: number; v: number; label: string }[] = [];
+    let currentValue: number | null = null;
+    let entityCount = 0;
+    let breaching = false;
+
+    if (entityType) {
+      // Fetch all current entity states for this type
+      const states = await prisma.currentEntityState.findMany({
+        where: { entityTypeId: entityType.id },
+        orderBy: { updatedAt: 'desc' },
+        take: 500, // cap at 500 most-recent entities
+      });
+
+      entityCount = states.length;
+
+      if (states.length > 0) {
+        // Extract the numeric property value from each entity's JSON data
+        const values: number[] = states
+          .map((s: any) => {
+            const data = s.data as Record<string, any>;
+            const raw = data[metric.property];
+            const n = parseFloat(String(raw));
+            return isNaN(n) ? null : n;
+          })
+          .filter((v: number | null): v is number => v !== null);
+
+        if (values.length > 0) {
+          // Apply aggregation to get the single current value
+          const appliedAggr = metric.aggr.toUpperCase();
+          switch (appliedAggr) {
+            case 'AVG':
+              currentValue = values.reduce((a, b) => a + b, 0) / values.length;
+              break;
+            case 'SUM':
+              currentValue = values.reduce((a, b) => a + b, 0);
+              break;
+            case 'COUNT':
+              currentValue = values.length;
+              break;
+            case 'MIN':
+              currentValue = Math.min(...values);
+              break;
+            case 'MAX':
+              currentValue = Math.max(...values);
+              break;
+            case 'P95': {
+              const sorted = [...values].sort((a, b) => a - b);
+              currentValue = sorted[Math.floor(sorted.length * 0.95)] ?? sorted[sorted.length - 1];
+              break;
+            }
+            case 'P99': {
+              const sorted = [...values].sort((a, b) => a - b);
+              currentValue = sorted[Math.floor(sorted.length * 0.99)] ?? sorted[sorted.length - 1];
+              break;
+            }
+            case 'P50': {
+              const sorted = [...values].sort((a, b) => a - b);
+              currentValue = sorted[Math.floor(sorted.length * 0.50)] ?? sorted[sorted.length - 1];
+              break;
+            }
+            default:
+              currentValue = values.reduce((a, b) => a + b, 0) / values.length;
+          }
+
+          // Build a realistic time series by using entity data + small variance
+          // We use entity values distributed across time buckets
+          const bucketSize = Math.max(1, Math.floor(values.length / POINTS));
+          for (let i = 0; i < POINTS; i++) {
+            const bucketValues = values.slice(i * bucketSize, (i + 1) * bucketSize);
+            let bucketValue: number;
+            if (bucketValues.length === 0) {
+              bucketValue = currentValue;
+            } else {
+              switch (metric.aggr.toUpperCase()) {
+                case 'AVG':
+                  bucketValue = bucketValues.reduce((a, b) => a + b, 0) / bucketValues.length;
+                  break;
+                case 'SUM':
+                  bucketValue = bucketValues.reduce((a, b) => a + b, 0);
+                  break;
+                case 'COUNT':
+                  bucketValue = bucketValues.length;
+                  break;
+                case 'MIN':
+                  bucketValue = Math.min(...bucketValues);
+                  break;
+                case 'MAX':
+                  bucketValue = Math.max(...bucketValues);
+                  break;
+                default:
+                  bucketValue = bucketValues.reduce((a, b) => a + b, 0) / bucketValues.length;
+              }
+            }
+            seriesData.push({ t: i, v: Math.round(bucketValue * 100) / 100, label: `t${i}` });
+          }
+        }
+      }
+    }
+
+    // If no real data available, return empty series (frontend falls back to synthetic)
+    if (seriesData.length === 0) {
+      for (let i = 0; i < POINTS; i++) {
+        seriesData.push({ t: i, v: 0, label: `t${i}` });
+      }
+    }
+
+    // Check threshold breach
+    if (currentValue !== null) {
+      switch (metric.thresholdOp) {
+        case '>': breaching = currentValue > metric.threshold; break;
+        case '<': breaching = currentValue < metric.threshold; break;
+        case '>=': breaching = currentValue >= metric.threshold; break;
+        case '<=': breaching = currentValue <= metric.threshold; break;
+        default: breaching = false;
+      }
+    }
+
+    return res.json({
+      metricId: metric.id,
+      series: seriesData,
+      currentValue,
+      entityCount,
+      breaching,
+      hasRealData: entityCount > 0 && currentValue !== null,
+      aggregation: `${metric.aggr}(${metric.objectType}.${metric.property})`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/metrics/summary — overview aggregates across all active metrics
+app.get('/api/metrics/summary', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const metrics = await prisma.aIPMetric.findMany({
+      where: { projectId, status: { in: ['active', 'warning'] } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return res.json({ count: metrics.length, metrics: metrics.slice(0, 10) });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 10: Workshop Apps API — Persistent Application Builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/workshop — list all workshop apps for the project
+app.get('/api/workshop', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const apps = await prisma.workshopApp.findMany({
+      where: { projectId },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, name: true, description: true, status: true, createdAt: true, updatedAt: true }
+    });
+    return res.json(apps);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/workshop — create a new workshop app
+app.post('/api/workshop', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const { name, description, status, pages } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const app = await prisma.workshopApp.create({
+      data: { projectId, name, description: description || '', status: status || 'draft', pages: pages || [] }
+    });
+    return res.status(201).json(app);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/workshop/:id — fetch a workshop app with full pages JSON
+app.get('/api/workshop/:id', async (req, res) => {
+  try {
+    const app = await prisma.workshopApp.findUnique({ where: { id: req.params.id } });
+    if (!app) return res.status(404).json({ error: 'Not found' });
+    return res.json(app);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// PUT /api/workshop/:id — update name/description/status/pages
+app.put('/api/workshop/:id', async (req, res) => {
+  try {
+    const { name, description, status, pages } = req.body;
+    const app = await prisma.workshopApp.update({
+      where: { id: req.params.id },
+      data: { ...(name && { name }), ...(description !== undefined && { description }), ...(status && { status }), ...(pages !== undefined && { pages }) },
+    });
+    return res.json(app);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// DELETE /api/workshop/:id
+app.delete('/api/workshop/:id', async (req, res) => {
+  try {
+    await prisma.workshopApp.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/workshop/:id/widget-data — live entity data for all widgets in the app
+// This is the key endpoint: walks all widgets across all pages, resolves their
+// entity bindings against CurrentEntityState, and returns live data per widget.
+app.get('/api/workshop/:id/widget-data', async (req, res) => {
+  try {
+    const app = await prisma.workshopApp.findUnique({ where: { id: req.params.id } });
+    if (!app) return res.status(404).json({ error: 'Not found' });
+
+    const pages = (app.pages as any[]) || [];
+    const widgetData: Record<string, any> = {};
+
+    // Pre-fetch all entity types for lookup
+    const entityTypes = await prisma.entityType.findMany({ select: { id: true, name: true } });
+    const etByName = Object.fromEntries(entityTypes.map((et: any) => [et.name.toLowerCase(), et.id]));
+
+    for (const page of pages) {
+      for (const section of (page.sections || [])) {
+        for (const widget of (section.widgets || [])) {
+          const binding = widget.binding || {};
+          if (!binding.objectType || binding.type === 'none' || binding.type === 'action') continue;
+
+          const objectTypeLower = binding.objectType.toLowerCase();
+          const entityTypeId = etByName[objectTypeLower];
+
+          if (!entityTypeId) {
+            widgetData[widget.id] = { type: widget.type, hasData: false, rows: [], total: 0 };
+            continue;
+          }
+
+          // Fetch live entity states for this type (cap at 200)
+          const states = await prisma.currentEntityState.findMany({
+            where: { entityTypeId },
+            orderBy: { updatedAt: 'desc' },
+            take: 200,
+          });
+
+          const rows = states.map((s: any) => ({ id: s.logicalId, ...(s.data as any) }));
+
+          if (widget.type === 'object-table' || widget.type === 'loop-layout') {
+            widgetData[widget.id] = {
+              type: widget.type, hasData: rows.length > 0,
+              rows: rows.slice(0, 100),
+              total: rows.length,
+              columns: rows.length > 0 ? Object.keys(rows[0]).filter(k => k !== '__typename').slice(0, 8) : []
+            };
+          } else if (widget.type === 'kpi-card') {
+            // KPI: aggregate the bound property
+            const prop = binding.property;
+            const values = prop ? rows.map((r: any) => parseFloat(r[prop])).filter((v: number) => !isNaN(v)) : [];
+            const kpiValue = values.length > 0 ? (values.reduce((a: number, b: number) => a + b, 0) / values.length) : null;
+            widgetData[widget.id] = {
+              type: widget.type, hasData: rows.length > 0,
+              value: kpiValue !== null ? Math.round(kpiValue * 10) / 10 : null,
+              total: rows.length,
+              property: prop || 'count',
+            };
+          } else if (widget.type === 'time-series-chart' || widget.type === 'bar-chart') {
+            // Chart: build a time series from the property across entity states
+            const prop = binding.property;
+            const buckets: { label: string; value: number }[] = [];
+            if (prop && rows.length > 0) {
+              // Group into buckets by index
+              const BUCKETS = 20;
+              const bucketSize = Math.max(1, Math.ceil(rows.length / BUCKETS));
+              for (let i = 0; i < Math.min(BUCKETS, rows.length); i++) {
+                const slice = rows.slice(i * bucketSize, (i + 1) * bucketSize);
+                const vals = slice.map((r: any) => parseFloat(r[prop])).filter((v: number) => !isNaN(v));
+                const avg = vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0;
+                buckets.push({ label: `t${i}`, value: Math.round(avg * 10) / 10 });
+              }
+            }
+            widgetData[widget.id] = {
+              type: widget.type, hasData: buckets.length > 0,
+              series: buckets, total: rows.length, property: prop || '',
+            };
+          } else {
+            widgetData[widget.id] = { type: widget.type, hasData: rows.length > 0, total: rows.length };
+          }
+        }
+      }
+    }
+
+    return res.json({ appId: app.id, widgetData, timestamp: new Date().toISOString() });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 8: AIP Actions API — Foundry-style write-back Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/actions — list all action types for project
+app.get('/api/actions', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const actions = await prisma.aIPAction.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(actions);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// POST /api/actions — create a new action type
+app.post('/api/actions', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project initialised' });
+    const { name, description, category, objectType, params, rbac, approvalRules, writesTo, riskTier, status } = req.body;
+    if (!name || !objectType) return res.status(400).json({ error: 'name, objectType required' });
+    const action = await prisma.aIPAction.create({
+      data: {
+        projectId,
+        name,
+        description: description || '',
+        category: category || 'edit',
+        objectType,
+        params: params || [],
+        rbac: rbac || [],
+        approvalRules: approvalRules || [],
+        writesTo: writesTo || [],
+        riskTier: riskTier || 'low',
+        status: status || 'draft',
+      }
+    });
+    return res.status(201).json(action);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/actions/:id — get a specific action type
+app.get('/api/actions/:id', async (req, res) => {
+  try {
+    const action = await prisma.aIPAction.findUnique({ where: { id: req.params.id } });
+    if (!action) return res.status(404).json({ error: 'Action not found' });
+    return res.json(action);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// PUT /api/actions/:id — update an action type
+app.put('/api/actions/:id', async (req, res) => {
+  try {
+    const { name, description, category, objectType, params, rbac, approvalRules, writesTo, riskTier, status } = req.body;
+    const action = await prisma.aIPAction.update({
+      where: { id: req.params.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(category !== undefined && { category }),
+        ...(objectType !== undefined && { objectType }),
+        ...(params !== undefined && { params }),
+        ...(rbac !== undefined && { rbac }),
+        ...(approvalRules !== undefined && { approvalRules }),
+        ...(writesTo !== undefined && { writesTo }),
+        ...(riskTier !== undefined && { riskTier }),
+        ...(status !== undefined && { status }),
+      }
+    });
+    return res.json(action);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// DELETE /api/actions/:id — delete an action type
+app.delete('/api/actions/:id', async (req, res) => {
+  try {
+    await prisma.aIPAction.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/actions/:id/executions — execution history for an action
+app.get('/api/actions/:id/executions', async (req, res) => {
+  try {
+    const executions = await prisma.aIPActionExecution.findMany({
+      where: { actionId: req.params.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return res.json(executions);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// POST /api/actions/:id/execute — apply an action against an entity instance
+app.post('/api/actions/:id/execute', async (req, res) => {
+  try {
+    const action = await prisma.aIPAction.findUnique({ where: { id: req.params.id } });
+    if (!action) return res.status(404).json({ error: 'Action not found' });
+    if (action.status === 'deprecated') return res.status(400).json({ error: 'Action is deprecated' });
+
+    const { logicalId, parameters, submittedBy } = req.body;
+    if (!logicalId) return res.status(400).json({ error: 'logicalId of the target entity is required' });
+
+    // Validate required params
+    const paramDefs = action.params as any[];
+    const missingParams = paramDefs
+      .filter((p: any) => p.required && (parameters[p.name] === undefined || parameters[p.name] === null || parameters[p.name] === ''))
+      .map((p: any) => p.name);
+    if (missingParams.length > 0) {
+      return res.status(400).json({ error: `Missing required parameters: ${missingParams.join(', ')}` });
+    }
+
+    // For low-risk actions (no approval required), apply immediately
+    const needsApproval = (action.approvalRules as any[]).length > 0 && action.riskTier !== 'low';
+
+    // Create execution log entry
+    const execution = await prisma.aIPActionExecution.create({
+      data: {
+        actionId: action.id,
+        logicalId,
+        objectType: action.objectType,
+        parameters,
+        status: needsApproval ? 'PENDING' : 'APPLIED',
+        submittedBy: submittedBy || 'system',
+        appliedAt: needsApproval ? null : new Date(),
+        result: needsApproval ? null : { message: 'Applied immediately (low-risk, no approval required)' },
+      }
+    });
+
+    // If no approval needed, perform write-back to CurrentEntityState
+    if (!needsApproval) {
+      try {
+        // Find the current entity state
+        const currentState = await prisma.currentEntityState.findUnique({ where: { logicalId } });
+        if (currentState) {
+          // Build the updated data by applying the action parameters as property patches
+          const currentData = currentState.data as Record<string, any>;
+          const category = action.category;
+          let updatedData = { ...currentData };
+
+          if (category === 'edit') {
+            // Merge action params into entity data
+            const writesToFields = action.writesTo as string[];
+            for (const param of paramDefs) {
+              if (parameters[param.name] !== undefined) {
+                // Strip "ObjectType." prefix if present (e.g. "Mission.priority" -> "priority")
+                const fieldName = param.name.includes('.') ? param.name.split('.').pop() : param.name;
+                if (fieldName) updatedData[fieldName] = parameters[param.name];
+              }
+            }
+          } else if (category === 'create') {
+            // For create actions, we just log the intent (entity creation goes through ingestion)
+            updatedData = { ...currentData, _lastAction: action.name, _lastActionParams: parameters };
+          } else if (category === 'delete') {
+            updatedData = { ...currentData, status: 'DECOMMISSIONED', _deletedBy: action.name };
+          } else if (category === 'link') {
+            // Apply link parameters to entity state
+            for (const param of paramDefs) {
+              if (parameters[param.name] !== undefined) {
+                const fieldName = param.name.includes('.') ? param.name.split('.').pop() : param.name;
+                if (fieldName) updatedData[fieldName] = parameters[param.name];
+              }
+            }
+          }
+
+          // Update the CurrentEntityState projection
+          await prisma.currentEntityState.update({
+            where: { logicalId },
+            data: { data: updatedData, updatedAt: new Date() }
+          });
+
+          // Update execution result with what changed
+          await prisma.aIPActionExecution.update({
+            where: { id: execution.id },
+            data: { result: { changedFields: Object.keys(updatedData).filter(k => updatedData[k] !== currentData[k]), updatedData } }
+          });
+        }
+      } catch (writeErr) {
+        logger.warn({ writeErr, logicalId }, 'Could not apply write-back to CurrentEntityState');
+      }
+    }
+
+    // Increment usage counter
+    await prisma.aIPAction.update({
+      where: { id: action.id },
+      data: { usages: { increment: 1 }, lastUsedAt: new Date() }
+    });
+
+    // Write audit log
+    await prisma.auditLog.create({
+      data: {
+        actor: submittedBy || 'system',
+        actorRole: 'OPERATOR',
+        action: `EXECUTE_ACTION:${action.name}`,
+        resourceType: 'AIPAction',
+        resourceId: action.id,
+        after: { logicalId, parameters, executionId: execution.id, status: execution.status },
+      }
+    });
+
+    return res.json({
+      executionId: execution.id,
+      status: execution.status,
+      needsApproval,
+      message: needsApproval
+        ? `Action submitted for approval. ${(action.approvalRules as any[]).length} approval rule(s) apply.`
+        : `Action applied successfully to entity ${logicalId}.`
+    });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }

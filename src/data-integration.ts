@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from './generated/prisma';
 import { evaluatePolicies } from './policy-engine';
 import { IdentityService } from './identity-service';
 import { ProvenanceService } from './provenance-service';
+import { runReasonerForEntity } from './ontology-reasoner';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ function transformRecord(
  * Returns { success: true } on success, { success: false, error } on failure.
  */
 export async function upsertEntityInstance(
-    entityType: { id: string; version: number; name: string },
+    entityType: { id: string; version: number; name: string; projectId: string },
     logicalId: string,
     attrData: Record<string, unknown>,
     prisma: PrismaClient,
@@ -228,6 +229,11 @@ export async function upsertEntityInstance(
             prisma,
         );
 
+        // Fire-and-forget: trigger semantic reasoner to derive ontology properties natively 
+        runReasonerForEntity(logicalId, entityType.projectId, prisma).catch(err => {
+            console.error(`[Semantic Reasoner Error] Failed to reason for entity ${logicalId}:`, err);
+        });
+
         return { success: true, instanceId };
     } catch (error) {
         return { success: false, error: String(error) };
@@ -282,6 +288,7 @@ export async function executeJob(
             id: job.targetEntityType.id,
             version: job.targetEntityType.version,
             name: job.targetEntityType.name,
+            projectId: job.targetEntityType.projectId,
         };
 
         for (const raw of rawRecords) {
@@ -337,6 +344,62 @@ export async function executeJob(
             status: 'FAILED',
             recordsProcessed,
             recordsFailed,
+            error: String(error),
+        };
+    }
+}
+
+/**
+ * Dry-Run an integration job:
+ * Fetches data from the exact connector but halts before writing any instances to the DB.
+ * Returns a subset of raw vs mapped records for user preview.
+ */
+export async function dryRunJob(
+    jobId: string,
+    prisma: PrismaClient,
+    inlineData?: unknown[],
+): Promise<{ status: string; records: Array<{ raw: Record<string, unknown>, mapped: Record<string, unknown>, externalId: string | null }>; error?: string }> {
+    const job = await prisma.integrationJob.findUnique({
+        where: { id: jobId },
+        include: {
+            dataSource: true,
+            targetEntityType: { include: { attributes: true } },
+        },
+    });
+
+    if (!job) throw new Error(`Integration job '${jobId}' not found`);
+
+    try {
+        const connectorFn = connectors[job.dataSource.type];
+        if (!connectorFn) {
+            throw new Error(`Unsupported data source type: '${job.dataSource.type}'`);
+        }
+
+        const connectionConfig = job.dataSource.connectionConfig as unknown as ConnectionConfig;
+        const rawRecords = await connectorFn(connectionConfig, inlineData);
+
+        const fieldMapping = job.fieldMapping as unknown as FieldMapping;
+        const previewLimit = 5;
+        const previewRecords = rawRecords.slice(0, previewLimit);
+
+        const output = previewRecords.map(raw => {
+            const externalId = raw[job.logicalIdField] as string | undefined;
+            const mapped = transformRecord(raw, fieldMapping);
+            return {
+                raw,
+                mapped,
+                externalId: externalId ?? null
+            };
+        });
+
+        return {
+            status: 'SUCCESS',
+            records: output
+        };
+    } catch (error) {
+        return {
+            status: 'FAILED',
+            records: [],
             error: String(error),
         };
     }

@@ -58,11 +58,11 @@ function generateSeries(metric: Metric, points = 48): { t: number; v: number }[]
     }));
 }
 
-// ── SVG Line Chart ────────────────────────────────────────────────────────────
-function TimeSeriesChart({ metric }: { metric: Metric }) {
-    const [series, setSeries] = useState(() => generateSeries(metric));
-
-    useEffect(() => { setSeries(generateSeries(metric)); }, [metric.id]);
+// Live-data aware TimeSeriesChart — accepts external series data
+interface ChartSeries { t: number; v: number }
+function TimeSeriesChart({ metric, series: externalSeries }: { metric: Metric; series?: ChartSeries[] }) {
+    const fallback = generateSeries(metric);
+    const series = (externalSeries && externalSeries.length > 0) ? externalSeries : fallback;
 
     const W = 480, H = 120;
     const pad = { t: 12, r: 8, b: 24, l: 36 };
@@ -78,10 +78,10 @@ function TimeSeriesChart({ metric }: { metric: Metric }) {
     const threshY = scY(metric.threshold);
 
     const yTicks = [minV, (minV + maxV) / 2, maxV].map(v => ({ v, y: scY(v) }));
-    const xLabels = [0, Math.floor(series.length / 3), Math.floor((2 * series.length) / 3), series.length - 1];
+    const xLabels = [0, Math.floor(series.length / 4), Math.floor(series.length / 2), Math.floor(series.length * 3 / 4), series.length - 1].filter(i => i < series.length);
 
     return (
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, display: "block" }}>
             <defs>
                 <linearGradient id={`grad-${metric.id}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.25" />
@@ -89,17 +89,15 @@ function TimeSeriesChart({ metric }: { metric: Metric }) {
                 </linearGradient>
             </defs>
             {/* Grid */}
-            {yTicks.map(({ y }, i) => (
-                <line key={i} x1={pad.l} y1={y} x2={pad.l + iW} y2={y} stroke="#EDE9FE" strokeWidth="0.7" />
-            ))}
-            {/* Y-axis labels */}
             {yTicks.map(({ v, y }) => (
-                <text key={v} x={pad.l - 4} y={y + 3} textAnchor="end" fontSize="8" fill="#8B7EC8">{v.toFixed(0)}</text>
+                <g key={v}>
+                    <line x1={pad.l} y1={y} x2={pad.l + iW} y2={y} stroke="#EDE9FE" strokeWidth="0.5" />
+                    <text x={pad.l - 4} y={y + 3} textAnchor="end" fontSize="7" fill="#8B7EC8">{v.toFixed(1)}</text>
+                </g>
             ))}
-            {/* X-axis labels */}
             {xLabels.map(i => (
                 <text key={i} x={scX(i)} y={H - 4} textAnchor="middle" fontSize="7" fill="#8B7EC8">
-                    {`${i}:${String(i % 60).padStart(2, "0")}`}
+                    {`t${i}`}
                 </text>
             ))}
             {/* Area */}
@@ -117,6 +115,8 @@ function TimeSeriesChart({ metric }: { metric: Metric }) {
         </svg>
     );
 }
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const btn = (primary = false): React.CSSProperties => ({
@@ -153,12 +153,123 @@ const select = (val: string, opts: string[], onChange: (v: string) => void) => (
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function MetricsPage() {
-    const [metrics, setMetrics] = useState<Metric[]>(SEED_METRICS);
-    const [sel, setSel] = useState<Metric>(SEED_METRICS[0]);
+    const [metrics, setMetrics] = useState<Metric[]>([]);
+    const [sel, setSel] = useState<Metric | null>(null);
     const [tab, setTab] = useState("Definition");
     const [canvasTab, setCanvasTab] = useState("Time Series");
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    // Live chart data
+    const [chartSeries, setChartSeries] = useState<ChartSeries[]>([]);
+    const [liveStats, setLiveStats] = useState<{
+        currentValue: number | null;
+        entityCount: number;
+        breaching: boolean;
+        hasRealData: boolean;
+        aggregation: string;
+    } | null>(null);
+    const [loadingChart, setLoadingChart] = useState(false);
+
+    // ── Fetch metric definitions from DB ────────────────────────────────────
+    const fetchMetrics = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch(`${API}/api/metrics`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.length > 0) {
+                    setMetrics(data);
+                    if (!sel) setSel(data[0]);
+                } else {
+                    // No metrics in DB yet — show seed metrics as default
+                    setMetrics(SEED_METRICS);
+                    setSel(SEED_METRICS[0]);
+                }
+            }
+        } catch {
+            setMetrics(SEED_METRICS);
+            setSel(SEED_METRICS[0]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ── Fetch live chart data when a metric is selected ─────────────────────
+    const fetchChartData = async (metricId: string) => {
+        // Skip for local/seed metrics not in DB
+        if (!metricId || metricId.startsWith('m')) return;
+        setLoadingChart(true);
+        try {
+            const res = await fetch(`${API}/api/metrics/${metricId}/data`);
+            if (res.ok) {
+                const data = await res.json();
+                setChartSeries(data.series || []);
+                setLiveStats({
+                    currentValue: data.currentValue,
+                    entityCount: data.entityCount,
+                    breaching: data.breaching,
+                    hasRealData: data.hasRealData,
+                    aggregation: data.aggregation,
+                });
+            }
+        } catch {
+            setChartSeries([]);
+            setLiveStats(null);
+        } finally {
+            setLoadingChart(false);
+        }
+    };
+
+    useEffect(() => { fetchMetrics(); }, []);
+    useEffect(() => {
+        if (sel) fetchChartData(sel.id);
+    }, [sel?.id]);
+
+    // ── Save handler ─────────────────────────────────────────────────────────
+    const handleSave = async () => {
+        if (!sel) return;
+        setSaving(true);
+        try {
+            const isNew = sel.id.startsWith('m') || sel.id.startsWith('local_');
+            const body = {
+                name: sel.name, objectType: sel.objectType, property: sel.property,
+                unit: sel.unit, aggr: sel.aggr, window: sel.window,
+                threshold: sel.threshold, thresholdOp: sel.thresholdOp,
+                alertOutputType: sel.alertOutputType, status: sel.status,
+            };
+            let res;
+            if (isNew) {
+                res = await fetch(`${API}/api/metrics`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            } else {
+                res = await fetch(`${API}/api/metrics/${sel.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            }
+            if (res?.ok) {
+                const saved = await res.json();
+                setSel((prev: Metric | null) => prev ? { ...prev, id: saved.id } : null);
+                await fetchMetrics();
+                await fetchChartData(saved.id);
+            }
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ── New metric ────────────────────────────────────────────────────────────
+    const handleNew = () => {
+        const m: Metric = {
+            id: `local_${Date.now()}`, name: 'New Metric', objectType: 'Drone',
+            property: 'batteryLevel', unit: '%', aggr: 'AVG', window: 'Last 1 hr',
+            threshold: 20, thresholdOp: '<', stream: 'Drone Telemetry Stream',
+            alertOutputType: 'streaming', status: 'draft',
+        };
+        setMetrics(prev => [...prev, m]);
+        setSel(m);
+        setChartSeries([]);
+        setLiveStats(null);
+    };
 
     const update = (patch: Partial<Metric>) => {
+        if (!sel) return;
         const updated = { ...sel, ...patch };
         setSel(updated);
         setMetrics(m => m.map(x => x.id === sel.id ? updated : x));
@@ -168,6 +279,9 @@ export default function MetricsPage() {
         const c = { active: ["#E6F7F0", "#0D8050"], warning: ["#FFF3E0", "#D9822B"], draft: ["#EBF4FC", "#137CBD"], inactive: ["#EBF1F5", "#5C7080"] }[s];
         return <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 10, fontWeight: 700, background: c[0], color: c[1] }}>{s}</span>;
     };
+
+    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#5C7080", fontSize: 13, fontFamily: "Inter, sans-serif" }}>Loading metrics...</div>;
+    if (!sel) return null;
 
     const objProps = PROPERTIES[sel.objectType] ?? [];
 
@@ -184,9 +298,9 @@ export default function MetricsPage() {
                 <div style={{ width: 1, height: 16, background: "#CED9E0", margin: "0 4px" }} />
                 <span style={{ fontSize: 11, color: "#5C7080" }}>Time-series thresholds · Alert automations</span>
                 <div style={{ flex: 1 }} />
-                <button style={btn()}><RefreshCw style={{ width: 12, height: 12 }} /> Refresh</button>
+                <button onClick={fetchMetrics} style={btn()}><RefreshCw style={{ width: 12, height: 12 }} /> Refresh</button>
                 <button style={btn()}><Share2 style={{ width: 12, height: 12 }} /> Share</button>
-                <button style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> New Metric</button>
+                <button onClick={handleNew} style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> New Metric</button>
             </div>
 
             {/* ── Body ── */}
@@ -202,7 +316,7 @@ export default function MetricsPage() {
                     </div>
                     <div style={{ flex: 1, overflowY: "auto" }}>
                         {metrics.map(m => (
-                            <div key={m.id} onClick={() => setSel(m)}
+                            <div key={m.id} onClick={() => { setSel(m); setChartSeries([]); setLiveStats(null); }}
                                 style={{
                                     padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid #EBF1F5",
                                     background: sel.id === m.id ? "rgba(124,58,237,0.05)" : "transparent",
@@ -249,7 +363,7 @@ export default function MetricsPage() {
                                     )}
                                     {field("Status", select(sel.status, ["active", "draft", "warning", "inactive"], v => update({ status: v as MetricStatus })))}
                                     <div style={{ display: "flex", gap: 8 }}>
-                                        <button style={btn(true)}>Save Definition</button>
+                                        <button onClick={handleSave} disabled={saving} style={{ ...btn(true), opacity: saving ? 0.6 : 1 }}>{saving ? "Saving..." : "Save Definition"}</button>
                                         <button style={btn()}>Discard</button>
                                     </div>
                                 </div>
@@ -271,12 +385,39 @@ export default function MetricsPage() {
                                         </div>
                                     </div>
                                     <div style={{ padding: "8px 12px" }}>
-                                        <TimeSeriesChart metric={sel} />
+                                        <TimeSeriesChart metric={sel} series={chartSeries} />
+                                        {/* Live stats panel */}
+                                        <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+                                            {liveStats && (
+                                                <>
+                                                    <div style={{ flex: 1, minWidth: 110, padding: "6px 10px", background: liveStats.hasRealData ? "#EDE9FE" : "#F5F8FA", borderRadius: 4, border: `1px solid ${liveStats.hasRealData ? "#7C3AED" : "#CED9E0"}` }}>
+                                                        <div style={{ fontSize: 9, fontWeight: 700, color: liveStats.hasRealData ? "#7C3AED" : "#8A9BA8", letterSpacing: "0.08em", marginBottom: 2 }}>{liveStats.hasRealData ? "⚡ LIVE VALUE" : "⊘ NO DATA"}</div>
+                                                        <div style={{ fontSize: 18, fontWeight: 700, color: "#182026" }}>{liveStats.currentValue !== null ? `${liveStats.currentValue.toFixed(1)}${sel.unit}` : "—"}</div>
+                                                        <div style={{ fontSize: 9, color: "#8A9BA8" }}>{liveStats.aggregation}</div>
+                                                    </div>
+                                                    <div style={{ flex: 1, minWidth: 90, padding: "6px 10px", background: "#F5F8FA", borderRadius: 4, border: "1px solid #CED9E0" }}>
+                                                        <div style={{ fontSize: 9, fontWeight: 700, color: "#8A9BA8", letterSpacing: "0.08em", marginBottom: 2 }}>ENTITIES</div>
+                                                        <div style={{ fontSize: 18, fontWeight: 700, color: "#182026" }}>{liveStats.entityCount}</div>
+                                                        <div style={{ fontSize: 9, color: "#8A9BA8" }}>{sel.objectType} instances</div>
+                                                    </div>
+                                                    {liveStats.hasRealData && (
+                                                        <div style={{ flex: 1, minWidth: 90, padding: "6px 10px", background: liveStats.breaching ? "rgba(239,68,68,0.08)" : "#E6F7F0", borderRadius: 4, border: `1px solid ${liveStats.breaching ? "#EF4444" : "#0D8050"}` }}>
+                                                            <div style={{ fontSize: 9, fontWeight: 700, color: liveStats.breaching ? "#EF4444" : "#0D8050", letterSpacing: "0.08em", marginBottom: 2 }}>THRESHOLD</div>
+                                                            <div style={{ fontSize: 13, fontWeight: 700, color: liveStats.breaching ? "#EF4444" : "#0D8050" }}>{liveStats.breaching ? "⚠ BREACHING" : "✓ OK"}</div>
+                                                            <div style={{ fontSize: 9, color: "#8A9BA8" }}>{sel.thresholdOp} {sel.threshold}{sel.unit}</div>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                            {loadingChart && <div style={{ fontSize: 11, color: "#8A9BA8", alignSelf: "center" }}>⟳ Loading live data...</div>}
+                                        </div>
                                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                                             <div style={{ width: 12, height: 2, background: "#7C3AED", borderRadius: 1 }} />
                                             <span style={{ fontSize: 10, color: "#5C7080" }}>{sel.aggr}({sel.property})</span>
                                             <div style={{ width: 12, height: 2, background: "#EF4444", borderRadius: 1, borderTop: "1px dashed #EF4444" }} />
                                             <span style={{ fontSize: 10, color: "#5C7080" }}>threshold</span>
+                                            {liveStats?.hasRealData && <span style={{ fontSize: 9, padding: "1px 5px", background: "#7C3AED", color: "#fff", borderRadius: 3, fontWeight: 700, marginLeft: 4 }}>LIVE</span>}
+                                            {liveStats && !liveStats.hasRealData && <span style={{ fontSize: 9, padding: "1px 5px", background: "#EBF1F5", color: "#8A9BA8", borderRadius: 3, fontWeight: 700, marginLeft: 4 }}>SYNTHETIC</span>}
                                         </div>
                                     </div>
                                 </div>
@@ -304,9 +445,9 @@ export default function MetricsPage() {
                                 {/* Live preview */}
                                 <div style={{ background: "#fff", border: "1px solid #CED9E0", borderRadius: 4, padding: 12 }}>
                                     <div style={{ fontSize: 11, fontWeight: 700, color: "#182026", marginBottom: 8 }}>Historical Preview</div>
-                                    <TimeSeriesChart metric={sel} />
+                                    <TimeSeriesChart metric={sel} series={chartSeries} />
                                 </div>
-                                <button style={btn(true)}>Save Aggregation</button>
+                                <button onClick={handleSave} disabled={saving} style={{ ...btn(true), opacity: saving ? 0.6 : 1 }}>{saving ? "Saving..." : "Save Aggregation"}</button>
                             </div>
                         )}
 

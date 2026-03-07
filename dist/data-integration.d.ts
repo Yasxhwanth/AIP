@@ -32,5 +32,19 @@ export declare function executeJob(jobId: string, prisma: PrismaClient, queueId?
     recordsFailed: number;
     error?: string;
 }>;
+/**
+ * Dry-Run an integration job:
+ * Fetches data from the exact connector but halts before writing any instances to the DB.
+ * Returns a subset of raw vs mapped records for user preview.
+ */
+export declare function dryRunJob(jobId: string, prisma: PrismaClient, inlineData?: unknown[]): Promise<{
+    status: string;
+    records: Array<{
+        raw: Record<string, unknown>;
+        mapped: Record<string, unknown>;
+        externalId: string | null;
+    }>;
+    error?: string;
+}>;
 export declare function startScheduler(prisma: PrismaClient): void;
 //# sourceMappingURL=data-integration.d.ts.map

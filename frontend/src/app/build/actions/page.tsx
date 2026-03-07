@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Zap, Plus, Shield, Check, X, AlertTriangle, Info,
     ChevronDown, Play, Copy, RefreshCw, Eye, Lock, Edit3,
@@ -254,13 +254,150 @@ function validatePayload(params: ActionParam[]): ActionParam[] {
     });
 }
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ActionsPage() {
-    const [actions, setActions] = useState<ActionType[]>(SEED_ACTIONS);
-    const [sel, setSel] = useState<ActionType>(SEED_ACTIONS[0]);
+    const [actions, setActions] = useState<ActionType[]>([]);
+    const [sel, setSel] = useState<ActionType | null>(null);
     const [tab, setTab] = useState<"general" | "schema" | "permissions" | "risk" | "simulation">("general");
     const [simRun, setSimRun] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [executing, setExecuting] = useState(false);
+    const [execResult, setExecResult] = useState<{ status: string; message: string; needsApproval?: boolean } | null>(null);
+
+    // ── Fetch on mount ────────────────────────────────────────────────────────
+    const fetchActions = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch(`${API}/api/actions`);
+            if (res.ok) {
+                const data = await res.json();
+                // Map DB model → UI ActionType shape
+                const mapped: ActionType[] = data.map((a: any) => ({
+                    id: a.id,
+                    name: a.name,
+                    description: a.description,
+                    category: a.category as ActionCategory,
+                    objectType: a.objectType,
+                    status: a.status as ActionStatus,
+                    riskTier: a.riskTier as RiskTier,
+                    usages: a.usages || 0,
+                    lastUsed: a.lastUsedAt ? new Date(a.lastUsedAt).toLocaleString() : "never",
+                    params: Array.isArray(a.params) ? a.params : [],
+                    rbac: Array.isArray(a.rbac) ? a.rbac : ROLES.map(r => ({ role: r, canView: true, canEdit: false, canApply: false, canAdmin: false })),
+                    approvalRules: Array.isArray(a.approvalRules) ? a.approvalRules : [],
+                    writesTo: Array.isArray(a.writesTo) ? a.writesTo : [],
+                }));
+                setActions(mapped);
+                if (mapped.length > 0 && !sel) setSel(mapped[0]);
+                else if (mapped.length === 0) setSel(null);
+            }
+        } catch (e) {
+            // Fallback to seed data if backend isn't reachable
+            setActions(SEED_ACTIONS);
+            setSel(SEED_ACTIONS[0]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { fetchActions(); }, []);    // fire once on mount
+
+    // ── Save handler ─────────────────────────────────────────────────────────
+    const handleSave = async () => {
+        if (!sel) return;
+        setSaving(true);
+        try {
+            const isNew = sel.id.startsWith("local_");
+            const body = {
+                name: sel.name,
+                description: sel.description,
+                category: sel.category,
+                objectType: sel.objectType,
+                params: sel.params,
+                rbac: sel.rbac,
+                approvalRules: sel.approvalRules,
+                writesTo: sel.writesTo,
+                riskTier: sel.riskTier,
+                status: sel.status,
+            };
+            let res;
+            if (isNew) {
+                res = await fetch(`${API}/api/actions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            } else {
+                res = await fetch(`${API}/api/actions/${sel.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            }
+            if (res.ok) {
+                const saved = await res.json();
+                setSel((prev: ActionType | null) => prev ? { ...prev, id: saved.id, usages: saved.usages } : null);
+                await fetchActions();
+            }
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ── New Action ────────────────────────────────────────────────────────────
+    const handleNew = () => {
+        const a: ActionType = {
+            id: `local_${Date.now()}`, name: "NewAction", category: "edit",
+            objectType: "Drone", description: "", status: "draft",
+            riskTier: "low", usages: 0, lastUsed: "never",
+            params: [], rbac: ROLES.map(r => ({ role: r, canView: true, canEdit: false, canApply: false, canAdmin: false })),
+            approvalRules: [], writesTo: [],
+        };
+        setActions(prev => [...prev, a]);
+        setSel(a); setSimRun(false); setExecResult(null);
+    };
+
+    // ── Execute handler ───────────────────────────────────────────────────────
+    const handleExecute = async () => {
+        if (!sel || sel.id.startsWith("local_")) {
+            alert("Save the action first before executing.");
+            return;
+        }
+        const validated = validatePayload(sel.params);
+        setSel({ ...sel, params: validated });
+        const allOk = validated.filter(p => p.required).every(p => p.validState === "VALID");
+        if (!allOk) { setSimRun(true); return; }
+
+        // Build parameters map for execution
+        const parameters: Record<string, any> = {};
+        validated.forEach(p => {
+            if (p.type === "boolean") parameters[p.name] = p.value === "true";
+            else if (p.type === "number") parameters[p.name] = Number(p.value) || 0;
+            else parameters[p.name] = p.value || null;
+        });
+
+        const logicalId = parameters.missionId || parameters.droneId || parameters.equipmentId || parameters.pilotId || "DEMO-001";
+
+        setExecuting(true);
+        setExecResult(null);
+        try {
+            const res = await fetch(`${API}/api/actions/${sel.id}/execute`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ logicalId, parameters, submittedBy: "current-user" })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setExecResult({ status: data.status, message: data.message, needsApproval: data.needsApproval });
+                // Refresh to get updated usages counter
+                await fetchActions();
+            } else {
+                setExecResult({ status: "FAILED", message: data.error || "Execution failed" });
+            }
+        } catch (e) {
+            setExecResult({ status: "FAILED", message: "Network error — backend unreachable" });
+        } finally {
+            setExecuting(false);
+            setSimRun(true);
+            setTab("simulation");
+        }
+    };
 
     const updateSel = (a: ActionType) => {
         setSel(a);
@@ -268,22 +405,48 @@ export default function ActionsPage() {
     };
 
     const updateParam = (idx: number, patch: Partial<ActionParam>) => {
+        if (!sel) return;
         const params = [...sel.params];
         params[idx] = { ...params[idx], ...patch };
         updateSel({ ...sel, params });
     };
 
     const toggleRbac = (roleIdx: number, field: keyof RbacEntry) => {
+        if (!sel) return;
         const rbac = sel.rbac.map((r, i) => i === roleIdx ? { ...r, [field]: !(r as Record<keyof RbacEntry, boolean | string>)[field] } : r);
         updateSel({ ...sel, rbac });
     };
 
     const runSim = () => {
+        if (!sel) return;
         const validated = validatePayload(sel.params);
         updateSel({ ...sel, params: validated });
         setSimRun(true);
         setTab("simulation");
     };
+
+    if (loading) return (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", fontFamily: "Inter, sans-serif", color: "#5C7080", fontSize: 13 }}>
+            Loading actions...
+        </div>
+    );
+
+    if (!sel) return (
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", fontFamily: "Inter, sans-serif", background: "#F5F8FA" }}>
+            <div style={{ height: 44, display: "flex", alignItems: "center", padding: "0 14px", background: "#fff", borderBottom: "1px solid #CED9E0", gap: 8 }}>
+                <Zap style={{ width: 16, height: 16, color: "#D9822B" }} />
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Actions</span>
+                <div style={{ flex: 1 }} />
+                <button onClick={handleNew} style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> New Action Type</button>
+            </div>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+                <Zap style={{ width: 40, height: 40, color: "#CED9E0" }} />
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#182026" }}>No Action Types yet</div>
+                <div style={{ fontSize: 11, color: "#5C7080" }}>Create your first action to enable write-back operations on the Ontology.</div>
+                <button onClick={handleNew} style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> Create Action Type</button>
+            </div>
+        </div>
+    );
 
     const allValid = sel.params.filter(p => p.required).every(p => p.validState === "VALID");
     const hasErrors = sel.params.some(p => p.validState === "INVALID");
@@ -309,20 +472,10 @@ export default function ActionsPage() {
                 <div style={{ width: 1, height: 16, background: "#CED9E0", margin: "0 4px" }} />
                 <span style={{ fontSize: 11, color: "#5C7080" }}>Ontology Manager · Action Types</span>
                 <div style={{ flex: 1 }} />
-                <button style={btn()}>
+                <button onClick={fetchActions} style={btn()}>
                     <RefreshCw style={{ width: 12, height: 12 }} /> Refresh
                 </button>
-                <button onClick={() => {
-                    const a: ActionType = {
-                        id: `a${Date.now()}`, name: "NewAction", category: "edit",
-                        objectType: "Drone", description: "", status: "draft",
-                        riskTier: "low", usages: 0, lastUsed: "never",
-                        params: [], rbac: ROLES.map(r => ({ role: r, canView: true, canEdit: false, canApply: false, canAdmin: false })),
-                        approvalRules: [], writesTo: [],
-                    };
-                    setActions(prev => [...prev, a]);
-                    setSel(a); setSimRun(false);
-                }} style={btn(true)}>
+                <button onClick={handleNew} style={btn(true)}>
                     <Plus style={{ width: 13, height: 13 }} /> New Action Type
                 </button>
             </div>
@@ -426,10 +579,12 @@ export default function ActionsPage() {
                             </div>
                         )}
 
-                        <button onClick={runSim} style={btn()}>
-                            <Play style={{ width: 12, height: 12 }} /> Simulate
+                        <button onClick={handleExecute} disabled={executing} style={{ ...btn(), opacity: executing ? 0.6 : 1 }}>
+                            <Play style={{ width: 12, height: 12 }} /> {executing ? "Executing..." : "Execute"}
                         </button>
-                        <button style={btn(true)}>Save</button>
+                        <button onClick={handleSave} disabled={saving} style={{ ...btn(true), opacity: saving ? 0.6 : 1 }}>
+                            {saving ? "Saving..." : "Save"}
+                        </button>
                     </div>
 
                     {/* Tabs */}
@@ -536,7 +691,9 @@ export default function ActionsPage() {
                                         {["active", "draft", "deprecated"].map(s => <option key={s}>{s}</option>)}
                                     </select>
                                 </div>
-                                <button style={btn(true)}>Save General</button>
+                                <button onClick={handleSave} disabled={saving} style={{ ...btn(true), opacity: saving ? 0.6 : 1 }}>
+                                    {saving ? "Saving..." : "Save Changes"}
+                                </button>
                             </div>
                         )}
 
@@ -724,7 +881,9 @@ export default function ActionsPage() {
                                     </span>
                                 </div>
                                 <div style={{ marginTop: 12 }}>
-                                    <button style={btn(true)}>Save Permissions</button>
+                                    <button onClick={handleSave} disabled={saving} style={{ ...btn(true), opacity: saving ? 0.6 : 1 }}>
+                                        {saving ? "Saving..." : "Save Permissions"}
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -823,7 +982,9 @@ export default function ActionsPage() {
                                     <button style={{ ...btn(), fontSize: 11 }}>
                                         <Plus style={{ width: 11, height: 11 }} /> Add Approval Rule
                                     </button>
-                                    <button style={btn(true)}>Save Risk Config</button>
+                                    <button onClick={handleSave} disabled={saving} style={{ ...btn(true), opacity: saving ? 0.6 : 1 }}>
+                                        {saving ? "Saving..." : "Save Risk Config"}
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -895,10 +1056,12 @@ export default function ActionsPage() {
                                     ))}
 
                                     <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                                        <button onClick={runSim} style={btn(true)}>
-                                            <Play style={{ width: 12, height: 12 }} /> Validate
+                                        <button onClick={runSim} style={btn()}>
+                                            <Check style={{ width: 12, height: 12 }} /> Validate Only
                                         </button>
-                                        <button style={btn()}>Reset</button>
+                                        <button onClick={handleExecute} disabled={executing} style={{ ...btn(true), opacity: executing ? 0.6 : 1 }}>
+                                            <Play style={{ width: 12, height: 12 }} /> {executing ? "Executing..." : "Execute Now"}
+                                        </button>
                                     </div>
 
                                     {/* Validation summary banner */}
@@ -922,6 +1085,20 @@ export default function ActionsPage() {
                                                             {sel.params.filter(p => p.validState === "INVALID").length} criteria failed
                                                         </div>
                                                     </div></>}
+                                        </div>
+                                    )}
+
+                                    {/* Live execution result */}
+                                    {execResult && (
+                                        <div style={{
+                                            padding: "10px 12px", borderRadius: 4, marginTop: 8,
+                                            background: execResult.status === "APPLIED" ? "#E6F7F0" : execResult.status === "PENDING" ? "#EBF4FC" : "rgba(194,48,48,0.08)",
+                                            border: `1px solid ${execResult.status === "APPLIED" ? "#0D8050" : execResult.status === "PENDING" ? "#137CBD" : "#C23030"}`,
+                                        }}>
+                                            <div style={{ fontSize: 11, fontWeight: 700, color: execResult.status === "APPLIED" ? "#0D8050" : execResult.status === "PENDING" ? "#137CBD" : "#C23030", marginBottom: 3 }}>
+                                                {execResult.status === "APPLIED" ? "✓ APPLIED" : execResult.status === "PENDING" ? "⏳ PENDING APPROVAL" : "✗ FAILED"}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: "#5C7080", lineHeight: 1.5 }}>{execResult.message}</div>
                                         </div>
                                     )}
 

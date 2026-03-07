@@ -206,65 +206,13 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
         decision = 'PENDING_ESCALATION'; // Falls below confidence, human review needed
     }
     else if (!rule.autoExecute) {
-        decision = 'PENDING_APPROVAL';
+        decision = 'PENDING_APPROVAL'; // Requires human review
     }
     else {
         decision = 'EXECUTE';
     }
-    // Execute actions (only if decision is EXECUTE)
-    const executionResults = [];
-    if (decision === 'EXECUTE') {
-        for (const plan of rule.executionPlans) {
-            const executor = actionExecutors[plan.actionDefinition.type];
-            if (!executor) {
-                executionResults.push({
-                    actionName: plan.actionDefinition.name,
-                    actionType: plan.actionDefinition.type,
-                    stepOrder: plan.stepOrder,
-                    success: false,
-                    error: `Unknown action type: ${plan.actionDefinition.type}`,
-                });
-                if (!plan.continueOnFailure)
-                    break;
-                continue;
-            }
-            const actionConfig = plan.actionDefinition.config;
-            const actionResult = await executor(actionConfig, { logicalId, triggerData, prisma });
-            executionResults.push({
-                actionName: plan.actionDefinition.name,
-                actionType: plan.actionDefinition.type,
-                stepOrder: plan.stepOrder,
-                success: actionResult.success,
-                result: actionResult.result,
-                error: actionResult.error,
-            });
-            if (!actionResult.success && !plan.continueOnFailure)
-                break;
-        }
-    }
-    else if (decision === 'SIMULATED') {
-        // Dry-run: list actions that would have been executed
-        for (const plan of rule.executionPlans) {
-            executionResults.push({
-                actionName: plan.actionDefinition.name,
-                actionType: plan.actionDefinition.type,
-                stepOrder: plan.stepOrder,
-                success: true,
-                result: { simulated: true, wouldExecute: plan.actionDefinition.type },
-            });
-        }
-    }
-    // Determine overall status
-    const status = simulate
-        ? 'SIMULATED'
-        : decision === 'SKIPPED'
-            ? 'COMPLETED'
-            : (decision === 'PENDING_APPROVAL' || decision === 'PENDING_ESCALATION')
-                ? 'PENDING'
-                : executionResults.every((r) => r.success)
-                    ? 'COMPLETED'
-                    : 'FAILED';
-    // Store decision log
+    // 1. Create Initial DecisionLog
+    let status = decision === 'SKIPPED' ? 'COMPLETED' : simulate ? 'SIMULATED' : (decision === 'PENDING_APPROVAL' || decision === 'PENDING_ESCALATION') ? 'PENDING' : 'RUNNING';
     const log = await prisma.decisionLog.create({
         data: {
             decisionRuleId: ruleId,
@@ -273,17 +221,91 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
             triggerData: triggerData,
             conditionResults: conditionResults,
             decision,
-            executionResults: executionResults,
             status,
         },
     });
-    return {
+    let executionTraceId;
+    // 2. Execute Actions & Create Trace (only if decision is EXECUTE or SIMULATED)
+    if (decision === 'EXECUTE' || decision === 'SIMULATED') {
+        const trace = await prisma.executionTrace.create({
+            data: { decisionLogId: log.id, status: 'RUNNING' }
+        });
+        executionTraceId = trace.id;
+        let hasFailures = false;
+        for (const plan of rule.executionPlans) {
+            const step = await prisma.executionStep.create({
+                data: {
+                    executionTraceId: trace.id,
+                    actionDefinitionId: plan.actionDefinition.id,
+                    stepOrder: plan.stepOrder,
+                    status: 'RUNNING',
+                    startedAt: new Date(),
+                    inputPayload: { logicalId, triggerData: triggerData, simulated: simulate }
+                }
+            });
+            if (simulate) {
+                // Dry-run: list actions that would have been executed without side-effects
+                await prisma.executionStep.update({
+                    where: { id: step.id },
+                    data: { status: 'SUCCESS', completedAt: new Date(), outputPayload: { simulated: true, wouldExecute: plan.actionDefinition.type } }
+                });
+                continue;
+            }
+            // Real execution
+            const executor = actionExecutors[plan.actionDefinition.type];
+            if (!executor) {
+                hasFailures = true;
+                await prisma.executionStep.update({
+                    where: { id: step.id },
+                    data: { status: 'FAILED', completedAt: new Date(), errorMessage: `Unknown action type: ${plan.actionDefinition.type}` }
+                });
+                if (!plan.continueOnFailure)
+                    break;
+                continue;
+            }
+            const actionConfig = plan.actionDefinition.config;
+            const actionResult = await executor(actionConfig, { logicalId, triggerData, prisma });
+            const dataToUpdate = {
+                status: actionResult.success ? 'SUCCESS' : 'FAILED',
+                completedAt: new Date(),
+            };
+            if (actionResult.result !== undefined) {
+                dataToUpdate.outputPayload = actionResult.result;
+            }
+            if (actionResult.error !== undefined) {
+                dataToUpdate.errorMessage = actionResult.error;
+            }
+            await prisma.executionStep.update({
+                where: { id: step.id },
+                data: dataToUpdate
+            });
+            if (!actionResult.success) {
+                hasFailures = true;
+                if (!plan.continueOnFailure)
+                    break;
+            }
+        }
+        // Conclude Trace
+        status = simulate ? 'SIMULATED' : hasFailures ? 'PARTIAL_FAILURE' : 'COMPLETED';
+        await prisma.executionTrace.update({
+            where: { id: trace.id },
+            data: { status, completedAt: new Date() }
+        });
+        // Update Final Log
+        await prisma.decisionLog.update({
+            where: { id: log.id },
+            data: { status: status === 'PARTIAL_FAILURE' ? 'FAILED' : 'COMPLETED' }
+        });
+    }
+    const resultToReturn = {
         decisionLogId: log.id,
         decision,
         status,
         conditionResults,
-        executionResults,
     };
+    if (executionTraceId)
+        resultToReturn.executionTraceId = executionTraceId;
+    return resultToReturn;
 }
 /**
  * Evaluate ALL enabled rules for an entity. Runs rules in priority order.

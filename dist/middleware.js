@@ -49,8 +49,8 @@ function requestLogger() {
 }
 // ── API Key Auth ─────────────────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET ?? 'c3-aip-dev-secret-change-in-production';
-// Auth: set AUTH_REQUIRED=true in production via environment variable
-const AUTH_REQUIRED = process.env.AUTH_REQUIRED === 'true';
+// Auth: Secure by default. Must explicitly turn off if running local unit tests.
+const AUTH_REQUIRED = process.env.AUTH_REQUIRED !== 'false';
 function hashApiKey(rawKey) {
     return (0, crypto_1.createHash)('sha256').update(rawKey).digest('hex');
 }
@@ -64,8 +64,8 @@ function apiKeyAuth(prisma) {
             next();
             return;
         }
-        if (!AUTH_REQUIRED) {
-            // Dev mode: attach a mock admin context
+        if (!AUTH_REQUIRED && process.env.NODE_ENV !== 'production') {
+            // ONLY explicitly allowed when BOTH AUTH_REQUIRED=false AND not in production
             req.auth = { apiKeyId: 'dev', apiKeyName: 'dev-mode', role: 'ADMIN', projectId: global.DEFAULT_PROJECT_ID };
             next();
             return;
@@ -131,6 +131,9 @@ function createRateLimiter(windowMs = 60000, max = 100) {
         max,
         standardHeaders: true,
         legacyHeaders: false,
+        validate: {
+            ip: false
+        },
         keyGenerator: (req) => {
             return req.auth?.apiKeyId ?? req.ip ?? 'anonymous';
         },

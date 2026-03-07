@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBuilderStore } from "@/store/builderStore";
-import { Network, Zap, BrainCircuit, LayoutDashboard, Rocket, Lock, CheckCircle2 } from "lucide-react";
+import { Network, Zap, BrainCircuit, LayoutDashboard, Rocket, Lock, CheckCircle2, Code2 } from "lucide-react";
 
 export default function BuilderSidebar() {
     const pathname = usePathname();
@@ -33,9 +33,17 @@ export default function BuilderSidebar() {
             done: hasAiAction
         },
         {
+            id: 'logic',
+            href: "/build/logic",
+            label: "3. AIP Logic",
+            icon: Code2,
+            unlocked: hasValidEntity && hasAiAction,
+            done: false
+        },
+        {
             id: 'ai',
-            href: "/build/ai",
-            label: "3. AI Agents",
+            href: "/build/agents",
+            label: "4. AI Agents",
             icon: BrainCircuit,
             unlocked: hasValidEntity && hasAiAction,
             done: hasConfiguredAgent
@@ -43,7 +51,7 @@ export default function BuilderSidebar() {
         {
             id: 'app',
             href: "/build/app",
-            label: "4. App Builder",
+            label: "5. App Builder",
             icon: LayoutDashboard,
             unlocked: hasValidEntity && hasAiAction && hasConfiguredAgent,
             done: hasPages
@@ -51,7 +59,7 @@ export default function BuilderSidebar() {
         {
             id: 'publish',
             href: "/build/publish",
-            label: "5. Publish",
+            label: "6. Publish",
             icon: Rocket,
             unlocked: hasValidEntity && hasAiAction && hasConfiguredAgent && hasPages,
             done: false

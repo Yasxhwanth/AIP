@@ -6,14 +6,6 @@ interface ConditionResult {
     actual: unknown;
     passed: boolean;
 }
-interface ActionResult {
-    actionName: string;
-    actionType: string;
-    stepOrder: number;
-    success: boolean;
-    result?: unknown | undefined;
-    error?: string | undefined;
-}
 /**
  * Execute a decision for a specific rule against an entity.
  * Full pipeline: evaluate conditions → decide → execute actions → log.
@@ -23,7 +15,7 @@ export declare function executeDecision(ruleId: string, logicalId: string, trigg
     decision: string;
     status: string;
     conditionResults: ConditionResult[];
-    executionResults: ActionResult[];
+    executionTraceId?: string;
 }>;
 /**
  * Evaluate ALL enabled rules for an entity. Runs rules in priority order.

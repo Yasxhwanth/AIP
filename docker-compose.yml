@@ -1,29 +1,108 @@
-version: '3.9'
+version: '3.8'
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: aip
+      POSTGRES_USER: aip_user
+      POSTGRES_PASSWORD: aip_password
+      POSTGRES_DB: aip_db
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U aip_user -d aip_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: aip_user
+      RABBITMQ_DEFAULT_PASS: aip_password
 
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://aip_user:aip_password@db:5432/aip_db?schema=public
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://aip_user:aip_password@rabbitmq:5672
+      # If using an external LLM for Agents, pass the key here
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    command: >
+      sh -c "npx prisma migrate deploy && npm run start"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+    depends_on:
+      - backend
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://aip_user:aip_password@db:5432/aip_db?schema=public
+      - RABBITMQ_URL=amqp://aip_user:aip_password@rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - db
+      - rabbitmq
+      - redis
+    command: [ "npx", "ts-node", "src/services/data-ingestion-worker.ts" ]
+
+  agent-compute-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/aip
-      PORT: 3000
-    ports:
-      - '3000:3000'
+      - DATABASE_URL=postgresql://aip_user:aip_password@db:5432/aip_db?schema=public
+      - RABBITMQ_URL=amqp://aip_user:aip_password@rabbitmq:5672
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - db
+      - rabbitmq
+    command: [ "npx", "ts-node", "src/services/agent-compute-worker.ts" ]
 
 volumes:
-  db_data:
-
-
+  postgres_data:
+  redis_data:

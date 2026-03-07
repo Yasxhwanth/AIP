@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.upsertEntityInstance = upsertEntityInstance;
 exports.executeJob = executeJob;
+exports.dryRunJob = dryRunJob;
 exports.startScheduler = startScheduler;
 const policy_engine_1 = require("./policy-engine");
 const identity_service_1 = require("./identity-service");
@@ -264,6 +265,53 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             status: 'FAILED',
             recordsProcessed,
             recordsFailed,
+            error: String(error),
+        };
+    }
+}
+/**
+ * Dry-Run an integration job:
+ * Fetches data from the exact connector but halts before writing any instances to the DB.
+ * Returns a subset of raw vs mapped records for user preview.
+ */
+async function dryRunJob(jobId, prisma, inlineData) {
+    const job = await prisma.integrationJob.findUnique({
+        where: { id: jobId },
+        include: {
+            dataSource: true,
+            targetEntityType: { include: { attributes: true } },
+        },
+    });
+    if (!job)
+        throw new Error(`Integration job '${jobId}' not found`);
+    try {
+        const connectorFn = connectors[job.dataSource.type];
+        if (!connectorFn) {
+            throw new Error(`Unsupported data source type: '${job.dataSource.type}'`);
+        }
+        const connectionConfig = job.dataSource.connectionConfig;
+        const rawRecords = await connectorFn(connectionConfig, inlineData);
+        const fieldMapping = job.fieldMapping;
+        const previewLimit = 5;
+        const previewRecords = rawRecords.slice(0, previewLimit);
+        const output = previewRecords.map(raw => {
+            const externalId = raw[job.logicalIdField];
+            const mapped = transformRecord(raw, fieldMapping);
+            return {
+                raw,
+                mapped,
+                externalId: externalId ?? null
+            };
+        });
+        return {
+            status: 'SUCCESS',
+            records: output
+        };
+    }
+    catch (error) {
+        return {
+            status: 'FAILED',
+            records: [],
             error: String(error),
         };
     }

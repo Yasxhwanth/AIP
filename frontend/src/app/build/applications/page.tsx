@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     LayoutGrid, Plus, Eye, EyeOff, ChevronDown, ChevronRight,
     Table2, BarChart2, MousePointerClick, FormInput, Brain,
@@ -429,17 +429,139 @@ function BindingPanel({ widget, onChange }: { widget: Widget; onChange: (b: Enti
     );
 }
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ApplicationsPage() {
-    const [apps, setApps] = useState<WorkshopApp[]>(SEED_APPS);
-    const [selApp, setSelApp] = useState<WorkshopApp>(SEED_APPS[0]);
-    const [selPage, setSelPage] = useState<AppPage>(SEED_APPS[0].pages[0]);
+    const [apps, setApps] = useState<WorkshopApp[]>([]);
+    const [selApp, setSelApp] = useState<WorkshopApp | null>(null);
+    const [selPage, setSelPage] = useState<AppPage | null>(null);
     const [selWidget, setSelWidget] = useState<Widget | null>(null);
     const [selSection, setSelSection] = useState<Section | null>(null);
     const [preview, setPreview] = useState(false);
     const [device, setDevice] = useState<PreviewDevice>("desktop");
     const [rightTab, setRightTab] = useState<"palette" | "config" | "binding" | "visibility">("palette");
     const [dragType, setDragType] = useState<WidgetType | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    // widgetData: widget.id → live data fetched from /api/workshop/:id/widget-data
+    const [widgetData, setWidgetData] = useState<Record<string, any>>({});
+
+    // ── Fetch app list from DB ───────────────────────────────────────────────
+    const fetchApps = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch(`${API}/api/workshop`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.length > 0) {
+                    setApps(data);
+                    // Load the first app's full definition
+                    loadApp(data[0].id);
+                } else {
+                    // No apps yet — seed the SEED_APPS into the DB
+                    for (const seedApp of SEED_APPS) {
+                        await fetch(`${API}/api/workshop`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: seedApp.name, description: seedApp.description, status: seedApp.status, pages: seedApp.pages })
+                        });
+                    }
+                    // Re-fetch after seeding
+                    const res2 = await fetch(`${API}/api/workshop`);
+                    if (res2.ok) {
+                        const data2 = await res2.json();
+                        setApps(data2);
+                        if (data2.length > 0) loadApp(data2[0].id);
+                    }
+                }
+            }
+        } catch {
+            // Fallback to seed data if API is unavailable
+            setApps(SEED_APPS);
+            setSelApp(SEED_APPS[0]);
+            setSelPage(SEED_APPS[0].pages[0]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ── Load a specific app's full definition (pages JSON) ──────────────────
+    const loadApp = async (appId: string) => {
+        try {
+            const res = await fetch(`${API}/api/workshop/${appId}`);
+            if (res.ok) {
+                const app = await res.json();
+                const fullApp: WorkshopApp = {
+                    id: app.id, name: app.name, description: app.description,
+                    status: app.status as "published" | "draft" | "staging",
+                    pages: (app.pages as AppPage[]) || []
+                };
+                if (fullApp.pages.length === 0) {
+                    fullApp.pages = [{ id: 'pg1', name: 'Overview', icon: '📊', sections: [] }];
+                }
+                setSelApp(fullApp);
+                setSelPage(fullApp.pages[0]);
+                setSelWidget(null);
+                setWidgetData({});
+            }
+        } catch { /* ignore */ }
+    };
+
+    // ── Save handler — persists full page tree to DB ─────────────────────────
+    const handleSave = async () => {
+        if (!selApp) return;
+        setSaving(true);
+        try {
+            await fetch(`${API}/api/workshop/${selApp.id}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: selApp.name, description: selApp.description, status: selApp.status, pages: selApp.pages })
+            });
+        } finally { setSaving(false); }
+    };
+
+    // ── Publish handler ──────────────────────────────────────────────────────
+    const handlePublish = async () => {
+        if (!selApp) return;
+        const updated = { ...selApp, status: 'published' as const };
+        updateApp(updated);
+        await fetch(`${API}/api/workshop/${selApp.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'published', pages: updated.pages })
+        });
+    };
+
+    // ── New app handler ──────────────────────────────────────────────────────
+    const handleNew = async () => {
+        try {
+            const res = await fetch(`${API}/api/workshop`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'New Application', description: '', status: 'draft', pages: [{ id: `pg${Date.now()}`, name: 'Overview', icon: '📊', sections: [] }] })
+            });
+            if (res.ok) {
+                const newApp = await res.json();
+                await fetchApps();
+                loadApp(newApp.id);
+            }
+        } catch { /* ignore */ }
+    };
+
+    // ── Fetch live widget data for preview mode ──────────────────────────────
+    const fetchWidgetData = async () => {
+        if (!selApp || selApp.id.startsWith('app')) return; // skip seed IDs
+        try {
+            const res = await fetch(`${API}/api/workshop/${selApp.id}/widget-data`);
+            if (res.ok) {
+                const data = await res.json();
+                setWidgetData(data.widgetData || {});
+            }
+        } catch { /* ignore */ }
+    };
+
+    useEffect(() => { fetchApps(); }, []);
+    useEffect(() => {
+        if (preview && selApp) fetchWidgetData();
+        else setWidgetData({});
+    }, [preview, selApp?.id]);
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
     const updateApp = (a: WorkshopApp) => { setSelApp(a); setApps(p => p.map(x => x.id === a.id ? a : x)); };
@@ -485,6 +607,9 @@ export default function ApplicationsPage() {
         setSelSection(s);
     };
 
+    if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#5C7080", fontSize: 13, fontFamily: "Inter, sans-serif" }}>Loading applications...</div>;
+    if (!selApp || !selPage) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#5C7080", fontSize: 13, fontFamily: "Inter, sans-serif" }}>No apps found. Creating...</div>;
+
     const currentPage = selApp.pages.find(p => p.id === selPage.id) ?? selApp.pages[0];
     const statusColors: Record<string, string[]> = {
         published: ["#E6F7F0", "#0D8050"],
@@ -505,10 +630,7 @@ export default function ApplicationsPage() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#182026" }}>Workshop</span>
                 <div style={{ width: 1, height: 16, background: "#CED9E0", margin: "0 4px" }} />
                 {/* App selector */}
-                <select value={selApp.id} onChange={e => {
-                    const a = apps.find(x => x.id === e.target.value)!;
-                    setSelApp(a); setSelPage(a.pages[0]); setSelWidget(null); setSelSection(null);
-                }} style={{
+                <select value={selApp.id} onChange={e => loadApp(e.target.value)} style={{
                     border: "1px solid #CED9E0", borderRadius: 3, fontSize: 12, padding: "0 8px",
                     height: 26, background: "#fff", fontWeight: 600, color: "#182026"
                 }}>
@@ -543,13 +665,7 @@ export default function ApplicationsPage() {
                     }}>
                     {preview ? <><EyeOff style={{ width: 13, height: 13 }} /> Edit</> : <><Eye style={{ width: 13, height: 13 }} /> Preview</>}
                 </button>
-                <button onClick={() => {
-                    const a: WorkshopApp = {
-                        id: `app${Date.now()}`, name: "New Workshop App", status: "draft",
-                        description: "", pages: [{ id: `pg${Date.now()}`, name: "Page 1", icon: "📄", sections: [] }],
-                    };
-                    setApps(p => [...p, a]); setSelApp(a); setSelPage(a.pages[0]);
-                }} style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> New App</button>
+                <button onClick={handleNew} style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> New App</button>
             </div>
 
             <div style={{ flex: 1, display: "flex", minHeight: 0 }}>

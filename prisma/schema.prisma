@@ -21,14 +21,21 @@ model Project {
   description String?
   createdAt   DateTime @default(now())
 
-  entityTypes      EntityType[]
-  dataSources      DataSource[]
-  integrationJobs  IntegrationJob[]
-  decisionRules    DecisionRule[]
-  modelDefinitions ModelDefinition[]
-  dashboards       Dashboard[]
-  pipelines        Pipeline[]
-  apiKeys          ApiKey[]
+  entityTypes         EntityType[]
+  dataSources         DataSource[]
+  integrationJobs     IntegrationJob[]
+  decisionRules       DecisionRule[]
+  modelDefinitions    ModelDefinition[]
+  dashboards          Dashboard[]
+  pipelines           Pipeline[]
+  apiKeys             ApiKey[]
+  releases            ProjectRelease[]
+  ontologyRules       OntologyRule[]
+  aipAgents           AIPAgent[]
+  aipFunctions        AIPFunction[]
+  aipActions          AIPAction[]
+  aipMetrics          AIPMetric[]
+  workshopApps        WorkshopApp[]
 }
 
 model EntityType {
@@ -612,6 +619,7 @@ model ActionDefinition {
   createdAt DateTime @default(now())
 
   executionPlans ExecutionPlan[]
+  executionSteps ExecutionStep[]
 }
 
 model ExecutionPlan {
@@ -636,14 +644,48 @@ model DecisionLog {
   triggerData      Json // snapshot of input data
   conditionResults Json // per-condition evaluation details
   decision         String // EXECUTE, PENDING_APPROVAL, SKIPPED, SIMULATED
-  executionResults Json? // per-step action results
   status           String   @default("PENDING") // COMPLETED, FAILED, PENDING, SIMULATED
   createdAt        DateTime @default(now())
 
-  decisionRule DecisionRule @relation(fields: [decisionRuleId], references: [id], onDelete: Cascade)
+  decisionRule   DecisionRule    @relation(fields: [decisionRuleId], references: [id], onDelete: Cascade)
+  executionTrace ExecutionTrace? // Optional because log might be SKIPPED or PENDING_APPROVAL
 
   @@index([decisionRuleId, createdAt(sort: Desc)])
   @@index([logicalId, createdAt(sort: Desc)])
+}
+
+model ExecutionTrace {
+  id            String   @id @default(uuid())
+  decisionLogId String   @unique // 1:1 with DecisionLog
+  status        String   @default("RUNNING") // RUNNING, COMPLETED, PARTIAL_FAILURE, FAILED
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  error         String?  // overall error if dag failed
+  
+  decisionLog   DecisionLog     @relation(fields: [decisionLogId], references: [id], onDelete: Cascade)
+  steps         ExecutionStep[]
+
+  @@index([status, startedAt(sort: Desc)])
+}
+
+model ExecutionStep {
+  id                 String   @id @default(uuid())
+  executionTraceId   String
+  actionDefinitionId String
+  stepOrder          Int
+  status             String   @default("PENDING") // PENDING, RUNNING, SUCCESS, FAILED, RETRYING, SKIPPED
+  attempts           Int      @default(0)
+  inputPayload       Json?    // exact payload sent to the action
+  outputPayload      Json?    // exact response received from the action
+  errorMessage       String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+
+  executionTrace   ExecutionTrace   @relation(fields: [executionTraceId], references: [id], onDelete: Cascade)
+  actionDefinition ActionDefinition @relation(fields: [actionDefinitionId], references: [id], onDelete: Restrict)
+
+  @@unique([executionTraceId, stepOrder])
+  @@index([executionTraceId, status])
 }
 
 // ── Enterprise: Authentication ───────────────────────────────────
@@ -694,4 +736,190 @@ model DashboardWidget {
   dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
 
   @@index([dashboardId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEW: PHASE 6 - RUNTIME & RELEASE ENGINE
+// ═══════════════════════════════════════════════════════════
+
+model ProjectRelease {
+    id          String   @id @default(uuid())
+    projectId   String
+    environment String   // "STAGING" | "PRODUCTION"
+    version     String   // e.g. "v1.0.0"
+    
+    // The atomic frozen state of all pipelines, datasets, apps, and logic rules
+    payload     Json
+
+    createdBy   String
+    createdAt   DateTime @default(now())
+
+    project     Project  @relation(fields: [projectId], references: [id])
+}
+
+// ── Ontology Semantic Reasoner Rules ──────────────────────────────
+
+model OntologyRule {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+
+  // Antecedent: ordered chain of relationship hops to follow in CurrentGraph
+  // e.g. [{"relDefId": "rel-a", "direction": "outgoing"}, {"relDefId": "rel-b", "direction": "outgoing"}]
+  antecedent  Json
+
+  // Consequent: the relationship to derive when the antecedent chain is satisfied
+  // e.g. {"relDefId": "rel-c", "confidence": 0.9, "decayRate": 0.0}
+  consequent  Json
+
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId, enabled])
+}
+
+// ── AIP Agent Studio ──────────────────────────────────────────────
+
+model AIPAgent {
+  id              String   @id @default(uuid())
+  projectId       String
+  name            String
+  description     String?
+  systemPrompt    String
+  modelConfig     Json     // { provider: "openai", model: "gpt-4" }
+  ontologyAccess  Json     // Array of EntityType IDs the agent can query
+  tools           Json?    // Optional Array of AIPFunction string IDs the agent can execute
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@index([projectId])
+}
+
+// Model for user-defined Typescript functions (Tools) that AIP Agents can execute
+model AIPFunction {
+  id          String   @id @default(uuid())
+  projectId   String
+  name        String   // e.g "promote_soldier"
+  description String   // Given to the LLM to understand what this tool does
+  parameters  Json     // JSON Schema defining the expected arguments for this tool
+  code        String   // The actual Javascript/Typescript code the worker executes securely
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ── Phase 8: AIP Actions (Foundry-style write-back Operations) ─────────────
+
+// An AIPAction is a typed, form-driven write-back operation that modifies the Ontology.
+// Analogous to Palantir Foundry "Action Types" in the ActionCenter.
+model AIPAction {
+  id          String   @id @default(uuid())
+  projectId   String
+
+  name        String                 // e.g. "EscalateMission"
+  description String
+  category    String                 // create | edit | delete | link | function-backed
+  objectType  String                 // Target Ontology entity type name
+
+  // JSON arrays stored as Json
+  params      Json                   // ActionParam[] - defines the input schema
+  rbac        Json                   // RbacEntry[] - role-based access control
+  approvalRules Json                 // ApprovalRule[] - approval workflow config
+  writesTo    Json                   // string[] - which properties/types are mutated
+
+  riskTier    String   @default("low") // low | medium | high | critical
+  status      String   @default("draft") // active | draft | deprecated
+
+  usages      Int      @default(0)
+  lastUsedAt  DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions  AIPActionExecution[]
+
+  @@index([projectId])
+  @@index([objectType])
+}
+
+// Audit log - every time an Action is applied against a specific entity instance
+model AIPActionExecution {
+  id           String   @id @default(uuid())
+  actionId     String
+  logicalId    String   // the entity instance this action was applied to
+  objectType   String
+  parameters   Json     // the actual param values at the time of execution
+  status       String   @default("PENDING") // PENDING | APPROVED | REJECTED | APPLIED | FAILED
+  submittedBy  String   @default("system")
+  approvedBy   String?
+  appliedAt    DateTime?
+  result       Json?    // the outcome / changes made
+  error        String?
+  createdAt    DateTime @default(now())
+
+  action       AIPAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([actionId, createdAt(sort: Desc)])
+  @@index([logicalId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+// ── Phase 9: AIP Metrics (Live Ontology Aggregations) ─────────────────────────
+
+model AIPMetric {
+  id           String   @id @default(uuid())
+  projectId    String
+
+  name         String                 // e.g. "Drone Battery Level"
+  objectType   String                 // Ontology entity type to aggregate over
+  property     String                 // Which property field to aggregate
+  unit         String   @default("")  // e.g. "%" or "hr"
+  aggr         String   @default("AVG") // AVG | SUM | COUNT | MIN | MAX | P95 | P99
+  window       String   @default("Last 1 hr") // e.g. "Last 1 hr"
+  threshold    Float    @default(0)
+  thresholdOp  String   @default(">") // > | < | >= | <=
+  alertOutputType String @default("streaming") // streaming | batch
+  status       String   @default("draft") // active | draft | warning | inactive
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([objectType])
+}
+
+// ── Phase 10: Workshop Apps (Persistent Application Builder) ──────────────────
+
+// Stores the full Workshop app definition as a nested JSON document.
+// The pages, sections, and widgets hierarchy is persisted in the `pages` Json field,
+// matching the WorkshopApp interface in the frontend directly.
+model WorkshopApp {
+  id          String   @id @default(uuid())
+  projectId   String
+
+  name        String
+  description String   @default("")
+  status      String   @default("draft") // draft | staging | published
+
+  // Full pages → sections → widgets tree stored as JSON
+  pages       Json     @default("[]")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
 }

@@ -387,15 +387,92 @@ export const BattlefieldOverview: React.FC<Props> = ({
         const now = new Date();
 
         // ── AIP Processing ────────────────────────────────────────────────────
+        let threatPos: { lat: number, lng: number } | null = null;
+        let unitPos: { lat: number, lng: number } | null = null;
+
         if (layers['aip'] && aipRaw) {
             for (const ent of (aipRaw as any[])) {
-                const { latitude: lat, longitude: lng, altitude: alt } = ent.data ?? {};
+                const { latitude, longitude, location, type, model, callsign, vehicle } = ent.data ?? {};
+                const lat = location?.lat ?? latitude;
+                const lng = location?.lng ?? longitude;
                 if (!lat || !lng) continue;
+
+                let color = Cesium.Color.CYAN;
+                let isThreat = ent.logicalId.startsWith('threat');
+                let isUnit = ent.logicalId.startsWith('unit');
+                let isAsset = ent.logicalId.startsWith('asset');
+
+                if (isThreat) {
+                    color = Cesium.Color.RED;
+                    threatPos = { lat, lng };
+                } else if (isUnit) {
+                    color = Cesium.Color.fromCssColorString('#4ade80'); // Green
+                    unitPos = { lat, lng };
+                } else if (isAsset) {
+                    color = Cesium.Color.fromCssColorString('#3b82f6'); // Blue
+                }
+
+                const displayName = model || callsign || vehicle || type || ent.logicalId;
+
                 entitiesToAdd.push({
                     id: `aip-${ent.logicalId}`,
-                    position: Cesium.Cartesian3.fromDegrees(lng, lat, alt ?? 0),
-                    point: { pixelSize: 10, color: Cesium.Color.CYAN, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-                    label: { text: ent.logicalId, font: '10px monospace', fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#0f172a99'), pixelOffset: new Cesium.Cartesian2(0, -20), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                    position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+                    point: { pixelSize: 12, color, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                    label: { text: displayName, font: '12px monospace', fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#0f172a99'), pixelOffset: new Cesium.Cartesian2(0, -25), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                });
+
+                // Add radii
+                if (isAsset && ent.logicalId.includes('drone')) {
+                    entitiesToAdd.push({
+                        id: `radius-${ent.logicalId}`,
+                        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+                        ellipse: {
+                            semiMinorAxis: 15000,
+                            semiMajorAxis: 15000,
+                            material: Cesium.Color.fromCssColorString('#3b82f6').withAlpha(0.15),
+                            outline: true,
+                            outlineColor: Cesium.Color.fromCssColorString('#3b82f6').withAlpha(0.8)
+                        }
+                    });
+                }
+
+                if (isThreat) {
+                    entitiesToAdd.push({
+                        id: `radius-threat-${ent.logicalId}`,
+                        position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+                        ellipse: {
+                            semiMinorAxis: 8000,
+                            semiMajorAxis: 8000,
+                            material: Cesium.Color.RED.withAlpha(0.15),
+                            outline: true,
+                            outlineColor: Cesium.Color.RED.withAlpha(0.6)
+                        }
+                    });
+                }
+            }
+
+            // Draw assault route between Unit and Threat if valid
+            if (threatPos && unitPos) {
+                // Generate a slight bend in the route to simulate road/terrain traversal
+                const midLat = (threatPos.lat + unitPos.lat) / 2 + 0.01;
+                const midLng = (threatPos.lng + unitPos.lng) / 2 + 0.01;
+
+                entitiesToAdd.push({
+                    id: 'assault-route',
+                    polyline: {
+                        positions: Cesium.Cartesian3.fromDegreesArray([
+                            unitPos.lng, unitPos.lat,
+                            midLng, midLat,
+                            threatPos.lng, threatPos.lat
+                        ]),
+                        width: 4,
+                        material: new Cesium.PolylineDashMaterialProperty({
+                            color: Cesium.Color.fromCssColorString('#4ade80'), // Green dashed line
+                            gapColor: Cesium.Color.TRANSPARENT,
+                            dashLength: 16
+                        }),
+                        arcType: Cesium.ArcType.GEODESIC
+                    }
                 });
             }
         }

@@ -66,8 +66,8 @@ export function requestLogger() {
 // ── API Key Auth ─────────────────────────────────────────────────
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'c3-aip-dev-secret-change-in-production';
-// Auth: set AUTH_REQUIRED=true in production via environment variable
-const AUTH_REQUIRED = process.env.AUTH_REQUIRED === 'true';
+// Auth: Secure by default. Must explicitly turn off if running local unit tests.
+const AUTH_REQUIRED = process.env.AUTH_REQUIRED !== 'false';
 
 export function hashApiKey(rawKey: string): string {
     return createHash('sha256').update(rawKey).digest('hex');
@@ -77,16 +77,24 @@ export function generateJwt(payload: AuthContext): string {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 }
 
+const AUTH_SKIP_PATHS = new Set([
+    '/api/v1/health',
+    '/api/v1/health/deep',
+    '/api/v1/auth/token',
+    '/telemetry',
+    '/health',
+]);
+
 export function apiKeyAuth(prisma: PrismaClient) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-        // Skip auth for health checks and auth endpoints
-        if (req.path === '/api/v1/health' || req.path === '/api/v1/health/deep' || req.path === '/api/v1/auth/token' || req.path === '/telemetry') {
+        // Skip auth for health checks, auth endpoints, and ontology builder API (dev)
+        if (AUTH_SKIP_PATHS.has(req.path) || req.path.startsWith('/api/ontology/')) {
             next();
             return;
         }
 
-        if (!AUTH_REQUIRED) {
-            // Dev mode: attach a mock admin context
+        if (!AUTH_REQUIRED && process.env.NODE_ENV !== 'production') {
+            // ONLY explicitly allowed when BOTH AUTH_REQUIRED=false AND not in production
             req.auth = { apiKeyId: 'dev', apiKeyName: 'dev-mode', role: 'ADMIN', projectId: (global as any).DEFAULT_PROJECT_ID };
             next();
             return;
@@ -162,8 +170,11 @@ export function createRateLimiter(windowMs = 60_000, max = 100) {
         max,
         standardHeaders: true,
         legacyHeaders: false,
+        validate: {
+            ip: false
+        },
         keyGenerator: (req: Request) => {
-            return req.auth?.apiKeyId ?? req.ip ?? 'anonymous';
+            return req.auth?.apiKeyId ?? 'anonymous';
         },
         handler: (_req: Request, res: Response) => {
             res.status(429).json({

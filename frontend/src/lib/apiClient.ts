@@ -34,31 +34,7 @@ async function getHeaders(): Promise<Record<string, string>> {
         return headers;
     }
 
-    // 3. Fallback Auth Bootstrap (Development Sandbox)
-    // If no explicit keys exist, we fetch a temporary developer token from the backend
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/auth/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-api-key' },
-            body: JSON.stringify({ userId: 'dev-user', role: 'admin' })
-        });
-        if (response.ok) {
-            const data = await response.json();
-            if (data.token) {
-                sessionToken = data.token;
-                if (typeof window !== 'undefined') {
-                    sessionStorage.setItem('aip_token', data.token);
-                }
-                headers['Authorization'] = `Bearer ${sessionToken}`;
-                return headers;
-            }
-        }
-    } catch {
-        // Fallback silently if auth endpoint unreachable
-    }
-
-    // 4. Ultimate Fallback for Local Dev Server without auth requirements setup
-    headers['x-api-key'] = 'test-api-key';
+    // If no token or API key is found, do not attach an auth header. The backend will return 401.
     return headers;
 }
 

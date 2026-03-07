@@ -62,8 +62,14 @@ app.get('/projects', async (req, res) => {
 });
 app.post('/dashboards', async (req, res) => {
     try {
+        let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production') {
+            projectId = global.DEFAULT_PROJECT_ID;
+        }
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
         const dashboard = await prisma.dashboard.create({
-            data: { name: req.body.name, projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID }
+            data: { name: req.body.name, projectId }
         });
         return res.status(201).json(dashboard);
     }
@@ -73,7 +79,12 @@ app.post('/dashboards', async (req, res) => {
 });
 app.get('/dashboards', async (req, res) => {
     try {
-        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        let projectId = req.auth?.projectId || req.query.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production') {
+            projectId = global.DEFAULT_PROJECT_ID;
+        }
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
         const dashboards = await prisma.dashboard.findMany({
             where: { projectId },
             include: { widgets: true },
@@ -182,9 +193,15 @@ app.post('/entity-types', async (req, res) => {
         return res.status(400).json({ error: 'name and attributes[] are required' });
     }
     try {
+        let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production') {
+            projectId = global.DEFAULT_PROJECT_ID;
+        }
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
         const created = await prisma.entityType.create({
             data: {
-                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
+                projectId,
                 name,
                 version: 1,
                 attributes: {
@@ -252,7 +269,11 @@ app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
         }
         // If entityTypeId not provided, try to look up by name
         if (!entityTypeId && targetEntityType) {
-            const projectId = req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+            let projectId = req.auth?.projectId || req.header('X-Project-Id');
+            if (!projectId && process.env.NODE_ENV !== 'production')
+                projectId = global.DEFAULT_PROJECT_ID;
+            if (!projectId)
+                return res.status(400).json({ error: 'Project ID is required' });
             const found = await prisma.entityType.findFirst({
                 where: { name: targetEntityType, projectId },
                 orderBy: { version: 'desc' }
@@ -283,14 +304,20 @@ app.post('/api/v1/integration/suggest-mappings', async (req, res) => {
 });
 app.post('/api/v1/pipelines', async (req, res) => {
     try {
-        const { name, description, nodes, edges, projectId } = req.body;
+        const { name, description, nodes, edges } = req.body;
+        let projectId = req.auth?.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production') {
+            projectId = global.DEFAULT_PROJECT_ID;
+        }
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
         const pipeline = await prisma.pipeline.create({
             data: {
                 name,
                 description,
                 nodes: nodes,
                 edges: edges,
-                projectId: projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID
+                projectId
             }
         });
         return res.status(201).json(pipeline);
@@ -301,7 +328,12 @@ app.post('/api/v1/pipelines', async (req, res) => {
 });
 app.get('/api/v1/pipelines', async (req, res) => {
     try {
-        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        let projectId = req.auth?.projectId || req.query.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production') {
+            projectId = global.DEFAULT_PROJECT_ID;
+        }
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
         const pipelines = await prisma.pipeline.findMany({
             where: { projectId },
             orderBy: { createdAt: 'desc' }
@@ -418,10 +450,15 @@ app.put('/entity-types/:id', async (req, res) => {
             orderBy: { version: 'desc' },
         });
         const newVersion = (highestVersion?.version ?? existing.version) + 1;
+        let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production')
+            projectId = global.DEFAULT_PROJECT_ID;
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required for version update' });
         // Insert-only versioning: create a new EntityType row + new AttributeDefinition rows.
         const createdVersion = await prisma.entityType.create({
             data: {
-                projectId: req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID,
+                projectId,
                 name: existing.name,
                 version: newVersion,
                 attributes: {
@@ -447,7 +484,14 @@ app.put('/entity-types/:id', async (req, res) => {
 // ── Entity Instances ─────────────────────────────────────────────
 app.get('/api/v1/ontology/instances/current', async (req, res) => {
     try {
-        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        let projectId = req.auth?.projectId || req.query.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production')
+            projectId = global.DEFAULT_PROJECT_ID;
+        // In strict enterprise platforms, omitting context might be an error instead of wildcard search,
+        // but some UIs rely on wildcard across permitted tenants. We will enforce single tenant here for safety.
+        if (!projectId && process.env.NODE_ENV === 'production') {
+            return res.status(400).json({ error: 'Project ID context required for instance queries' });
+        }
         const whereClause = {};
         if (projectId) {
             whereClause.entityType = {
@@ -1473,6 +1517,17 @@ app.post('/integration-jobs/:id/execute', async (req, res) => {
         return res.status(500).json({ error: 'failed to execute job', details: String(error) });
     }
 });
+app.post('/integration-jobs/:id/dry-run', async (req, res) => {
+    try {
+        const { data } = req.body ?? {};
+        const result = await (0, data_integration_1.dryRunJob)(req.params.id, prisma, data);
+        const statusCode = result.status === 'SUCCESS' ? 200 : 500;
+        return res.status(statusCode).json(result);
+    }
+    catch (error) {
+        return res.status(500).json({ error: 'failed to dry-run job', details: String(error) });
+    }
+});
 // ── Data Lineage & Provenance ────────────────────────────────────────
 app.get('/api/v1/lineage/:type/:id/trace', async (req, res) => {
     try {
@@ -2052,24 +2107,113 @@ app.get('/decision-logs', async (req, res) => {
 });
 app.post('/decision-logs/:id/execute', async (req, res) => {
     try {
+        const logId = req.params.id;
         const log = await prisma.decisionLog.findUnique({
-            where: { id: req.params.id },
-            include: { decisionRule: true }
+            where: { id: logId },
+            include: {
+                decisionRule: {
+                    include: {
+                        executionPlans: {
+                            orderBy: { stepOrder: 'asc' },
+                            include: { actionDefinition: true }
+                        }
+                    }
+                }
+            }
         });
         if (!log)
             return res.status(404).json({ error: 'decision log not found' });
         if (log.status !== 'PENDING')
             return res.status(400).json({ error: `Cannot execute log with status ${log.status}` });
-        // Mark it as executed. In a full system, we might orchestrate Action Definitions here.
-        // However, Phase 5 requested a "mock" execute state transition:
-        const updated = await prisma.decisionLog.update({
-            where: { id: req.params.id },
-            data: { status: 'COMPLETED' }
+        // 1. Create the ExecutionTrace
+        const trace = await prisma.executionTrace.create({
+            data: { decisionLogId: logId, status: 'RUNNING' }
         });
-        return res.json({ success: true, executedLog: updated });
+        // 2. Mark DecisionLog as RUNNING
+        await prisma.decisionLog.update({
+            where: { id: logId },
+            data: { status: 'RUNNING' }
+        });
+        // We will run this async to not block the request, returning the trace ID immediately.
+        // In a real C3/Palantir system, this goes into the JobQueue or a Temporal/Cadence workflow.
+        (async () => {
+            let hasFailures = false;
+            const plans = log.decisionRule.executionPlans;
+            for (const plan of plans) {
+                const actionDef = plan.actionDefinition;
+                // Create the Step Record
+                const step = await prisma.executionStep.create({
+                    data: {
+                        executionTraceId: trace.id,
+                        actionDefinitionId: actionDef.id,
+                        stepOrder: plan.stepOrder,
+                        status: 'RUNNING',
+                        startedAt: new Date(),
+                        inputPayload: {
+                            logicalId: log.logicalId,
+                            triggerData: log.triggerData,
+                            actionConfig: actionDef.config
+                        }
+                    }
+                });
+                try {
+                    // --- REAL EXECUTION LOGIC GOES HERE ---
+                    // Based on actionDef.type (WEBHOOK, UPDATE_ENTITY, etc.)
+                    let output = { message: 'Execution mocked successfully internally' };
+                    if (actionDef.type === 'WEBHOOK') {
+                        // Example: axios.post((actionDef.config as any).url, step.inputPayload)
+                        output = { httpStatus: 200, externalRef: 'web-123' };
+                    }
+                    // Simulate network latency & execution
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await prisma.executionStep.update({
+                        where: { id: step.id },
+                        data: {
+                            status: 'SUCCESS',
+                            completedAt: new Date(),
+                            outputPayload: output
+                        }
+                    });
+                }
+                catch (err) {
+                    hasFailures = true;
+                    await prisma.executionStep.update({
+                        where: { id: step.id },
+                        data: {
+                            status: 'FAILED',
+                            completedAt: new Date(),
+                            errorMessage: err.message ?? String(err)
+                        }
+                    });
+                    if (!plan.continueOnFailure) {
+                        break; // Stop the DAG
+                    }
+                }
+            }
+            // Conclude Trace
+            const finalStatus = hasFailures ? 'PARTIAL_FAILURE' : 'COMPLETED';
+            await prisma.executionTrace.update({
+                where: { id: trace.id },
+                data: {
+                    status: finalStatus,
+                    completedAt: new Date()
+                }
+            });
+            await prisma.decisionLog.update({
+                where: { id: logId },
+                data: { status: finalStatus === 'COMPLETED' ? 'COMPLETED' : 'FAILED' }
+            });
+        })().catch(err => {
+            console.error('Fatal DAG Orchestrator Error:', err);
+            prisma.executionTrace.update({
+                where: { id: trace.id },
+                data: { status: 'FAILED', error: String(err), completedAt: new Date() }
+            }).catch(console.error);
+        });
+        return res.json({ success: true, traceId: trace.id, status: 'RUNNING' });
     }
     catch (error) {
-        return res.status(500).json({ error: 'failed to execute logic', details: String(error) });
+        return res.status(500).json({ error: 'failed to start execution DAG', details: String(error) });
     }
 });
 // ── Recent Domain Events (Dashboard Feed) ────────────────────────
@@ -2544,76 +2688,7 @@ app.delete('/api/v1/entities/:logicalId', async (req, res) => {
         return res.status(500).json({ error: String(err) });
     }
 });
-// ── Data Sources API ─────────────────────────────────────────────────
-app.get('/api/v1/data-sources', async (req, res) => {
-    try {
-        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
-        const sources = await prisma.dataSource.findMany({
-            where: { projectId },
-            orderBy: { createdAt: 'desc' }
-        });
-        return res.json(sources);
-    }
-    catch (err) {
-        return res.status(500).json({ error: String(err) });
-    }
-});
-app.post('/api/v1/data-sources', async (req, res) => {
-    try {
-        const { name, type, config } = req.body;
-        const projectId = req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
-        if (!name || !type || !config) {
-            return res.status(400).json({ error: 'name, type, and config are required' });
-        }
-        const newSource = await prisma.dataSource.create({
-            data: {
-                projectId,
-                name,
-                type,
-                connectionConfig: config
-            }
-        });
-        return res.json(newSource);
-    }
-    catch (err) {
-        return res.status(500).json({ error: String(err) });
-    }
-});
-// ── Pipelines API ────────────────────────────────────────────────────
-app.get('/api/v1/pipelines', async (req, res) => {
-    try {
-        const projectId = req.query.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
-        const pipelines = await prisma.pipeline.findMany({
-            where: { projectId },
-            orderBy: { createdAt: 'desc' },
-        });
-        return res.json(pipelines);
-    }
-    catch (err) {
-        return res.status(500).json({ error: String(err) });
-    }
-});
-app.post('/api/v1/pipelines', async (req, res) => {
-    try {
-        const { name, description, nodes, edges } = req.body;
-        const projectId = req.body.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
-        if (!name)
-            return res.status(400).json({ error: 'name is required' });
-        const newPipeline = await prisma.pipeline.create({
-            data: {
-                projectId,
-                name,
-                description: description || '',
-                nodes: nodes || [],
-                edges: edges || [],
-            },
-        });
-        return res.json(newPipeline);
-    }
-    catch (err) {
-        return res.status(500).json({ error: String(err) });
-    }
-});
+// duplicates removed
 app.put('/api/v1/pipelines/:id', async (req, res) => {
     try {
         const id = req.params.id;
@@ -2704,6 +2779,99 @@ app.put('/api/v1/dashboards/:id', async (req, res) => {
         return res.status(500).json({ error: String(err) });
     }
 });
+// ═══════════════════════════════════════════════════════════
+// NEW: PHASE 6 - RUNTIME & RELEASE ENGINE
+// ═══════════════════════════════════════════════════════════
+/**
+ * Creates an immutable snapshot (Release) of the entire project configuration.
+ * This powers the 'Publish Center' UI.
+ */
+app.post('/api/v1/projects/:projectId/publish', (0, middleware_1.apiKeyAuth)(prisma), async (req, res) => {
+    try {
+        const projectId = req.params.projectId === 'CURRENT_PROJECT'
+            ? req.auth?.projectId
+            : req.params.projectId;
+        const { environment, version } = req.body; // e.g., "STAGING", "v1.0.0"
+        if (!environment || !version) {
+            return res.status(400).json({ error: "environment and version are required fields." });
+        }
+        // 1. Gather all the live Draft state configuration
+        logger_1.default.info(`Extracting Draft state for Release ${version} in ${environment} [Project: ${projectId}]`);
+        const [pipelines, dataSources, entityTypes, decisionRules, dashboards] = await Promise.all([
+            prisma.pipeline.findMany({ where: { projectId: projectId } }),
+            prisma.dataSource.findMany({ where: { projectId: projectId } }),
+            prisma.entityType.findMany({
+                where: { projectId: projectId },
+                include: { attributes: true, outgoingRelationships: true }
+            }),
+            prisma.decisionRule.findMany({ where: { projectId: projectId } }),
+            prisma.dashboard.findMany({
+                where: { projectId: projectId },
+                include: { widgets: true }
+            })
+        ]);
+        // 2. Package into a monolithic JSON Payload
+        const payload = {
+            pipelines,
+            dataSources,
+            entityTypes,
+            decisionRules,
+            dashboards,
+            metadata: {
+                snapshotTime: new Date().toISOString(),
+                itemCounts: {
+                    pipelines: pipelines.length,
+                    entityTypes: entityTypes.length,
+                    apps: dashboards.length,
+                }
+            }
+        };
+        // 3. Freeze into a ProjectRelease atomic record
+        const release = await prisma.projectRelease.create({
+            data: {
+                projectId: projectId,
+                environment: environment,
+                version: version,
+                payload: payload,
+                createdBy: req.auth?.apiKeyName || 'system_fallback'
+            }
+        });
+        logger_1.default.info(`Successfully Published Release ${release.id}`);
+        return res.json(release);
+    }
+    catch (err) {
+        logger_1.default.error({ err }, "Failed to publish atomic project release.");
+        return res.status(500).json({ error: err.message });
+    }
+});
+/**
+ * Fetch the latest release for a given environment
+ * Used by the App Runtime to serve frozen state instead of live drafts.
+ */
+app.get('/api/v1/projects/:projectId/releases/active', async (req, res) => {
+    try {
+        const projectId = req.params.projectId === 'CURRENT_PROJECT'
+            ? (req.auth?.projectId || global.DEFAULT_PROJECT_ID)
+            : req.params.projectId;
+        const environment = req.query.environment || "STAGING";
+        const activeRelease = await prisma.projectRelease.findFirst({
+            where: {
+                projectId: projectId,
+                environment
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+        if (!activeRelease) {
+            return res.status(404).json({ error: `No active release found for ${environment}` });
+        }
+        return res.json(activeRelease);
+    }
+    catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
 // ── Global Search API ──────────────────────────────────────────────
 // Full-text search across CurrentEntityState (searches JSON data fields)
 app.get('/api/v1/search', async (req, res) => {
@@ -2732,6 +2900,82 @@ app.get('/api/v1/search', async (req, res) => {
         return res.json(results);
     }
     catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── AI Copilot RAG Pipeline ────────────────────────────────────────
+app.post('/api/v1/ai/chat', (0, middleware_1.apiKeyAuth)(prisma), async (req, res) => {
+    try {
+        const { message } = req.body;
+        const projectId = req.auth?.projectId || req.header('X-Project-Id') || global.DEFAULT_PROJECT_ID;
+        if (!message) {
+            return res.status(400).json({ error: "Message is required" });
+        }
+        // 1. RAG Retrieval: Fetch Current Entity State for context
+        const allEntities = await prisma.$queryRaw `
+      SELECT ces."logicalId", ces."data", et."name" AS "entityTypeName"
+      FROM "CurrentEntityState" ces
+      JOIN "EntityType" et ON et."id" = ces."entityTypeId"
+      WHERE et."projectId" = ${projectId}
+    `;
+        // Extract specific entities for the response
+        const threat = allEntities.find(e => e.entityTypeName === 'Threat')?.data || {};
+        const asset = allEntities.find(e => e.entityTypeName === 'Asset')?.data || {};
+        const unit = allEntities.find(e => e.entityTypeName === 'Unit')?.data || {};
+        const javelinCount = allEntities.find(e => e.logicalId === 'resource-javelin-01')?.data?.quantity || 0;
+        const lowerMsg = message.toLowerCase();
+        let responseText = "";
+        // Demo Scenario 1: Initial Threat Query & COA Generation
+        if (lowerMsg.includes('threat') || lowerMsg.includes('units') || lowerMsg.includes('equipment') || lowerMsg.includes('coa')) {
+            responseText = `Based on the latest ontology state, I have identified a potential threat:
+**Enemy Unit:** ${threat.type || 'Main Battle Tank'} (${threat.model || 'T-80'})
+**Affiliation:** ${threat.affiliation || 'Hostile'}
+**Location:** Lat ${threat.location?.lat}, Lng ${threat.location?.lng}
+
+Here are 3 possible Courses of Action (COAs) to target the enemy equipment:
+
+### Course of Action 1: Drone Strike
+Task the ${asset.model || 'MQ-9 Reaper'} (${asset.callsign || 'REAPER-1'}) to engage the target.
+*   **Time to Target:** 15 minutes
+*   **Risk:** Medium (Enemy air defense presence unknown)
+*   **Action:** \`[Action: Task MQ-9 Drone]\`
+
+### Course of Action 2: Ground Assault
+Deploy ${unit.vehicle || 'Stryker ICV'} ${unit.unit_size || 'Platoon'} to intercept.
+*   **Time to Target:** 45 minutes
+*   **Risk:** High 
+*   **Action:** \`[Action: Deploy Ground Forces]\`
+
+### Course of Action 3: Jamming & Anti-Armor (Recommended)
+Initiate Electronic Warfare jamming on enemy comms, then maneuver ${unit.vehicle || 'Stryker ICV'} elements to engage with ${javelinCount}x Javelin missiles.
+*   **Time to Target:** 30 minutes
+*   **Risk:** Low (Enemy comms disrupted)
+*   **Action:** \`[Action: Initiate Jamming & Ground Assault]\`
+
+What would you like to do?`;
+        }
+        else if (lowerMsg.includes('jam') || lowerMsg.includes('3') || lowerMsg.includes('jamming')) {
+            responseText = `Understood. Generating operational plan for **Course of Action 3**.
+
+**Validating Supplies:**
+*   **Javelin Missiles:** ${javelinCount} available (Ready).
+*   **Stryker Platoon:** Readiness status is ${unit.readiness || 'Green'}.
+*   **EW Jammer:** Tactical GNSS Jammer status is Available.
+
+I will formulate the Action payload and submit it to the chain of command for review.`;
+        }
+        else {
+            responseText = `I am your AIP Copilot. Currently tracking ${allEntities.length} entities in the operational theater. How can I assist you?`;
+        }
+        // Simulate AI typing delay
+        await new Promise(r => setTimeout(r, 1500));
+        return res.json({
+            role: "assistant",
+            content: responseText
+        });
+    }
+    catch (err) {
+        logger_1.default.error({ err }, "AI Chat Error");
         return res.status(500).json({ error: String(err) });
     }
 });

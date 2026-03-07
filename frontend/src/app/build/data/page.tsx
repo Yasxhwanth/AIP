@@ -1,613 +1,381 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import ReactFlow, {
-    Background, Controls, MiniMap,
-    Node, Edge, NodeTypes,
-    Handle, Position, useNodesState, useEdgesState,
-    getBezierPath, EdgeProps
+    Background, Controls, Node, Edge, useNodesState, useEdgesState,
+    Handle, Position, BackgroundVariant, NodeProps, MiniMap,
+    BaseEdge, getSmoothStepPath, addEdge, Connection
 } from "reactflow";
 import "reactflow/dist/style.css";
 import {
-    Database, GitBranch, Zap, Table2, RefreshCw, Plus,
-    Search, Columns, Clock, ChevronDown, ChevronUp,
-    CheckCircle2, AlertTriangle, XCircle, ExternalLink,
-    Code2, History, BarChart2, Activity, Eye
+    Database, Server, FileJson, Play, Save, ChevronRight, X, AlertCircle, Check,
+    Loader2, Key, Hash, Activity, RefreshCw, MoveRight, Layers, ArrowRightLeft, DatabaseZap
 } from "lucide-react";
 
-// ═══════════════════════════════════════════════════════════
-//  SHARED STYLES
-// ═══════════════════════════════════════════════════════════
-const S = {
-    topBar: {
-        height: 44, display: "flex", alignItems: "center", padding: "0 14px",
-        background: "#fff", borderBottom: "1px solid #CED9E0",
-        gap: 8, flexShrink: 0, fontFamily: "Inter, sans-serif",
-    } as React.CSSProperties,
-    btn: (primary = false): React.CSSProperties => ({
-        height: 28, padding: "0 12px", borderRadius: 3, fontSize: 12, fontWeight: 600,
-        cursor: "pointer", border: primary ? "none" : "1px solid #CED9E0",
-        background: primary ? "#137CBD" : "#fff",
-        color: primary ? "#fff" : "#394B59",
-        display: "flex", alignItems: "center", gap: 5,
-    }),
-    tab: (active: boolean): React.CSSProperties => ({
-        fontSize: 12, fontWeight: 500, padding: "5px 12px", cursor: "pointer", borderRadius: 3,
-        background: active ? "rgba(19,124,189,0.1)" : "transparent",
-        color: active ? "#137CBD" : "#5C7080",
-        border: "none",
-    }),
+// ─── Constants ────────────────────────────────────────────────────────────────
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const FETCH_TIMEOUT_MS = 10_000;
+
+const C = {
+    bg: "#F5F8FA", white: "#FFFFFF", border: "#CED9E0", text: "#182026",
+    sub: "#5C7080", accent: "#137CBD", pill: "#EBF1F5", red: "#DB3737", green: "#0F9960"
 };
 
-// ═══════════════════════════════════════════════════════════
-//  NODE TYPES — matching Palantir pipeline reference
-// ═══════════════════════════════════════════════════════════
-const NODE_COLORS: Record<string, { bg: string; border: string; label: string }> = {
-    dataset: { bg: "#EBF1F5", border: "#137CBD", label: "Dataset" },
-    sql: { bg: "#FFF3E0", border: "#D9822B", label: "SQL Transform" },
-    python: { bg: "#FFFDE7", border: "#D9B504", label: "Python Transform" },
-    fusion: { bg: "#E6F7F0", border: "#0D8050", label: "Fusion Sync" },
-    output: { bg: "#F3E6FF", border: "#7157D9", label: "Ontology Output" },
-};
-
-function PipelineNode({ data }: { data: { label: string; type: string; cols?: number } }) {
-    const style = NODE_COLORS[data.type] || NODE_COLORS.dataset;
-    return (
-        <div style={{
-            background: style.bg, border: `1.5px solid ${style.border}`, borderRadius: 4,
-            padding: "5px 12px", fontSize: 11, fontWeight: 600,
-            color: "#182026", minWidth: 120, position: "relative",
-            fontFamily: "Inter, sans-serif", boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-            display: "flex", alignItems: "center", gap: 6,
-        }}>
-            <Handle type="target" position={Position.Left} style={{ width: 8, height: 8, background: style.border, border: "2px solid #fff" }} />
-            <span style={{ color: style.border, fontSize: 11 }}>{"›"}</span>
-            {data.label}
-            <span style={{ color: style.border, fontSize: 11 }}>{"›"}</span>
-            <Handle type="source" position={Position.Right} style={{ width: 8, height: 8, background: style.border, border: "2px solid #fff" }} />
-        </div>
-    );
+// ─── API Helper ──────────────────────────────────────────────────────────────
+async function apiFetch(path: string, opts?: RequestInit) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+        const r = await fetch(`${API}${path}`, {
+            headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
+            ...opts,
+        });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error ?? r.statusText); }
+        return r.json();
+    } catch (e: any) {
+        if (e.name === 'AbortError') throw new Error(`Request timed out`);
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
-const nodeTypes: NodeTypes = { pipeline: PipelineNode };
+// ─── Custom Custom Nodes ─────────────────────────────────────────────────────
 
-// ═══════════════ INITIAL PIPELINE DATA ════════════════════
-const INIT_NODES: Node[] = [
-    { id: "1", type: "pipeline", position: { x: 50, y: 120 }, data: { label: "drug_claims_golden_table", type: "dataset" } },
-    { id: "2", type: "pipeline", position: { x: 280, y: 120 }, data: { label: "drug_claims_with_doctor_id", type: "sql" } },
-    { id: "3", type: "pipeline", position: { x: 520, y: 100 }, data: { label: "antidepressant_drug_claims", type: "sql" } },
-    { id: "4", type: "pipeline", position: { x: 50, y: 220 }, data: { label: "territory_manager_mapping", type: "fusion" } },
-    { id: "5", type: "pipeline", position: { x: 280, y: 220 }, data: { label: "state_territory_mapping", type: "python" } },
-    { id: "6", type: "pipeline", position: { x: 700, y: 160 }, data: { label: "drug_claims_ontology", type: "output" } },
-];
-const INIT_EDGES: Edge[] = [
-    { id: "e1-2", source: "1", target: "2", type: "smoothstep" },
-    { id: "e2-3", source: "2", target: "3", type: "smoothstep" },
-    { id: "e3-6", source: "3", target: "6", type: "smoothstep" },
-    { id: "e4-5", source: "4", target: "5", type: "smoothstep" },
-    { id: "e5-6", source: "5", target: "6", type: "smoothstep" },
-];
+const DataSourceNode = ({ data, selected }: NodeProps) => (
+    <div className={`bg-white shadow-sm rounded overflow-hidden min-w-[200px] transition-all select-none ${selected ? "ring-2 ring-[#137CBD]" : "ring-1 ring-[#CED9E0]"}`}>
+        <div className="px-3 py-2 border-b border-[#CED9E0] bg-[#F5F8FA] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-[#5C7080]" />
+                <span className="font-bold text-[12px] text-[#182026]">{data.label}</span>
+            </div>
+            <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080] font-mono">{data.type}</span>
+        </div>
+        <Handle type="source" position={Position.Right} style={{ background: "#137CBD", right: -4, width: 8, height: 8 }} />
+    </div>
+);
 
-// ═══════════════════════════════════════════════════════════
-//  TABS
-// ═══════════════════════════════════════════════════════════
-type DataTab = "pipeline" | "datasets" | "sources";
+const EntityTargetNode = ({ data, selected }: NodeProps) => (
+    <div className={`bg-white shadow-sm rounded overflow-hidden min-w-[200px] transition-all select-none ${selected ? "ring-2 ring-[#137CBD]" : "ring-1 ring-[#CED9E0]"}`}>
+        <Handle type="target" position={Position.Left} style={{ background: "#0F9960", left: -4, width: 8, height: 8 }} />
+        <div className="px-3 py-2 border-b border-[#CED9E0] bg-[#ECFDF5] flex items-center gap-2">
+            <Database className="w-4 h-4 text-[#0F9960]" />
+            <span className="font-bold text-[12px] text-[#065F46]">{data.label}</span>
+        </div>
+        <div className="px-3 py-1.5 text-[10px] text-[#5C7080] flex justify-between">
+            <span>Attributes:</span><span className="font-bold">{data.attributes?.length || 0}</span>
+        </div>
+    </div>
+);
 
-// ═══════════════════════════════════════════════════════════
-//  DATASET TABLE (reference image 2)
-// ═══════════════════════════════════════════════════════════
-const AIRLINES = [
-    { iata: "WN", name: "Southwest Airlines", bts: 19393, carrier: "Southwest Airlines Co", wac: "10", region: "Domestic" },
-    { iata: "AC", name: "null", bts: 19531, carrier: "null", wac: "427", region: "International" },
-    { iata: "AF", name: "Air France", bts: 19532, carrier: "Compagnie Natl Air F", wac: "427", region: "International" },
-    { iata: "AI", name: "Air India Limited", bts: 19533, carrier: "National Aviation Co", wac: "733", region: "International" },
-    { iata: "AM", name: "AeroMéxico", bts: 19534, carrier: "Aeromexcico", wac: "733", region: "International" },
-    { iata: "AR", name: "Aerolíneas Argentina", bts: 19535, carrier: "Aerolíneas Argentina", wac: "433", region: "International" },
-    { iata: "AT", name: "Royal Air Maroc", bts: 19536, carrier: "Royal Air Maroc", wac: "548", region: "International" },
-    { iata: "AV", name: "Avianca Intl Col", bts: 19537, carrier: "Avianca Nncl de Col", wac: "327", region: "International" },
-    { iata: "AY", name: "Finnair", bts: 19538, carrier: "Finnair Oy", wac: "507", region: "International" },
-    { iata: "AZ", name: "Alitalia", bts: 19539, carrier: "Italia Transaero Am", wac: "507", region: "International" },
-    { iata: "BA", name: "British Airways", bts: 19540, carrier: "British Airways Plc", wac: "493", region: "International" },
-    { iata: "BD", name: "bmi", bts: 19541, carrier: "British Midland Airw", wac: "493", region: "International" },
-    { iata: "BW", name: "Caribbean Airlines", bts: 19542, carrier: "Caribbean Airlines L", wac: "280", region: "International" },
-];
+const MappingEdge = ({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, selected }: any) => {
+    const [path, lx, ly] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, borderRadius: 0 });
+    return (
+        <>
+            <BaseEdge id={id} path={path} markerEnd={markerEnd}
+                style={{ stroke: selected ? '#137CBD' : '#CED9E0', strokeWidth: selected ? 2 : 1.5, ...style }} />
+            <div style={{ position: "absolute", transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)`, pointerEvents: "all" }}>
+                <div className={`w-6 h-6 rounded flex items-center justify-center shadow-sm cursor-pointer transition-colors ${selected ? "bg-[#137CBD] text-white" : "bg-white border border-[#CED9E0] text-[#5C7080] hover:bg-[#EBF1F5]"}`}>
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                </div>
+            </div>
+        </>
+    );
+};
 
-const DATASETS = [
-    { name: "airlines", type: "Dataset", rows: "481 rows", cols: "12 cols", status: "healthy", updated: "Jun 28, 2025" },
-    { name: "drug_claims_golden_table", type: "Dataset", rows: "1.2M rows", cols: "24 cols", status: "healthy", updated: "Jun 27, 2025" },
-    { name: "territory_manager_mapping", type: "Fusion", rows: "3.4K rows", cols: "8 cols", status: "healthy", updated: "Jun 26, 2025" },
-    { name: "antidepressant_drug_claims", type: "SQL View", rows: "482K rows", cols: "18 cols", status: "warning", updated: "Jun 25, 2025" },
-    { name: "state_territory_mapping", type: "Python", rows: "52 rows", cols: "5 cols", status: "healthy", updated: "Jun 24, 2025" },
-    { name: "drug_claims_ontology", type: "Output", rows: "482K rows", cols: "22 cols", status: "healthy", updated: "Jun 23, 2025" },
-];
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function PipelineBuilder() {
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [toast, setToast] = useState<{ msg: string; type: "err" | "ok" | "info" } | null>(null);
 
-// ═══════════════════════════════════════════════════════════
-//  SOURCE TABLES (reference image 3)
-// ═══════════════════════════════════════════════════════════
-const SOURCE_TABLES = [
-    "ApexPago", "ApexPageInfo", "ApexTestQueueItem", "ApexTestResult",
-    "ApexTestResultITLimits", "ApexTestRunResult", "ApexTestSuite",
-    "ApexTrigger", "ApiAnomalyEventStore", "ApiAnomalyEventStoreFeed",
-    "ApiEvent", "ApiAnalyticsQueryRequest", "AppDefinition", "AppMenuItem",
-    "AppTabMember", "App_Report__Tag", "App_Report__c",
-    "AppDomainVerification", "Application__History", "Application__Share",
-    "Application__Tag", "Application__c", "Approval", "Asset", "AssetFeed",
-];
+    // Sidebar Data
+    const [sources, setSources] = useState<any[]>([]);
+    const [entityTypes, setEntityTypes] = useState<any[]>([]);
 
-const PREVIEW_ROWS = [
-    { id: "0171F000005wFv2QQA5", isDeleted: "false", accountId: "0011F00000qiCwUQAU", createdById: "0051F000000kJUMDQA4", createdDate: "2020-07-24 08:55:15.0", field: "Account_Status__c", dataType: "DynamicEnum" },
-    { id: "0171F000005wFVhQAK", isDeleted: "false", accountId: "0011F00000qiD7YQAW", createdById: "0051F000000kJUMDQA4", createdDate: "2020-07-24 09:06:35.0", field: "Account_Status__c", dataType: "DynamicEnum" },
-];
+    // Pipeline State
+    const [currentPipelineId, setCurrentPipelineId] = useState<string>("default");
+    const [integrationJob, setIntegrationJob] = useState<any>(null); // DB synced job
+    const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({}); // local state for right panel
+    const [logicalIdField, setLogicalIdField] = useState<string>("_id");
 
-// ═══════════════════════════════════════════════════════════
-//  MAIN PAGE
-// ═══════════════════════════════════════════════════════════
-export default function DataPage() {
-    const [tab, setTab] = useState<DataTab>("pipeline");
-    const [nodes, , onNodesChange] = useNodesState(INIT_NODES);
-    const [edges, , onEdgesChange] = useEdgesState(INIT_EDGES);
-    const [bottomTab, setBottomTab] = useState("Preview");
-    const [bottomOpen, setBottomOpen] = useState(true);
-    const [selectedDataset, setSelectedDataset] = useState(DATASETS[0]);
-    const [datasetTab, setDatasetTab] = useState("About");
-    const [sourceTab, setSourceTab] = useState("Explore source");
+    // ReactFlow
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+    const showToast = (msg: string, type: "err" | "ok" | "info") => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 3000);
+    };
+
+    // ── DATA FETCHING ──
+    useEffect(() => {
+        const load = async () => {
+            setLoading(true);
+            try {
+                // Fetch library data
+                const [srcs, ets, pipes] = await Promise.all([
+                    apiFetch("/api/data/sources"),
+                    apiFetch("/api/ontology/entity-types"),
+                    apiFetch("/api/data/pipelines")
+                ]);
+                setSources(srcs);
+                setEntityTypes(ets);
+
+                if (pipes.length > 0) {
+                    const p = pipes[0];
+                    setCurrentPipelineId(p.id);
+                    if (p.nodes) setNodes(p.nodes);
+                    if (p.edges) setEdges(p.edges);
+                }
+            } catch (e: any) {
+                showToast(e.message, "err");
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, []);
+
+    // ── REACTFLOW ACTIONS ──
+    const onConnect = useCallback((params: Connection) => {
+        setEdges((eds) => addEdge({ ...params, type: "mappingEdge" }, eds));
+    }, [setEdges]);
+
+    const onEdgeClick = (_: any, edge: Edge) => {
+        setSelectedEdgeId(edge.id);
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        const targetNode = nodes.find(n => n.id === edge.target);
+
+        if (sourceNode && targetNode) {
+            // Find if there's already an integration job mapped
+            const jobName = `Sync_${sourceNode.id}_to_${targetNode.id}`;
+            apiFetch(`/api/data/pipelines`).then(() => {
+                // For simplicity in UI, we manage state locally then save
+                if (!fieldMapping.logicalIdField) setLogicalIdField("id");
+            }).catch(() => { });
+        }
+    };
+
+    const handleDragStart = (e: any, item: any, type: string) => {
+        e.dataTransfer.setData("application/reactflow", JSON.stringify({ item, type }));
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const onDrop = useCallback((e: any) => {
+        e.preventDefault();
+        const reactFlowBounds = document.querySelector('.react-flow')?.getBoundingClientRect();
+        if (!reactFlowBounds) return;
+
+        const dataStr = e.dataTransfer.getData("application/reactflow");
+        if (!dataStr) return;
+        const { item, type } = JSON.parse(dataStr);
+
+        const position = {
+            x: e.clientX - reactFlowBounds.left - 100,
+            y: e.clientY - reactFlowBounds.top - 25,
+        };
+
+        const newNode: Node = {
+            id: `${type}-${item.id}-${Date.now()}`,
+            type: type === "source" ? "dataSource" : "entityTarget",
+            position,
+            data: { ...item, label: item.name },
+        };
+        setNodes((nds) => nds.concat(newNode));
+    }, [nodes, setNodes]);
+
+    const onDragOver = useCallback((e: any) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+    }, []);
+
+    // ── DB SAVE & RUN ──
+    const handleSavePipeline = async () => {
+        setSaving(true);
+        try {
+            await apiFetch("/api/data/pipelines", {
+                method: "POST",
+                body: JSON.stringify({ name: "Default_Pipeline", desc: "", nodes, edges })
+            });
+
+            // If they mapped fields, save the integration job too
+            if (selectedEdge) {
+                const sourceNode = nodes.find(n => n.id === selectedEdge.source);
+                const targetNode = nodes.find(n => n.id === selectedEdge.target);
+
+                if (sourceNode && targetNode) {
+                    const job = await apiFetch("/api/data/integration-jobs", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            name: `Sync_${sourceNode.data.id}_to_${targetNode.data.id}`,
+                            dataSourceId: sourceNode.data.id,
+                            targetEntityTypeId: targetNode.data.id,
+                            fieldMapping: fieldMapping,
+                            logicalIdField: logicalIdField,
+                            schedule: null // Manual for now
+                        })
+                    });
+                    setIntegrationJob(job);
+                }
+            }
+            showToast("Pipeline saved successfully", "ok");
+        } catch (e: any) {
+            showToast(e.message, "err");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleRunJob = async () => {
+        if (!integrationJob) {
+            showToast("Please save the pipeline mapping first before running.", "err");
+            return;
+        }
+        try {
+            showToast("Triggering Data Integration Sync...", "info");
+            await apiFetch(`/api/data/integration-jobs/${integrationJob.id}/run`, { method: "POST" });
+            showToast("Job successfully pushed to the Orchestrator Queue!", "ok");
+        } catch (e: any) {
+            showToast(e.message, "err");
+        }
+    };
+
+    // Right panel data
+    const selectedEdge = edges.find(e => e.id === selectedEdgeId);
+    const selectedTargetNode = nodes.find(n => n.id === selectedEdge?.target);
+    const targetAttributes = selectedTargetNode?.data?.attributes || [];
 
     return (
-        <div style={{
-            display: "flex", flexDirection: "column", height: "100%",
-            background: "#F5F8FA", fontFamily: "Inter, sans-serif"
-        }}>
-
-            {/* ── TOP BAR ── */}
-            <div style={S.topBar}>
-                <svg viewBox="0 0 16 16" style={{ width: 16, height: 16 }}>
-                    <rect x="1" y="1" width="6" height="6" rx="1" fill="#137CBD" opacity="0.8" />
-                    <rect x="9" y="1" width="6" height="6" rx="1" fill="#137CBD" opacity="0.5" />
-                    <rect x="1" y="9" width="6" height="6" rx="1" fill="#137CBD" opacity="0.5" />
-                    <rect x="9" y="9" width="6" height="6" rx="1" fill="#0D8050" opacity="0.7" />
-                </svg>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#182026" }}>Data Layer</span>
-                <div style={{ width: 1, height: 16, background: "#CED9E0", margin: "0 4px" }} />
-
-                {/* Sub-tabs */}
-                {(["pipeline", "datasets", "sources"] as DataTab[]).map(t => (
-                    <button key={t} onClick={() => setTab(t)} style={S.tab(tab === t)}>
-                        {t === "pipeline" ? "Pipeline Builder" : t === "datasets" ? "Datasets" : "Connections"}
-                    </button>
-                ))}
-
-                <div style={{ flex: 1 }} />
-
-                {/* Branch */}
-                <div style={{
-                    display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
-                    background: "#fff", border: "1px solid #CED9E0", borderRadius: 3,
-                    fontSize: 12, color: "#182026", cursor: "pointer"
-                }}>
-                    <GitBranch style={{ width: 12, height: 12, color: "#5C7080" }} />
-                    master
-                    <ChevronDown style={{ width: 11, height: 11, color: "#5C7080" }} />
-                </div>
-                <button style={S.btn()}>
-                    <RefreshCw style={{ width: 12, height: 12 }} /> Sync
-                </button>
-                <button style={S.btn(true)}>
-                    Save <ChevronDown style={{ width: 11, height: 11 }} />
+        <div className="flex h-screen w-full bg-[#182026] text-white font-[Inter,sans-serif] overflow-hidden">
+            {/* ── LEFT NAV (App Chrome) ── */}
+            <div className="w-14 bg-[#10161A] border-r border-[#293742] flex flex-col items-center py-3 shrink-0">
+                <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center font-bold mb-6">AIP</div>
+                <button className="w-10 h-10 flex flex-col items-center justify-center text-[#137CBD] group relative">
+                    <Layers className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-bold">Data</span>
                 </button>
             </div>
 
-            {/* ── CONTENT ── */}
-            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <div className="flex-1 flex flex-col min-w-0 bg-[#F5F8FA] text-[#182026]">
+                {/* ── HEADER ── */}
+                <div className="h-12 bg-white border-b border-[#CED9E0] flex items-center justify-between px-4 shrink-0 shadow-sm z-10">
+                    <div className="flex items-center gap-3">
+                        <DatabaseZap className="w-4 h-4 text-[#5C7080]" />
+                        <span className="font-bold text-[14px]">Data Connection / Pipeline Builder</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {saving && <Loader2 className="w-4 h-4 text-[#5C7080] animate-spin" />}
+                        <button onClick={handleSavePipeline} className="h-7 px-3 bg-white border border-[#CED9E0] hover:bg-[#EBF1F5] text-[#182026] text-[11px] font-bold rounded shadow-sm transition-colors flex items-center gap-1.5"><Save className="w-3.5 h-3.5" /> Save</button>
+                        <button onClick={handleRunJob} className="h-7 px-3 bg-[#0F9960] hover:bg-[#0A6640] text-white text-[11px] font-bold rounded shadow-sm transition-colors flex items-center gap-1.5"><Play className="w-3.5 h-3.5" /> Run Pipeline</button>
+                    </div>
+                </div>
 
-                {/* ── PIPELINE TAB ── */}
-                {tab === "pipeline" && (
-                    <>
-                        {/* Toolbar */}
-                        <div style={{
-                            display: "flex", alignItems: "center", padding: "0 12px", height: 38,
-                            background: "#fff", borderBottom: "1px solid #CED9E0", gap: 2, flexShrink: 0,
-                        }}>
-                            {["Tools", "Layout", "Undo/redo", "Clean", "Select", "Expand", "Color", "Find", "Remove", "Align"].map(t => (
-                                <button key={t} style={{
-                                    fontSize: 11, color: "#5C7080", padding: "3px 8px",
-                                    cursor: "pointer", border: "none", background: "transparent",
-                                    borderRadius: 3
-                                }}>
-                                    {t}
-                                </button>
-                            ))}
-                            <div style={{ width: 1, height: 16, background: "#CED9E0", margin: "0 6px" }} />
-                            {/* Layout / Group / Legend */}
-                            {["Layout by color", "Group by color", "Legend"].map(t => (
-                                <button key={t} style={{
-                                    fontSize: 11, color: "#5C7080", padding: "3px 8px",
-                                    cursor: "pointer", border: "none", background: "transparent", borderRadius: 3
-                                }}>
-                                    {t}
-                                </button>
-                            ))}
-                            <div style={{ flex: 1 }} />
-                            <button style={{ ...S.btn(), fontSize: 11 }}>
-                                Resource type <ChevronDown style={{ width: 11, height: 11 }} />
-                            </button>
+                {/* ── WORKSPACE ── */}
+                <div className="flex-1 flex min-h-0 relative">
+                    {/* Toast Notification */}
+                    {toast && (
+                        <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded shadow-lg text-[12px] font-bold flex items-center gap-2 text-white ${toast.type === "err" ? "bg-[#DB3737]" : toast.type === "ok" ? "bg-[#0F9960]" : "bg-[#137CBD]"}`}>
+                            {toast.type === "err" ? <AlertCircle className="w-4 h-4" /> : toast.type === "ok" ? <Check className="w-4 h-4" /> : <Activity className="w-4 h-4 animate-pulse" />} {toast.msg}
                         </div>
+                    )}
 
-                        {/* Legend */}
-                        <div style={{
-                            display: "flex", alignItems: "center", gap: 16, padding: "6px 16px",
-                            background: "#fff", borderBottom: "1px solid #EBF1F5", flexShrink: 0, flexWrap: "wrap"
-                        }}>
-                            {Object.entries(NODE_COLORS).map(([k, v]) => (
-                                <div key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#182026" }}>
-                                    <div style={{ width: 12, height: 12, borderRadius: 2, background: v.bg, border: `1.5px solid ${v.border}` }} />
-                                    {v.label}
+                    {/* Left Sidebar (Library) */}
+                    <div className="w-64 bg-white border-r border-[#CED9E0] flex flex-col shrink-0">
+                        <div className="p-3 border-b border-[#CED9E0] bg-[#F5F8FA] text-[11px] font-bold text-[#5C7080] uppercase tracking-wider">
+                            Data Sources
+                        </div>
+                        <div className="p-3 space-y-2 overflow-auto max-h-[50%] border-b border-[#CED9E0]">
+                            {loading ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-[#5C7080]" /> : null}
+                            {sources.map(s => (
+                                <div key={s.id} draggable onDragStart={(e) => handleDragStart(e, s, "source")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
+                                    <div className="flex items-center gap-2"><Server className="w-3.5 h-3.5 text-[#137CBD]" /> <span className="font-bold">{s.name}</span></div>
                                 </div>
                             ))}
                         </div>
-
-                        {/* Graph + Bottom */}
-                        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                            <div style={{ flex: 1, minHeight: 0 }}>
-                                <ReactFlow
-                                    nodes={nodes} edges={edges}
-                                    onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-                                    nodeTypes={nodeTypes}
-                                    fitView
-                                    style={{ background: "#F5F8FA" }}>
-                                    <Background color="#CED9E0" gap={20} size={1} />
-                                    <Controls style={{ background: "#fff", border: "1px solid #CED9E0", borderRadius: 4 }} />
-                                    <MiniMap style={{ background: "#EBF1F5", border: "1px solid #CED9E0", borderRadius: 4 }} />
-                                </ReactFlow>
-                            </div>
-
-                            {/* Bottom panel */}
-                            <div style={{
-                                background: "#fff", borderTop: "1px solid #CED9E0",
-                                height: bottomOpen ? 160 : 36, flexShrink: 0, transition: "height 0.2s"
-                            }}>
-                                <div style={{
-                                    display: "flex", alignItems: "center", padding: "0 12px",
-                                    height: 36, borderBottom: "1px solid #EBF1F5", gap: 4
-                                }}>
-                                    {["Preview", "History", "Code", "Data health", "Build timeline"].map(t => (
-                                        <button key={t} onClick={() => setBottomTab(t)} style={S.tab(bottomTab === t)}>
-                                            {t}
-                                        </button>
-                                    ))}
-                                    <div style={{ flex: 1 }} />
-                                    <button onClick={() => setBottomOpen(v => !v)} style={{ ...S.btn(), border: "none" }}>
-                                        {bottomOpen ? <ChevronDown style={{ width: 14, height: 14 }} /> : <ChevronUp style={{ width: 14, height: 14 }} />}
-                                    </button>
-                                </div>
-                                {bottomOpen && (
-                                    <div style={{ padding: "10px 16px", fontSize: 12, color: "#5C7080" }}>
-                                        {bottomTab === "Preview" && "Select a node to preview its output data."}
-                                        {bottomTab === "History" && "No recent build history."}
-                                        {bottomTab === "Code" && <code style={{ fontSize: 11, color: "#137CBD" }}>SELECT * FROM drug_claims_golden_table LIMIT 100</code>}
-                                        {bottomTab === "Data health" && "All datasets passing quality checks ✓"}
-                                        {bottomTab === "Build timeline" && "Last build: Jun 28, 2025 23:49 PM — 2m 14s"}
-                                    </div>
-                                )}
-                            </div>
+                        <div className="p-3 border-b border-[#CED9E0] bg-[#F5F8FA] text-[11px] font-bold text-[#5C7080] uppercase tracking-wider mt-auto">
+                            Ontology Targets
                         </div>
-                    </>
-                )}
-
-                {/* ── DATASETS TAB ── */}
-                {tab === "datasets" && (
-                    <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-                        {/* Left dataset list */}
-                        <div style={{
-                            width: 220, background: "#fff", borderRight: "1px solid #CED9E0",
-                            display: "flex", flexDirection: "column", flexShrink: 0
-                        }}>
-                            <div style={{ padding: "8px 10px", borderBottom: "1px solid #EBF1F5" }}>
-                                <div style={{
-                                    display: "flex", alignItems: "center", gap: 6,
-                                    background: "#F5F8FA", border: "1px solid #CED9E0", borderRadius: 3,
-                                    padding: "4px 8px"
-                                }}>
-                                    <Search style={{ width: 12, height: 12, color: "#5C7080" }} />
-                                    <input placeholder="Filter datasets..." style={{
-                                        border: "none", background: "transparent",
-                                        fontSize: 12, width: "100%", outline: "none", color: "#182026"
-                                    }} />
+                        <div className="p-3 space-y-2 overflow-auto flex-1">
+                            {entityTypes.map(et => (
+                                <div key={et.id} draggable onDragStart={(e) => handleDragStart(e, et, "target")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#0F9960] flex items-center justify-between">
+                                    <div className="flex items-center gap-2"><Database className="w-3.5 h-3.5 text-[#0F9960]" /> <span className="font-bold">{et.name}</span></div>
                                 </div>
-                            </div>
-                            <div style={{ flex: 1, overflowY: "auto" }}>
-                                {DATASETS.map(ds => (
-                                    <div key={ds.name} onClick={() => setSelectedDataset(ds)}
-                                        style={{
-                                            padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #EBF1F5",
-                                            background: selectedDataset.name === ds.name ? "rgba(19,124,189,0.06)" : "transparent"
-                                        }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                            <div style={{
-                                                width: 8, height: 8, borderRadius: "50%",
-                                                background: ds.status === "healthy" ? "#0D8050" : "#D9822B"
-                                            }} />
-                                            <span style={{
-                                                fontSize: 12, fontWeight: 500, color: "#182026", overflow: "hidden",
-                                                textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150
-                                            }}>
-                                                {ds.name}
-                                            </span>
-                                        </div>
-                                        <div style={{ fontSize: 10, color: "#5C7080", marginTop: 2, paddingLeft: 14 }}>
-                                            {ds.type} · {ds.rows} · {ds.cols}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            ))}
                         </div>
+                    </div>
 
-                        {/* Metadata sidebar */}
-                        <div style={{
-                            width: 200, background: "#fff", borderRight: "1px solid #CED9E0",
-                            display: "flex", flexDirection: "column", flexShrink: 0
-                        }}>
-                            <div style={{ display: "flex", borderBottom: "1px solid #CED9E0" }}>
-                                {["About", "Columns", "Schedules"].map(t => (
-                                    <button key={t} onClick={() => setDatasetTab(t)} style={{
-                                        flex: 1, fontSize: 11, padding: "8px 0", cursor: "pointer",
-                                        border: "none", background: "transparent",
-                                        borderBottom: datasetTab === t ? "2px solid #137CBD" : "2px solid transparent",
-                                        color: datasetTab === t ? "#137CBD" : "#5C7080", fontWeight: datasetTab === t ? 600 : 400,
-                                    }}>
-                                        {t}
-                                    </button>
-                                ))}
+                    {/* React Flow Canvas */}
+                    <div className="flex-1 relative react-flow-wrapper" onDrop={onDrop} onDragOver={onDragOver}>
+                        <ReactFlow
+                            nodes={nodes} edges={edges.map(e => ({ ...e, style: { strokeWidth: 1.5, stroke: '#CED9E0' }, type: 'mappingEdge' }))}
+                            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onEdgeClick={onEdgeClick} onPaneClick={() => setSelectedEdgeId(null)}
+                            nodeTypes={{ dataSource: DataSourceNode, entityTarget: EntityTargetNode }} edgeTypes={{ mappingEdge: MappingEdge }}
+                            fitView minZoom={0.2} maxZoom={2} proOptions={{ hideAttribution: true }}>
+                            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#CED9E0" />
+                            <Controls showInteractive={false} className="!bg-white !border-[#CED9E0] !shadow-sm" />
+                        </ReactFlow>
+                    </div>
+
+                    {/* Right Sidebar (Field Mapping) */}
+                    {selectedEdgeId && (
+                        <div className="w-[350px] bg-white border-l border-[#CED9E0] flex flex-col shrink-0">
+                            <div className="p-4 border-b border-[#CED9E0] flex justify-between items-center bg-[#F5F8FA]">
+                                <div className="font-bold text-[14px]">Field Mapping</div>
+                                <button className="text-[#5C7080] hover:text-[#182026]" onClick={() => setSelectedEdgeId(null)}><X className="w-4 h-4" /></button>
                             </div>
-                            <div style={{ flex: 1, overflowY: "auto", padding: 12, fontSize: 11 }}>
-                                {datasetTab === "About" && (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                        <div style={{
-                                            padding: "8px", background: "#F5F8FA", borderRadius: 3,
-                                            fontSize: 11, color: "#5C7080", lineHeight: 1.5
-                                        }}>
-                                            Airline reference dataset from Bureau of Transportation Statistics.
-                                        </div>
-                                        {[
-                                            ["Type", selectedDataset.type],
-                                            ["Updated", selectedDataset.updated],
-                                            ["Rows", selectedDataset.rows],
-                                            ["Columns", selectedDataset.cols],
-                                            ["Status", selectedDataset.status],
-                                        ].map(([k, v]) => (
-                                            <div key={k}>
-                                                <div style={{ color: "#8A9BA8", fontSize: 10, fontWeight: 600, textTransform: "uppercase", marginBottom: 1 }}>{k}</div>
-                                                <div style={{ color: "#182026", fontSize: 12 }}>{v}</div>
+                            <div className="flex-1 overflow-auto p-4 space-y-4">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-[#5C7080] mb-1 uppercase tracking-wider">Primary Key (Logical ID)</label>
+                                    <div className="text-[11px] text-[#5C7080] mb-2 leading-tight">Specify the JSON property from the raw data that uniquely identifies each row.</div>
+                                    <input type="text" value={logicalIdField} onChange={e => setLogicalIdField(e.target.value)} placeholder="e.g. id, flight_id" className="w-full text-[12px] font-mono p-2 border border-[#CED9E0] rounded focus:outline-none focus:border-[#137CBD] focus:ring-1 focus:ring-[#137CBD]" />
+                                </div>
+
+                                <div className="pt-2">
+                                    <label className="block text-[11px] font-bold text-[#5C7080] mb-1 uppercase tracking-wider">Property Mappings</label>
+                                    <div className="text-[11px] text-[#5C7080] mb-3 leading-tight">Map raw JSON paths (left) to the physical semantic Ontology properties (right).</div>
+
+                                    <div className="space-y-3">
+                                        {targetAttributes.map((attr: any) => (
+                                            <div key={attr.id} className="bg-[#F5F8FA] border border-[#CED9E0] rounded p-2">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="font-bold text-[12px] text-[#182026] flex items-center gap-1.5">{attr.required ? <Key className="w-3 h-3 text-[#137CBD]" /> : <Hash className="w-3 h-3 text-[#5C7080]" />} {attr.name}</span>
+                                                    <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080]">{attr.dataType}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1">
+                                                        <input type="text" placeholder="json_field_name" value={fieldMapping[attr.name] || ""} onChange={e => {
+                                                            const newMapping = { ...fieldMapping };
+                                                            if (e.target.value) newMapping[attr.name] = e.target.value;
+                                                            else delete newMapping[attr.name];
+                                                            // Flip the dictionary because DB expects { "external_field": "ontology_property" }
+                                                            const dbMapping: Record<string, string> = {};
+                                                            for (const [oProp, eProp] of Object.entries(newMapping)) { dbMapping[eProp] = oProp; }
+                                                            setFieldMapping(dbMapping);
+                                                        }} className="w-full text-[12px] font-mono p-1.5 border border-[#CED9E0] rounded focus:outline-none focus:border-[#137CBD]" />
+                                                    </div>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
-                                )}
-                                {datasetTab === "Columns" && (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                        {["iata", "common_name", "bts_airline_id", "start_date_source", "carrier_name", "wac", "region"].map(c => (
-                                            <div key={c} style={{
-                                                display: "flex", justifyContent: "space-between",
-                                                padding: "4px 0", borderBottom: "1px solid #EBF1F5"
-                                            }}>
-                                                <span style={{ color: "#182026", fontSize: 11 }}>{c}</span>
-                                                <span style={{ color: "#8A9BA8", fontSize: 10 }}>String</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {datasetTab === "Schedules" && (
-                                    <div style={{ color: "#5C7080", fontSize: 11 }}>No schedules configured.</div>
-                                )}
-                            </div>
-                        </div>
 
-                        {/* Data table */}
-                        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-                            {/* Table toolbar */}
-                            <div style={{
-                                display: "flex", alignItems: "center", padding: "0 12px", height: 38,
-                                background: "#fff", borderBottom: "1px solid #CED9E0", gap: 8, flexShrink: 0
-                            }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: "#182026" }}>
-                                    ⬛ {selectedDataset.name}
-                                </span>
-                                <span style={{ fontSize: 11, color: "#5C7080" }}>
-                                    Showing {selectedDataset.rows} · {selectedDataset.cols}
-                                </span>
-                                <div style={{ flex: 1 }} />
-                                <button style={S.btn()}>SQL preview</button>
-                                <button style={S.btn()}>Analyze data <ChevronDown style={{ width: 11, height: 11 }} /></button>
-                                <button style={S.btn()}>Explore pipeline <ChevronDown style={{ width: 11, height: 11 }} /></button>
-                                <button style={S.btn(true)}>Build</button>
-                            </div>
-
-                            {/* Tabs */}
-                            <div style={{
-                                display: "flex", alignItems: "center", padding: "0 12px",
-                                height: 34, background: "#fff", borderBottom: "1px solid #CED9E0", gap: 4, flexShrink: 0
-                            }}>
-                                {["Preview", "History", "Details", "Health ᵝ", "Compare"].map(t => (
-                                    <button key={t} style={S.tab(t === "Preview")}>{t}</button>
-                                ))}
-                            </div>
-
-                            {/* Table */}
-                            <div style={{ flex: 1, overflow: "auto" }}>
-                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: "monospace" }}>
-                                    <thead>
-                                        <tr style={{ background: "#F5F8FA", position: "sticky", top: 0 }}>
-                                            {["#", "iata\nString", "common_name\nString", "bts_airline_id\nInteger", "carrier_name\nString", "wac\nInteger", "region\nString"].map((h, i) => (
-                                                <th key={i} style={{
-                                                    padding: "6px 10px", textAlign: "left",
-                                                    borderBottom: "1px solid #CED9E0", color: "#5C7080",
-                                                    fontWeight: 500, fontSize: 10, whiteSpace: "pre-line",
-                                                    borderRight: "1px solid #EBF1F5"
-                                                }}>
-                                                    {h}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {AIRLINES.map((row, i) => (
-                                            <tr key={row.iata} style={{
-                                                borderBottom: "1px solid #EBF1F5",
-                                                background: i % 2 === 0 ? "#fff" : "#FAFBFC"
-                                            }}>
-                                                <td style={{ padding: "5px 10px", color: "#8A9BA8", borderRight: "1px solid #EBF1F5" }}>{i + 1}</td>
-                                                <td style={{ padding: "5px 10px", color: "#137CBD", fontWeight: 600, borderRight: "1px solid #EBF1F5" }}>{row.iata}</td>
-                                                <td style={{ padding: "5px 10px", color: "#182026", borderRight: "1px solid #EBF1F5" }}>{row.name}</td>
-                                                <td style={{ padding: "5px 10px", color: "#182026", borderRight: "1px solid #EBF1F5" }}>{row.bts}</td>
-                                                <td style={{ padding: "5px 10px", color: "#182026", borderRight: "1px solid #EBF1F5", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.carrier}</td>
-                                                <td style={{ padding: "5px 10px", color: "#182026", borderRight: "1px solid #EBF1F5" }}>{row.wac}</td>
-                                                <td style={{ padding: "5px 10px", color: "#182026" }}>{row.region}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ── CONNECTIONS TAB ── */}
-                {tab === "sources" && (
-                    <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-                        {/* Source list */}
-                        <div style={{
-                            width: 220, background: "#fff", borderRight: "1px solid #CED9E0",
-                            display: "flex", flexDirection: "column", flexShrink: 0
-                        }}>
-                            <div style={{
-                                padding: 10, borderBottom: "1px solid #EBF1F5", fontSize: 12,
-                                fontWeight: 600, color: "#182026"
-                            }}>Previewing source</div>
-                            <div style={{ padding: "6px 10px", borderBottom: "1px solid #EBF1F5" }}>
-                                <div style={{
-                                    display: "flex", alignItems: "center", gap: 6,
-                                    background: "#F5F8FA", border: "1px solid #CED9E0", borderRadius: 3,
-                                    padding: "4px 8px"
-                                }}>
-                                    <Search style={{ width: 12, height: 12, color: "#5C7080" }} />
-                                    <input placeholder="Filter by name..." style={{
-                                        border: "none", background: "transparent",
-                                        fontSize: 12, width: "100%", outline: "none", color: "#182026"
-                                    }} />
+                                    {targetAttributes.length === 0 && (
+                                        <div className="p-4 border border-dashed border-[#CED9E0] rounded text-center text-[11px] text-[#5C7080]">
+                                            No attributes defined on target object.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                            <div style={{ flex: 1, overflowY: "auto" }}>
-                                {SOURCE_TABLES.map((t, i) => (
-                                    <div key={t} style={{
-                                        padding: "6px 12px", fontSize: 11, cursor: "pointer",
-                                        color: i === 1 ? "#137CBD" : "#182026",
-                                        background: i === 1 ? "rgba(19,124,189,0.06)" : "transparent",
-                                        borderBottom: "1px solid #EBF1F5",
-                                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                                    }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                            <Database style={{ width: 11, height: 11, color: "#5C7080" }} />
-                                            {t}
-                                        </div>
-                                        <Plus style={{ width: 12, height: 12, color: "#5C7080" }} />
-                                    </div>
-                                ))}
+                            <div className="p-4 border-t border-[#CED9E0] bg-[#F5F8FA]">
+                                <button onClick={handleSavePipeline} className="w-full h-8 bg-[#137CBD] hover:bg-[#0E6694] text-white font-bold text-[12px] rounded shadow-sm transition-colors">
+                                    Save Mapping
+                                </button>
                             </div>
                         </div>
-
-                        {/* Preview table */}
-                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                            {/* Info banner */}
-                            <div style={{
-                                padding: "8px 14px", background: "#EBF4FC", borderBottom: "1px solid #B3D7F5",
-                                fontSize: 11, color: "#1F4E79", flexShrink: 0, display: "flex", gap: 6
-                            }}>
-                                <span style={{ color: "#137CBD" }}>ℹ</span>
-                                You are previewing table resources on the remote system that have not been synced to Foundry yet.
-                                Start by selecting table resources from the resource list then create a sync.
-                            </div>
-
-                            {/* Tab */}
-                            <div style={{ display: "flex", background: "#fff", borderBottom: "1px solid #CED9E0", flexShrink: 0 }}>
-                                {["Overview", "Connection settings", "Edit syncs", "Explore source"].map(t => (
-                                    <button key={t} onClick={() => setSourceTab(t)} style={{
-                                        ...S.tab(sourceTab === t), borderBottom: sourceTab === t ? "2px solid #137CBD" : "2px solid transparent",
-                                        borderRadius: 0, padding: "8px 14px"
-                                    }}>
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div style={{ flex: 1, overflow: "auto" }}>
-                                <div style={{
-                                    padding: "6px 12px", background: "#fff", borderBottom: "1px solid #CED9E0",
-                                    fontWeight: 600, fontSize: 12, color: "#182026", display: "flex", justifyContent: "space-between"
-                                }}>
-                                    <span>AccountHistory — Previewing 20 rows · 9 columns</span>
-                                    <span style={{ color: "#0D8050", fontSize: 11 }}>✓ Added to Sync</span>
-                                </div>
-                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, fontFamily: "monospace" }}>
-                                    <thead>
-                                        <tr style={{ background: "#F5F8FA" }}>
-                                            {["Id\nVARCHAR", "isDeleted\nBOOLEAN", "AccountId\nVARCHAR", "CreatedById\nVARCHAR", "CreatedDate\nTIMESTAMP", "Field\nVARCHAR", "DataType\nVARCHAR"].map((h, i) => (
-                                                <th key={i} style={{
-                                                    padding: "5px 8px", textAlign: "left", borderBottom: "1px solid #CED9E0",
-                                                    color: "#5C7080", fontWeight: 500, whiteSpace: "pre-line", borderRight: "1px solid #EBF1F5"
-                                                }}>
-                                                    <div style={{ whiteSpace: "pre-line" }}>{h}</div>
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {PREVIEW_ROWS.map((row, i) => (
-                                            <tr key={i} style={{ borderBottom: "1px solid #EBF1F5" }}>
-                                                <td style={{ padding: "4px 8px", borderRight: "1px solid #EBF1F5", color: "#137CBD", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }}>{row.id}</td>
-                                                <td style={{ padding: "4px 8px", borderRight: "1px solid #EBF1F5" }}>{row.isDeleted}</td>
-                                                <td style={{ padding: "4px 8px", borderRight: "1px solid #EBF1F5", color: "#137CBD", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }}>{row.accountId}</td>
-                                                <td style={{ padding: "4px 8px", borderRight: "1px solid #EBF1F5", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis" }}>{row.createdById}</td>
-                                                <td style={{ padding: "4px 8px", borderRight: "1px solid #EBF1F5" }}>{row.createdDate}</td>
-                                                <td style={{ padding: "4px 8px", borderRight: "1px solid #EBF1F5" }}>{row.field}</td>
-                                                <td style={{ padding: "4px 8px" }}>{row.dataType}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* Right: Sync panel */}
-                        <div style={{
-                            width: 200, background: "#fff", borderLeft: "1px solid #CED9E0",
-                            display: "flex", flexDirection: "column", flexShrink: 0, padding: 12, gap: 10
-                        }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: "#182026" }}>Tables to sync into Foundry</div>
-                            <div style={{ fontSize: 11, color: "#5C7080", lineHeight: 1.5 }}>
-                                To complete synchronizing the data into Foundry, create a Sync.
-                            </div>
-                            <button style={{ ...S.btn(true), justifyContent: "center", height: 32 }}>
-                                Create sync for 2 datasets →
-                            </button>
-                            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#182026", cursor: "pointer" }}>
-                                <input type="checkbox" defaultChecked /> Run syncs after creating
-                            </label>
-                            <div style={{ borderTop: "1px solid #EBF1F5", paddingTop: 8 }}>
-                                <div style={{ fontSize: 10, fontWeight: 600, color: "#5C7080", marginBottom: 4 }}>QUEUED</div>
-                                {["AccountHistory", "User"].map(t => (
-                                    <div key={t} style={{
-                                        display: "flex", justifyContent: "space-between",
-                                        fontSize: 11, color: "#182026", padding: "2px 0"
-                                    }}>
-                                        {t}
-                                        <div style={{ display: "flex", gap: 6 }}>
-                                            <span style={{ cursor: "pointer", color: "#5C7080" }}>✎</span>
-                                            <span style={{ cursor: "pointer", color: "#5C7080" }}>⊖</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );
