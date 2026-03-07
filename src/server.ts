@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { WebSocketServer, WebSocket } from 'ws';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Prisma } from './generated/prisma';
@@ -4823,8 +4824,197 @@ app.post('/api/actions/:id/execute', async (req, res) => {
   }
 });
 
+
+// ── Real-time entity publish endpoint ────────────────────────────────────────
+// POST /api/entities/publish — push an entity change event to all WS subscribers.
+// Called by integration pipelines, data jobs, or any external system that writes entities.
+app.post('/api/entities/publish', async (req, res) => {
+  try {
+    const { objectType, logicalId, data, changeType } = req.body;
+    if (!objectType || !logicalId) return res.status(400).json({ error: 'objectType and logicalId required' });
+
+    // Also write/update the entity in the DB if data is provided
+    if (data) {
+      const projectId = (global as any).DEFAULT_PROJECT_ID;
+      const entityType = await prisma.entityType.findFirst({ where: { name: objectType } });
+      if (entityType && projectId) {
+        await prisma.currentEntityState.upsert({
+          where: { entityTypeId_logicalId: { entityTypeId: entityType.id, logicalId } },
+          create: { entityTypeId: entityType.id, logicalId, projectId, data },
+          update: { data, updatedAt: new Date() },
+        });
+      }
+    }
+
+    // Broadcast to all WS clients subscribed to this entity type
+    const broadcast = (global as any).broadcastEntityChange;
+    const delivered = broadcast ? (() => {
+      broadcast(objectType, logicalId, data || {}, changeType || 'updated');
+      return true;
+    })() : false;
+
+    return res.json({ published: true, objectType, logicalId, delivered });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/entities/live-stream — info about how to connect to the WS
+app.get('/api/entities/live-stream', (req, res) => {
+  return res.json({
+    wsUrl: `ws://localhost:${process.env.PORT || 3001}`,
+    protocol: 'aip-ontology-v1',
+    topics: {
+      'entities:<ObjectType>': 'Live entity state changes for one object type',
+      'entities:*': 'All entity changes across all types',
+      'metrics:*': 'Metric threshold breach events',
+      'actions:*': 'Action execution events',
+      'events:*': 'All events (default subscription)',
+    },
+    subscribe: { subscribe: ['entities:Drone', 'metrics:*'] },
+    clients: wsClients.size,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 12: Real-time WebSocket Push — Live Ontology Updates
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Connection registry ───────────────────────────────────────────────────────
+interface WSClient {
+  ws: WebSocket;
+  id: string;
+  subscriptions: Set<string>; // topic strings e.g. "entities:Drone", "metrics:*", "events:*"
+  connectedAt: Date;
+}
+
+const wsClients = new Map<string, WSClient>();
+
+// ── Broadcast helpers ─────────────────────────────────────────────────────────
+
+/** Broadcast a message to all clients subscribed to at least one of the given topics */
+function broadcastToTopics(topics: string[], payload: any) {
+  const msg = JSON.stringify(payload);
+  let count = 0;
+  for (const client of wsClients.values()) {
+    if (client.ws.readyState !== WebSocket.OPEN) continue;
+    const interested = topics.some(t => {
+      if (client.subscriptions.has(t)) return true;
+      if (client.subscriptions.has('*')) return true;
+      // wildcard prefix match: "entities:*" matches "entities:Drone"
+      for (const sub of client.subscriptions) {
+        if (sub.endsWith(':*') && t.startsWith(sub.slice(0, -1))) return true;
+      }
+      return false;
+    });
+    if (interested) { client.ws.send(msg); count++; }
+  }
+  return count;
+}
+
+/** Called after any entity upsert — pushes live update to subscribed clients */
+function broadcastEntityChange(objectType: string, logicalId: string, data: any, changeType: 'created' | 'updated' | 'deleted' = 'updated') {
+  broadcastToTopics(
+    [`entities:${objectType}`, 'entities:*', 'events:*'],
+    { type: 'entity.change', changeType, objectType, logicalId, data, ts: Date.now() }
+  );
+  // Also fire the automate event dispatcher
+  const dispatch = (global as any).dispatchAutomateEvent;
+  if (dispatch) {
+    dispatch((global as any).DEFAULT_PROJECT_ID, `entity.${changeType}`, { objectType, logicalId, data }).catch(() => { });
+  }
+}
+
+/** Called after a metric threshold breach */
+function broadcastMetricAlert(metricId: string, metricName: string, value: number, threshold: number) {
+  broadcastToTopics(
+    [`metrics:${metricId}`, 'metrics:*', 'events:*'],
+    { type: 'metric.threshold_breached', metricId, metricName, value, threshold, ts: Date.now() }
+  );
+}
+
+/** Called after an action execution */
+function broadcastActionEvent(actionName: string, logicalId: string, executionId: string, status: string) {
+  broadcastToTopics(
+    ['actions:*', 'events:*'],
+    { type: 'action.executed', actionName, logicalId, executionId, status, ts: Date.now() }
+  );
+}
+
+// Export broadcast helpers for use in other parts of server.ts
+(global as any).broadcastEntityChange = broadcastEntityChange;
+(global as any).broadcastMetricAlert = broadcastMetricAlert;
+(global as any).broadcastActionEvent = broadcastActionEvent;
+
+// ── WebSocket server bootstrap (attached on server listen) ────────────────────
+let wss: WebSocketServer | null = null;
+
+function initWebSocketServer(httpServer: any) {
+  wss = new WebSocketServer({ server: httpServer });
+
+  wss.on('connection', (ws, req) => {
+    const clientId = randomUUID();
+    const client: WSClient = { ws, id: clientId, subscriptions: new Set(['events:*']), connectedAt: new Date() };
+    wsClients.set(clientId, client);
+    logger.info(`[WS] Client connected: ${clientId} (total: ${wsClients.size})`);
+
+    // Send welcome
+    ws.send(JSON.stringify({ type: 'connected', clientId, ts: Date.now() }));
+
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.subscribe) {
+          // Support single topic or array of topics
+          const topics: string[] = Array.isArray(msg.subscribe) ? msg.subscribe : [msg.subscribe];
+          topics.forEach(t => client.subscriptions.add(t));
+          ws.send(JSON.stringify({ type: 'subscribed', topics: [...client.subscriptions], ts: Date.now() }));
+        }
+        if (msg.unsubscribe) {
+          const topics: string[] = Array.isArray(msg.unsubscribe) ? msg.unsubscribe : [msg.unsubscribe];
+          topics.forEach(t => client.subscriptions.delete(t));
+          ws.send(JSON.stringify({ type: 'unsubscribed', topics: [...client.subscriptions], ts: Date.now() }));
+        }
+        if (msg.ping) {
+          ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+        }
+      } catch { /* ignore malformed messages */ }
+    });
+
+    ws.on('close', () => {
+      wsClients.delete(clientId);
+      logger.info(`[WS] Client disconnected: ${clientId} (remaining: ${wsClients.size})`);
+    });
+
+    ws.on('error', (err) => {
+      logger.warn({ err }, `[WS] Client error: ${clientId}`);
+      wsClients.delete(clientId);
+    });
+  });
+
+  logger.info('[WS] WebSocket server attached to HTTP server');
+}
+
+// ── REST monitoring endpoints ─────────────────────────────────────────────────
+
+// GET /api/ws/stats — WebSocket connection stats
+app.get('/api/ws/stats', (req, res) => {
+  const clients = [...wsClients.values()].map(c => ({
+    id: c.id, subscriptions: [...c.subscriptions],
+    connectedAt: c.connectedAt, readyState: c.ws.readyState
+  }));
+  return res.json({ total: wsClients.size, clients });
+});
+
+// POST /api/ws/broadcast — manual broadcast for testing
+app.post('/api/ws/broadcast', (req, res) => {
+  const { topics, payload } = req.body;
+  if (!topics || !payload) return res.status(400).json({ error: 'topics and payload required' });
+  const count = broadcastToTopics(Array.isArray(topics) ? topics : [topics], payload);
+  return res.json({ delivered: count });
+});
+
 // ── Error Handler (must be last middleware) ──────────────────────
 app.use(errorHandler());
+
 
 // ── Server & Graceful Shutdown ───────────────────────────────────
 
@@ -4832,6 +5022,9 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 
 const server = app.listen(PORT, '0.0.0.0', async () => {
   logger.info(`Server listening on http://0.0.0.0:${PORT}`);
+
+  // ── Attach WebSocket server to the same HTTP server ──────────────────────
+  initWebSocketServer(server);
 
   try {
     let proj = await prisma.project.findFirst({ orderBy: { createdAt: 'asc' } });
