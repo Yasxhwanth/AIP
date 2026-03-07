@@ -380,9 +380,39 @@ model Pipeline {
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs      PipelineRun[]
 
   @@index([projectId])
 }
+
+model PipelineRun {
+  id          String   @id @default(uuid())
+  pipelineId  String
+  projectId   String
+  status      String   @default("running") // running | success | failed | cancelled
+  trigger     String   @default("manual")  // manual | schedule | event
+
+  // Step-level progress (stored as JSON array)
+  steps       Json     @default("[]")
+  // e.g. [{ stepId, name, status, recordsIn, recordsOut, error, durationMs }]
+
+  recordsIn   Int      @default(0)
+  recordsOut  Int      @default(0)
+  errorCount  Int      @default(0)
+
+  logs        Json     @default("[]")   // string[] of log lines
+  summary     Json?                     // final output summary
+
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  duration    Int?     // ms
+
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineId, startedAt(sort: Desc)])
+  @@index([projectId, status])
+}
+
 
 model IntegrationJob {
   id                 String   @id @default(uuid())

@@ -1,0 +1,24 @@
+[00:51:28.261] [32mINFO[39m: [36mServer listening on http://0.0.0.0:3001[39m
+[00:51:28.262] [32mINFO[39m: [36m[WS] WebSocket server attached to HTTP server[39m
+[Scheduler] Started — checking every 60s for scheduled jobs
+[RollupScheduler] Started — enqueueing 5m rollup jobs every 300s
+[ConfidenceDecayScheduler] Started — enqueueing relation decay jobs every 3600s
+RabbitMQ Publisher Error Error: Handshake terminated by server: 403 (ACCESS-REFUSED) with message "ACCESS_REFUSED - Login was refused using authentication mechanism PLAIN. For details see the broker logfile."
+    at afterStartOk (c:\Users\YASHWANTH\Projects\AIP\node_modules\amqplib\lib\connection.js:169:16)
+    at c:\Users\YASHWANTH\Projects\AIP\node_modules\amqplib\lib\connection.js:104:11
+    at Socket.recv (c:\Users\YASHWANTH\Projects\AIP\node_modules\amqplib\lib\connection.js:453:9)
+    at Object.onceWrapper (node:events:633:28)
+    at Socket.emit (node:events:519:28)
+    at Socket.emit (node:domain:489:12)
+    at emitReadable_ (node:internal/streams/readable:834:12)
+    at processTicksAndRejections (node:internal/process/task_queues:89:21)
+[00:51:28.834] [32mINFO[39m: [36mGET /api/ws/stats → 200 (5ms)[39m
+    [35mcorrelationId[39m: "2c011152-d327-4e72-9d83-5c3cd8cdabb7"
+    [35mmethod[39m: "GET"
+    [35mpath[39m: "/api/ws/stats"
+    [35mstatusCode[39m: 200
+    [35mduration[39m: "5ms"
+    [35muserAgent[39m: "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-IN) WindowsPowerShell/5.1.26100.7920"
+    [35mip[39m: "127.0.0.1"
+    [35mapiKey[39m: "dev-mode"
+    [35mrole[39m: "ADMIN"

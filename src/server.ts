@@ -4195,6 +4195,328 @@ app.get('/api/metrics/summary', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PHASE 13: Data Pipeline Real Execution Engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Execute a pipeline by its DB id — walks the ReactFlow DAG in topo order */
+async function executePipeline(pipelineId: string, runId: string, trigger = 'manual') {
+  const pipeline = await prisma.pipeline.findUnique({ where: { id: pipelineId } });
+  if (!pipeline) throw new Error('Pipeline not found');
+
+  const nodes = (pipeline.nodes as any[]) || [];
+  const edges = (pipeline.edges as any[]) || [];
+
+  const logs: string[] = [];
+  const steps: any[] = [];
+  let totalIn = 0, totalOut = 0, errorCount = 0;
+
+  const log = async (msg: string) => {
+    const line = `[${new Date().toISOString()}] ${msg}`;
+    logs.push(line);
+    if (logs.length % 5 === 0 || msg.startsWith('✓') || msg.startsWith('✗')) {
+      await prisma.pipelineRun.update({ where: { id: runId }, data: { logs } });
+    }
+    // Broadcast progress via WS
+    const broadcast = (global as any).broadcastToTopics;
+    if (broadcast) {
+      broadcast([`pipeline:${pipelineId}`, 'pipelines:*'], {
+        type: 'pipeline.progress', pipelineId, runId, log: line, ts: Date.now()
+      });
+    }
+  };
+
+  const updateStep = async (step: any) => {
+    const idx = steps.findIndex(s => s.stepId === step.stepId);
+    if (idx >= 0) steps[idx] = step; else steps.push(step);
+    await prisma.pipelineRun.update({ where: { id: runId }, data: { steps } });
+  };
+
+  // ── Build topological order ──────────────────────────────────────────────
+  const adjOut = new Map<string, string[]>();
+  const indegree = new Map<string, number>();
+  nodes.forEach((n: any) => { adjOut.set(n.id, []); indegree.set(n.id, 0); });
+  edges.forEach((e: any) => {
+    adjOut.get(e.source)?.push(e.target);
+    indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
+  });
+  const queue = nodes.filter((n: any) => (indegree.get(n.id) ?? 0) === 0).map((n: any) => n.id);
+  const order: string[] = [];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    order.push(cur);
+    for (const next of (adjOut.get(cur) ?? [])) {
+      const deg = (indegree.get(next) ?? 0) - 1;
+      indegree.set(next, deg);
+      if (deg === 0) queue.push(next);
+    }
+  }
+
+  // ── Node data map (carry outputs between steps) ──────────────────────────
+  const nodeData = new Map<string, any[]>(); // nodeId → output records
+
+  await log(`Starting pipeline "${pipeline.name}" — ${order.length} nodes`);
+
+  // ── Execute each node in DAG order ──────────────────────────────────────
+  for (const nodeId of order) {
+    const node = nodes.find((n: any) => n.id === nodeId);
+    if (!node) continue;
+
+    const nodeType: string = node.type || node.data?.type || 'unknown';
+    const nodeLabel: string = node.data?.label || nodeId;
+    const stepStart = Date.now();
+    const step = { stepId: nodeId, name: nodeLabel, type: nodeType, status: 'running', recordsIn: 0, recordsOut: 0, error: null as string | null, durationMs: 0 };
+    await updateStep(step);
+    await log(`→ Step [${nodeType}] "${nodeLabel}"`);
+
+    try {
+      // Collect input from upstream nodes
+      const inEdges = edges.filter((e: any) => e.target === nodeId);
+      const inputRecords: any[] = inEdges.flatMap((e: any) => nodeData.get(e.source) ?? []);
+      step.recordsIn = inputRecords.length;
+      totalIn += inputRecords.length;
+
+      let output: any[] = [];
+
+      if (nodeType === 'dataSource' || nodeType === 'DataSourceNode') {
+        // Use existing integration job / data source fetch
+        const jobId = node.data?.jobId || node.data?.integrationJobId;
+        if (jobId) {
+          await log(`  Executing IntegrationJob ${jobId}`);
+          const result = await executeJob(jobId, prisma);
+          output = [{ status: result.status, recordsProcessed: result.recordsProcessed }];
+          totalOut += result.recordsProcessed;
+          await log(`  ✓ Job done: ${result.recordsProcessed} records processed`);
+        } else if (node.data?.url || node.data?.connectionConfig?.url) {
+          // Direct fetch
+          const url = node.data?.url || node.data?.connectionConfig?.url;
+          await log(`  Fetching ${url}`);
+          const resp = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+          const raw = await resp.json();
+          output = Array.isArray(raw) ? raw : [raw];
+          await log(`  ✓ Fetched ${output.length} records`);
+          totalOut += output.length;
+        } else {
+          output = [];
+          await log(`  No job or URL — empty source`);
+        }
+      } else if (nodeType === 'transform' || nodeType === 'TransformNode') {
+        // JS transform using eval
+        const code = node.data?.code || node.data?.transformCode || '';
+        await log(`  Running JS transform (${code.length} chars)`);
+        if (code && inputRecords.length > 0) {
+          const AsyncFn = Object.getPrototypeOf(async function () { }).constructor;
+          const fn = new AsyncFn('records', `"use strict";\n${code}`);
+          const result = await Promise.race([
+            fn(inputRecords),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Transform timeout (30s)')), 30_000))
+          ]);
+          output = Array.isArray(result) ? result : [result];
+          await log(`  ✓ Transform: ${inputRecords.length} → ${output.length} records`);
+        } else {
+          output = inputRecords;
+          await log(`  No code or no input — passing through`);
+        }
+        totalOut += output.length;
+      } else if (nodeType === 'sqlQuery' || nodeType === 'SQLNode') {
+        // Execute raw SQL against Postgres and produce records
+        const sql = node.data?.sql || node.data?.query || '';
+        await log(`  Running SQL: ${sql.slice(0, 80)}...`);
+        if (sql) {
+          const res = await pool.query(sql);
+          output = res.rows;
+          await log(`  ✓ SQL returned ${output.length} rows`);
+          totalOut += output.length;
+        } else {
+          output = inputRecords;
+          await log(`  No SQL — passing through`);
+        }
+      } else if (nodeType === 'filter' || nodeType === 'FilterNode') {
+        // Inline filter using a JS predicate
+        const predicate = node.data?.predicate || node.data?.condition || 'return true';
+        await log(`  Filtering ${inputRecords.length} records`);
+        const fn = new Function('record', `"use strict"; ${predicate}`);
+        output = inputRecords.filter((r: any) => { try { return fn(r); } catch { return false; } });
+        await log(`  ✓ Filter: ${inputRecords.length} → ${output.length} records`);
+        totalOut += output.length;
+      } else if (nodeType === 'entityTarget' || nodeType === 'EntityTargetNode') {
+        // Write records to CurrentEntityState
+        const entityTypeName: string = node.data?.entityType || node.data?.label || '';
+        const logicalIdField: string = node.data?.logicalIdField || 'id';
+        await log(`  Writing ${inputRecords.length} records to entity type "${entityTypeName}"`);
+        let written = 0;
+        const entityType = await prisma.entityType.findFirst({ where: { name: entityTypeName } });
+        if (entityType) {
+          for (const rec of inputRecords) {
+            const logicalId = String(rec[logicalIdField] ?? rec.id ?? `gen-${Date.now()}-${written}`);
+            const projectId = (global as any).DEFAULT_PROJECT_ID;
+            try {
+              await prisma.currentEntityState.upsert({
+                where: { entityTypeId_logicalId: { entityTypeId: entityType.id, logicalId } },
+                create: { entityTypeId: entityType.id, logicalId, projectId, data: rec },
+                update: { data: rec, updatedAt: new Date() },
+              });
+              // Broadcast entity change
+              const bcast = (global as any).broadcastEntityChange;
+              if (bcast) bcast(entityTypeName, logicalId, rec, 'updated');
+              written++;
+            } catch { errorCount++; }
+          }
+          await log(`  ✓ Wrote ${written}/${inputRecords.length} entities`);
+          totalOut += written;
+        } else {
+          await log(`  ⚠ Entity type "${entityTypeName}" not found — skipping write`);
+        }
+        output = inputRecords;
+      } else {
+        // Unknown node type — pass through
+        output = inputRecords;
+        await log(`  Unknown node type "${nodeType}" — passing through`);
+      }
+
+      nodeData.set(nodeId, output);
+      step.status = 'success';
+      step.recordsOut = output.length;
+      step.durationMs = Date.now() - stepStart;
+      await updateStep(step);
+      await log(`  ✓ "${nodeLabel}" done in ${step.durationMs}ms`);
+    } catch (err: any) {
+      errorCount++;
+      step.status = 'failed';
+      step.error = String(err?.message ?? err);
+      step.durationMs = Date.now() - stepStart;
+      await updateStep(step);
+      await log(`  ✗ "${nodeLabel}" failed: ${step.error}`);
+    }
+  }
+
+  const runStatus = errorCount > 0 && totalOut === 0 ? 'failed' : 'success';
+  await log(`Pipeline complete — ${totalOut} records output, ${errorCount} errors`);
+
+  return { status: runStatus, recordsIn: totalIn, recordsOut: totalOut, errorCount, logs, steps };
+}
+
+// ── REST routes ───────────────────────────────────────────────────────────────
+
+// GET /api/pipelines — list all pipelines for project
+app.get('/api/pipelines', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project' });
+    const pipelines = await prisma.pipeline.findMany({
+      where: { projectId }, orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, description: true, enabled: true, createdAt: true }
+    });
+    return res.json(pipelines);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/pipelines — create a new pipeline
+app.post('/api/pipelines', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(503).json({ error: 'No project' });
+    const { name, description, nodes, edges, enabled } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const p = await prisma.pipeline.create({
+      data: { projectId, name, description: description || '', nodes: nodes || [], edges: edges || [], enabled: enabled ?? true }
+    });
+    return res.status(201).json(p);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/pipelines/:id
+app.get('/api/pipelines/:id', async (req, res) => {
+  try {
+    const p = await prisma.pipeline.findUnique({ where: { id: req.params.id } });
+    if (!p) return res.status(404).json({ error: 'Not found' });
+    return res.json(p);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// PUT /api/pipelines/:id — save pipeline (nodes/edges)
+app.put('/api/pipelines/:id', async (req, res) => {
+  try {
+    const p = await prisma.pipeline.update({ where: { id: req.params.id }, data: req.body });
+    return res.json(p);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// DELETE /api/pipelines/:id
+app.delete('/api/pipelines/:id', async (req, res) => {
+  try {
+    await prisma.pipeline.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// POST /api/pipelines/:id/run — execute the pipeline (async, returns runId immediately)
+app.post('/api/pipelines/:id/run', async (req, res) => {
+  try {
+    const projectId = (global as any).DEFAULT_PROJECT_ID;
+    const pipeline = await prisma.pipeline.findUnique({ where: { id: req.params.id } });
+    if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
+
+    // Create run record immediately
+    const run = await prisma.pipelineRun.create({
+      data: { pipelineId: pipeline.id, projectId: projectId || '', status: 'running', trigger: req.body?.trigger || 'manual' }
+    });
+
+    // Respond immediately with runId so client can poll
+    res.status(202).json({ runId: run.id, pipelineId: pipeline.id, status: 'running' });
+
+    // Execute asynchronously
+    executePipeline(pipeline.id, run.id, req.body?.trigger || 'manual')
+      .then(async (result) => {
+        await prisma.pipelineRun.update({
+          where: { id: run.id },
+          data: {
+            status: result.status, recordsIn: result.recordsIn,
+            recordsOut: result.recordsOut, errorCount: result.errorCount,
+            logs: result.logs, steps: result.steps,
+            finishedAt: new Date(), duration: Date.now() - run.startedAt.getTime(),
+            summary: { recordsIn: result.recordsIn, recordsOut: result.recordsOut, errorCount: result.errorCount }
+          }
+        });
+        // Final WS broadcast
+        const broadcast = (global as any).broadcastToTopics;
+        if (broadcast) {
+          broadcast([`pipeline:${pipeline.id}`, 'pipelines:*'], {
+            type: 'pipeline.complete', pipelineId: pipeline.id, runId: run.id,
+            status: result.status, recordsIn: result.recordsIn, recordsOut: result.recordsOut, ts: Date.now()
+          });
+        }
+      })
+      .catch(async (err) => {
+        await prisma.pipelineRun.update({
+          where: { id: run.id },
+          data: { status: 'failed', finishedAt: new Date(), logs: [String(err)] }
+        });
+      });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/pipelines/:id/runs — execution history
+app.get('/api/pipelines/:id/runs', async (req, res) => {
+  try {
+    const runs = await prisma.pipelineRun.findMany({
+      where: { pipelineId: req.params.id },
+      orderBy: { startedAt: 'desc' }, take: 30,
+      select: { id: true, status: true, trigger: true, recordsIn: true, recordsOut: true, errorCount: true, startedAt: true, finishedAt: true, duration: true, summary: true }
+    });
+    return res.json(runs);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// GET /api/pipelines/:id/runs/:runId — full run detail with logs + steps
+app.get('/api/pipelines/:id/runs/:runId', async (req, res) => {
+  try {
+    const run = await prisma.pipelineRun.findUnique({ where: { id: req.params.runId } });
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    return res.json(run);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE 11: AIP Automate — Event & Schedule-Triggered Function Execution
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4940,6 +5262,7 @@ function broadcastActionEvent(actionName: string, logicalId: string, executionId
 }
 
 // Export broadcast helpers for use in other parts of server.ts
+(global as any).broadcastToTopics = broadcastToTopics;
 (global as any).broadcastEntityChange = broadcastEntityChange;
 (global as any).broadcastMetricAlert = broadcastMetricAlert;
 (global as any).broadcastActionEvent = broadcastActionEvent;
