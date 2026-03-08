@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Plus, LayoutGrid, TerminalSquare, AlertTriangle, Play, Save, Settings, LineChart, Table, MessageSquare, Bot, Trash2 } from "lucide-react";
-// @ts-ignore
-import { Responsive, WidthProvider, Layout } from "react-grid-layout";
+import GridLayout from "react-grid-layout";
+const { WidthProvider, Responsive } = GridLayout as any;
+import { Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { ApiClient } from "@/lib/apiClient";

@@ -1058,3 +1058,212 @@ model AIWorkflowRun {
   @@index([workflowId, startedAt(sort: Desc)])
   @@index([projectId, status])
 }
+
+// ─── Phase 18: AIP Evals ─────────────────────────────────────────────────────
+
+model AIPEval {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  workflowId  String?                        // optional: link to an AIWorkflow to test
+  testCases   Json                           // Array of { input: any, expectedOutput: string, description: string }
+  projectId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  runs        AIPEvalRun[]
+}
+
+model AIPEvalRun {
+  id        String   @id @default(uuid())
+  evalId    String
+  status    String   @default("pending")    // pending | running | complete | failed
+  results   Json?                           // Array of { caseIndex, input, actualOutput, expectedOutput, score: 0-1, judgeReason, passed }
+  summary   Json?                           // { total, passed, failed, avgScore, duration }
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  duration  Int?
+
+  eval      AIPEval  @relation(fields: [evalId], references: [id], onDelete: Cascade)
+
+  @@index([evalId, startedAt(sort: Desc)])
+}
+
+// ─── Phase 21: Function Version History ──────────────────────────────────────
+
+
+
+model FunctionVersion {
+  id         String   @id @default(uuid())
+  functionId String
+  version    Int
+  code       String   @db.Text
+  language   String   @default("javascript")
+  savedAt    DateTime @default(now())
+  savedBy    String?
+
+  @@index([functionId, version(sort: Desc)])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 22: APOLLO INFRASTRUCTURE
+// ═══════════════════════════════════════════════════════════════
+
+// Represents a deployment target environment (dev, staging, prod, classified)
+model ApolloEnvironment {
+  id          String   @id @default(uuid())
+  name        String   // "dev" | "staging" | "production" | "classified-scif"
+  tier        String   @default("cloud") // "cloud" | "on-prem" | "air-gap" | "classified"
+  region      String?  // e.g. "us-east-1", "dc-vault-7"
+  description String?
+  agentUrl    String?  // URL of the Apollo agent running on this environment
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  deployments  ApolloDeployment[]
+  healthChecks ApolloHealthCheck[]
+
+  @@index([tier, active])
+}
+
+// A deployment event: pushing a release snapshot to an environment
+model ApolloDeployment {
+  id             String   @id @default(uuid())
+  environmentId  String
+  releaseVersion String   // e.g. "v2.4.1"
+  payload        Json     // frozen snapshot of pipelines/agents/functions/actions
+  strategy       String   @default("rolling") // "rolling" | "canary" | "blue-green" | "immediate"
+  canaryPercent  Int      @default(100)  // % of nodes receiving this release
+  status         String   @default("pending") // "pending" | "deploying" | "healthy" | "degraded" | "rolled-back"
+  deployedBy     String   @default("system")
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  rollbackFrom   String?  // previous deploymentId if this is a rollback
+  notes          String?
+
+  environment ApolloEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([environmentId, startedAt(sort: Desc)])
+  @@index([status])
+}
+
+// Heartbeat results from agents running in each environment
+model ApolloHealthCheck {
+  id            String   @id @default(uuid())
+  environmentId String
+  service       String   // e.g. "api-server" | "pipeline-worker" | "ws-broker"
+  status        String   // "ok" | "degraded" | "down"
+  latencyMs     Int?
+  cpuPercent    Float?
+  memPercent    Float?
+  errorMessage  String?
+  checkedAt     DateTime @default(now())
+
+  environment ApolloEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([environmentId, service, checkedAt(sort: Desc)])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 22: SPARK PROCESSING ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+// A reusable Spark-style job definition (DAG of transform stages)
+model SparkJob {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  projectId   String?
+  stages      Json     // Array of SparkStageConfig: { id, type, config, dependsOn[] }
+  schedule    String?  // optional cron for scheduled execution
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  runs SparkJobRun[]
+
+  @@index([projectId, enabled])
+}
+
+// One execution of a SparkJob
+model SparkJobRun {
+  id        String   @id @default(uuid())
+  jobId     String
+  status    String   @default("queued") // "queued" | "running" | "success" | "failed" | "cancelled"
+  trigger   String   @default("manual") // "manual" | "schedule" | "event"
+  inputData Json?
+  summary   Json?    // { totalRecords, processedRecords, droppedRecords, durationMs }
+  error     String?
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  job    SparkJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stages SparkJobStage[]
+
+  @@index([jobId, startedAt(sort: Desc)])
+  @@index([status])
+}
+
+// Per-stage execution record within a run
+model SparkJobStage {
+  id            String   @id @default(uuid())
+  runId         String
+  stageId       String   // matches stages[].id in SparkJob.stages
+  stageType     String   // "source" | "filter" | "project" | "join" | "aggregate" | "sort" | "output"
+  status        String   @default("pending") // "pending" | "running" | "success" | "failed" | "skipped"
+  recordsIn     Int?
+  recordsOut    Int?
+  partitions    Int      @default(1)
+  durationMs    Int?
+  errorMessage  String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  run SparkJobRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, stageId])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 22: MILITARY-GRADE CRYPTOGRAPHIC PROVENANCE
+// ═══════════════════════════════════════════════════════════════
+
+// Field-level provenance entry: SHA-256 hash of each field value at write time
+model CryptoProvenanceChain {
+  id              String   @id @default(uuid())
+  entityId        String   // logical entity ID (e.g. "drone-001")
+  entityType      String
+  field           String   // field name (e.g. "status", "latitude")
+  valueHash       String   // SHA-256(fieldValue)
+  rawValue        String?  // optional: store original value for audit
+  sourceSystem    String   // data source (e.g. "kafka-ingest", "manual-api", "pipeline-42")
+  sourceRecordId  String?
+  operationType   String   @default("write") // "write" | "update" | "delete" | "transform"
+  operatorId      String?  // user/service that performed the operation
+  previousHash    String?  // SHA-256 of the previous value (creates a hash chain)
+  recordedAt      DateTime @default(now())
+
+  @@index([entityId, field, recordedAt(sort: Desc)])
+  @@index([entityType, recordedAt(sort: Desc)])
+}
+
+// HMAC-SHA256 integrity seal for a complete entity's field hashes at a point in time
+model CryptoProvenanceSeal {
+  id            String   @id @default(uuid())
+  entityId      String
+  entityType    String
+  sealHmac      String   // HMAC-SHA256(sorted field hashes; server secret key)
+  fieldCount    Int
+  fieldHashes   Json     // { [fieldName]: SHA-256(value) } — snapshot at seal time
+  sealedAt      DateTime @default(now())
+  sealedBy      String?
+  verified      Boolean  @default(false) // flipped to true by last verify call
+  lastVerifiedAt DateTime?
+  tamperedFields Json?   // null if valid, array of field names if tampered
+
+  @@index([entityId, sealedAt(sort: Desc)])
+  @@unique([entityId, sealedAt])
+}
+
+

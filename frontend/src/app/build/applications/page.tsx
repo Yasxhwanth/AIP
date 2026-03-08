@@ -567,16 +567,19 @@ export default function ApplicationsPage() {
     // ── Helpers ──────────────────────────────────────────────────────────────────
     const updateApp = (a: WorkshopApp) => { setSelApp(a); setApps(p => p.map(x => x.id === a.id ? a : x)); };
     const updatePage = (pg: AppPage) => {
+        if (!selApp) return;
         const pages = selApp.pages.map(p => p.id === pg.id ? pg : p);
         const newApp = { ...selApp, pages };
         setSelPage(pg); updateApp(newApp);
     };
     const updateSection = (s: Section) => {
+        if (!selPage) return;
         const sections = selPage.sections.map(x => x.id === s.id ? x = s : x);
         updatePage({ ...selPage, sections });
         if (selSection?.id === s.id) setSelSection(s);
     };
     const updateWidget = (sectionId: string, w: Widget) => {
+        if (!selPage) return;
         const sections = selPage.sections.map(s =>
             s.id !== sectionId ? s : { ...s, widgets: s.widgets.map(x => x.id === w.id ? w : x) }
         );
@@ -584,6 +587,7 @@ export default function ApplicationsPage() {
         setSelWidget(w);
     };
     const deleteWidget = (sectionId: string, widgetId: string) => {
+        if (!selPage) return;
         const sections = selPage.sections.map(s =>
             s.id !== sectionId ? s : { ...s, widgets: s.widgets.filter(w => w.id !== widgetId) }
         );
@@ -600,6 +604,7 @@ export default function ApplicationsPage() {
         setSelWidget(w); setSelSection(section); setRightTab("binding");
     };
     const addSection = () => {
+        if (!selPage) return;
         const s: Section = {
             id: `s${Date.now()}`, name: "New Section", columns: 2, collapsed: false,
             widgets: [], roleVisibility: allRoles(true),

@@ -43,6 +43,13 @@ const NAV_GROUPS = [
         label: "Delivery",
         items: [
             { name: "Applications", href: "/build/applications", icon: LayoutTemplate },
+            { name: "Apollo", href: "/build/apollo", icon: Zap },
+        ]
+    },
+    {
+        label: "Processing",
+        items: [
+            { name: "Spark Jobs", href: "/build/spark", icon: Network },
         ]
     },
     {
@@ -50,6 +57,7 @@ const NAV_GROUPS = [
         items: [
             { name: "Security", href: "/build/security", icon: Shield },
             { name: "Governance", href: "/build/governance", icon: BookOpen },
+            { name: "Provenance", href: "/build/provenance", icon: Shield },
             { name: "Audit", href: "/build/audit", icon: ClipboardList },
             { name: "Publish", href: "/build/publish", icon: Send },
         ]

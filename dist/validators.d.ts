@@ -98,13 +98,13 @@ export declare const CreateDecisionRuleSchema: z.ZodObject<{
     conditions: z.ZodArray<z.ZodObject<{
         field: z.ZodString;
         operator: z.ZodEnum<{
+            contains: "contains";
             ">": ">";
             "<": "<";
             ">=": ">=";
             "<=": "<=";
             "==": "==";
             "!=": "!=";
-            contains: "contains";
             exists: "exists";
         }>;
         value: z.ZodUnknown;

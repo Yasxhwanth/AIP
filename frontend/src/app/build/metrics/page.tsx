@@ -497,7 +497,7 @@ export default function MetricsPage() {
                                 {field("Group By",
                                     <select style={{ width: "100%", padding: "6px 10px", border: "1px solid #CED9E0", borderRadius: 3, fontSize: 12, background: "#fff" }}>
                                         <option>No grouping</option>
-                                        {OBJECT_TYPES.map(o => <option key={o}>By {o} instance</option>)}
+                                        {FALLBACK_OBJECT_TYPES.map(o => <option key={o}>By {o} instance</option>)}
                                     </select>
                                 )}
                                 <div style={{ padding: 12, background: "#F5F8FA", borderRadius: 3, border: "1px solid #EBF1F5" }}>

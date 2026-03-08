@@ -30,5 +30,28 @@ export declare function evaluateAllRules(logicalId: string, triggerType: string,
         decisionLogId: string;
     }[];
 }>;
+export declare function simulateDecision(ruleId: string, ruleData: any, entityData: any): Promise<{
+    id: string;
+    projectId: string;
+    version: number;
+    name: string;
+    description: null;
+    antecedent: {
+        type: string;
+        field: string;
+        operator: string;
+        value: number;
+    };
+    consequent: {
+        type: string;
+        actionName: string;
+        payload: {
+            itemId: string;
+            quantity: number;
+        };
+    };
+    createdAt: Date;
+    updatedAt: Date;
+}>;
 export {};
 //# sourceMappingURL=decision-engine.d.ts.map

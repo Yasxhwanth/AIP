@@ -28,14 +28,14 @@ export declare class Orchestrator {
         createdAt: Date;
         updatedAt: Date;
         payload: import("./generated/prisma/runtime/client").JsonValue;
-        idempotencyKey: string | null;
         status: string;
+        startedAt: Date | null;
+        completedAt: Date | null;
+        idempotencyKey: string | null;
         recordsProcessed: number;
         recordsFailed: number;
         jobType: string;
         priority: number;
-        startedAt: Date | null;
-        completedAt: Date | null;
         lockedAt: Date | null;
         lockedByWorkerId: string | null;
         attempts: number;

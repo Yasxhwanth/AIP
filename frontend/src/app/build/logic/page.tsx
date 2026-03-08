@@ -292,6 +292,67 @@ function RunPanel({ workflowId, runs, selectedRun, setSelectedRun, fetchRuns }: 
     );
 }
 
+// ── Versions panel ─────────────────────────────────────────────────────────────
+function VersionsPanel({ selectedFunctionId }: { selectedFunctionId: string | null }) {
+    const [versions, setVersions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [restoring, setRestoring] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!selectedFunctionId) { setVersions([]); return; }
+        setLoading(true);
+        apiFetch(`/api/functions/${selectedFunctionId}/versions`)
+            .then(setVersions).catch(() => setVersions([]))
+            .finally(() => setLoading(false));
+    }, [selectedFunctionId]);
+
+    const restore = async (version: number) => {
+        if (!selectedFunctionId) return;
+        setRestoring(String(version));
+        try {
+            await apiFetch(`/api/functions/${selectedFunctionId}/versions/${version}/restore`, { method: 'POST' });
+            apiFetch(`/api/functions/${selectedFunctionId}/versions`).then(setVersions).catch(() => { });
+        } finally { setRestoring(null); }
+    };
+
+    if (!selectedFunctionId) return (
+        <div className="flex-1 flex items-center justify-center text-center text-gray-400 flex-col gap-2 p-4">
+            <Code2 className="w-8 h-8 opacity-20" />
+            <div className="text-xs">Select a Function Call node to view version history</div>
+        </div>
+    );
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="p-3 border-b border-gray-100 flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <GitBranch className="w-3.5 h-3.5" /> Version History
+                </span>
+                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+            </div>
+            <div className="flex-1 overflow-y-auto">
+                {versions.length === 0 && !loading && (
+                    <div className="p-4 text-center text-xs text-gray-400">No versions saved yet. Save the function to create a snapshot.</div>
+                )}
+                {versions.map((v) => (
+                    <div key={v.id} className="p-3 border-b border-gray-50 hover:bg-gray-50">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="font-mono text-xs font-bold text-violet-600">v{v.version}</span>
+                            <button onClick={() => restore(v.version)} disabled={restoring === String(v.version)}
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 flex items-center gap-1">
+                                {restoring === String(v.version) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                Restore
+                            </button>
+                        </div>
+                        <div className="text-[10px] text-gray-400 mb-1">{new Date(v.savedAt).toLocaleString()} · saved by {v.savedBy || 'system'}</div>
+                        <pre className="text-[9px] font-mono bg-slate-900 text-green-300 rounded p-2 overflow-auto max-h-24">{v.code?.slice(0, 300)}{(v.code?.length ?? 0) > 300 ? '...' : ''}</pre>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AIPLogicPage() {
     const [workflows, setWorkflows] = useState<any[]>([]);
@@ -303,7 +364,7 @@ export default function AIPLogicPage() {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-    const [rightTab, setRightTab] = useState<"inspect" | "runs">("inspect");
+    const [rightTab, setRightTab] = useState<"inspect" | "runs" | "versions">("inspect");
 
     const [entityTypes, setEntityTypes] = useState<any[]>([]);
     const [functions, setFunctions] = useState<any[]>([]);
@@ -560,18 +621,20 @@ export default function AIPLogicPage() {
             <div className="w-72 border-l border-gray-200 bg-white flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.04)] z-10">
                 {/* Tabs */}
                 <div className="flex border-b border-gray-100">
-                    {[["inspect", "Inspector", Settings2], ["runs", "Runs", Activity]].map(([tab, label, Icon]: any) => (
+                    {([["inspect", "Inspector", Settings2], ["runs", "Runs", Activity], ["versions", "Versions", GitBranch]] as any[]).map(([tab, label, Icon]: any) => (
                         <button key={tab} onClick={() => setRightTab(tab as any)}
-                            className={`flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${rightTab === tab ? "text-violet-600 border-b-2 border-violet-600 -mb-px" : "text-gray-400 hover:text-gray-600"}`}>
-                            <Icon className="w-3.5 h-3.5" />{label}
+                            className={`flex-1 py-2.5 text-[10px] font-bold flex items-center justify-center gap-1 transition-colors ${rightTab === tab ? "text-violet-600 border-b-2 border-violet-600 -mb-px" : "text-gray-400 hover:text-gray-600"}`}>
+                            <Icon className="w-3 h-3" />{label}
                         </button>
                     ))}
                 </div>
 
                 {rightTab === "inspect" ? (
                     <NodeInspector node={selectedNode} entityTypes={entityTypes} functions={functions} actions={actions} onChange={handleNodeDataChange} />
-                ) : (
+                ) : rightTab === "runs" ? (
                     <RunPanel workflowId={activeWfId} runs={runs} selectedRun={selectedRun} setSelectedRun={setSelectedRun} fetchRuns={() => fetchRuns(activeWfId!)} />
+                ) : (
+                    <VersionsPanel selectedFunctionId={selectedNode?.type === "functionCall" ? selectedNode?.data?.functionId : null} />
                 )}
             </div>
         </div>

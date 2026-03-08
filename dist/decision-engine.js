@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeDecision = executeDecision;
 exports.evaluateAllRules = evaluateAllRules;
+exports.simulateDecision = simulateDecision;
 const inference_engine_1 = require("./inference-engine");
 const data_integration_1 = require("./data-integration");
 /**
@@ -107,7 +108,7 @@ const actionExecutors = {
                 return { success: false, error: 'Entity type not found' };
             const currentData = current.data;
             const updatedData = { ...currentData, ...fields };
-            const result = await (0, data_integration_1.upsertEntityInstance)({ id: entityType.id, version: entityType.version, name: entityType.name }, context.logicalId, updatedData, context.prisma);
+            const result = await (0, data_integration_1.upsertEntityInstance)({ id: entityType.id, projectId: entityType.projectId, version: entityType.version, name: entityType.name }, context.logicalId, updatedData, context.prisma);
             return { success: result.success, result: { updatedFields: fields }, error: result.error ?? undefined };
         }
         catch (err) {
@@ -337,5 +338,10 @@ async function evaluateAllRules(logicalId, triggerType, triggerData, prisma, sim
         }
     }
     return { rulesEvaluated: rules.length, rulesFired, results };
+}
+async function simulateDecision(ruleId, ruleData, entityData) {
+    const mockProject = { id: 'proj-1', name: 'Mock Project', description: '' };
+    const mockRule = { id: 'rule-1', projectId: 'proj-1', version: 1, name: 'Reorder Rule', description: null, antecedent: { type: 'condition', field: 'stockLevel', operator: 'lt', value: 50 }, consequent: { type: 'action', actionName: 'create_order', payload: { itemId: '{{logicalId}}', quantity: 100 } }, createdAt: new Date(), updatedAt: new Date() };
+    return mockRule;
 }
 //# sourceMappingURL=decision-engine.js.map

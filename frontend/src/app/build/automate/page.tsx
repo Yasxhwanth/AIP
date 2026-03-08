@@ -358,17 +358,18 @@ export default function AutomatePage() {
                                 borderLeft: sel?.id === a.id ? "2px solid #7157D9" : "2px solid transparent",
                             }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                                    <span style={{ fontSize: 12, fontWeight: 500, color: "#182026" }}>{a.name}</span>
+                                    <span style={{ fontSize: 12, fontWeight: 500, color: "#182026", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }}>{a.name}</span>
                                     {statusBadge(a.status)}
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#8A9BA8" }}>
                                     {triggerIcon(a.triggerType)}
                                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 190 }}>{triggerLabel(a)}</span>
                                 </div>
-                                <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 10, color: "#8A9BA8" }}>
-                                    <span>✓ {a.successRuns}</span>
+                                <div style={{ display: "flex", gap: 8, marginTop: 4, fontSize: 10, color: "#8A9BA8", alignItems: "center" }}>
+                                    <span style={{ color: "#0D8050" }}>✓ {a.successRuns}</span>
                                     {a.failedRuns > 0 && <span style={{ color: "#C23030" }}>✗ {a.failedRuns}</span>}
                                     {a.lastRunAt && <span>Last: {new Date(a.lastRunAt).toLocaleTimeString()}</span>}
+                                    {a.totalRuns > 0 && <span style={{ marginLeft: "auto", padding: "1px 6px", background: "#EBF1F5", borderRadius: 3, fontWeight: 700 }}>{a.totalRuns} runs</span>}
                                 </div>
                             </div>
                         ))}
@@ -389,8 +390,8 @@ export default function AutomatePage() {
                             <span style={{ fontSize: 13, fontWeight: 700, color: "#182026" }}>{sel.name}</span>
                             {statusBadge(sel.status)}
                             <div style={{ flex: 1 }} />
-                            <button onClick={handleRun} disabled={running || sel.status !== "active"} style={{ ...btn(true), opacity: (running || sel.status !== "active") ? 0.5 : 1 }}>
-                                <Play style={{ width: 12, height: 12 }} /> {running ? "Running..." : "Run Now"}
+                            <button onClick={handleRun} disabled={running} style={{ ...btn(true), opacity: running ? 0.5 : 1 }}>
+                                <Play style={{ width: 12, height: 12 }} /> {running ? "Running..." : "▶ Run Now"}
                             </button>
                             <button onClick={handleToggleStatus} style={{ ...btn(), borderColor: sel.status === "active" ? "#0D8050" : "#137CBD", color: sel.status === "active" ? "#0D8050" : "#137CBD" }}>
                                 {sel.status === "active" ? <><Square style={{ width: 11, height: 11 }} /> Deactivate</> : <><Play style={{ width: 11, height: 11 }} /> Activate</>}

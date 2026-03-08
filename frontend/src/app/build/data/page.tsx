@@ -70,6 +70,59 @@ const EntityTargetNode = ({ data, selected }: NodeProps) => (
     </div>
 );
 
+const CsvUploadNode = ({ data, selected }: NodeProps) => (
+    <div className={`bg-white shadow-sm rounded overflow-hidden min-w-[200px] transition-all select-none ${selected ? "ring-2 ring-[#137CBD]" : "ring-1 ring-[#CED9E0]"}`}>
+        <div className="px-3 py-2 border-b border-[#CED9E0] bg-[#F5F8FA] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#137CBD]" />
+                <span className="font-bold text-[12px] text-[#182026]">{data.label || 'CSV Upload'}</span>
+            </div>
+            <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080] font-mono">source</span>
+        </div>
+        <Handle type="source" position={Position.Right} style={{ background: "#137CBD", right: -4, width: 8, height: 8 }} />
+    </div>
+);
+
+const ApiPollingNode = ({ data, selected }: NodeProps) => (
+    <div className={`bg-white shadow-sm rounded overflow-hidden min-w-[200px] transition-all select-none ${selected ? "ring-2 ring-[#137CBD]" : "ring-1 ring-[#CED9E0]"}`}>
+        <div className="px-3 py-2 border-b border-[#CED9E0] bg-[#F5F8FA] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-[#137CBD]" />
+                <span className="font-bold text-[12px] text-[#182026]">{data.label || 'API Polling'}</span>
+            </div>
+            <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080] font-mono">source</span>
+        </div>
+        <Handle type="source" position={Position.Right} style={{ background: "#137CBD", right: -4, width: 8, height: 8 }} />
+    </div>
+);
+
+const WebhookSourceNode = ({ data, selected }: NodeProps) => (
+    <div className={`bg-white shadow-sm rounded overflow-hidden min-w-[200px] transition-all select-none ${selected ? "ring-2 ring-[#137CBD]" : "ring-1 ring-[#CED9E0]"}`}>
+        <div className="px-3 py-2 border-b border-[#CED9E0] bg-[#F5F8FA] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-[#137CBD]" />
+                <span className="font-bold text-[12px] text-[#182026]">{data.label || 'Webhook'}</span>
+            </div>
+            <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080] font-mono">source</span>
+        </div>
+        <Handle type="source" position={Position.Right} style={{ background: "#137CBD", right: -4, width: 8, height: 8 }} />
+    </div>
+);
+
+const DataTransformNode = ({ data, selected }: NodeProps) => (
+    <div className={`bg-white shadow-sm rounded overflow-hidden min-w-[200px] transition-all select-none ${selected ? "ring-2 ring-[#137CBD]" : "ring-1 ring-[#CED9E0]"}`}>
+        <Handle type="target" position={Position.Left} style={{ background: "#5C7080", left: -4, width: 8, height: 8 }} />
+        <div className="px-3 py-2 border-b border-[#CED9E0] bg-[#F5F8FA] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#137CBD]" />
+                <span className="font-bold text-[12px] text-[#182026]">{data.label || 'Transform'}</span>
+            </div>
+            <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080] font-mono">transform</span>
+        </div>
+        <Handle type="source" position={Position.Right} style={{ background: "#137CBD", right: -4, width: 8, height: 8 }} />
+    </div>
+);
+
 const MappingEdge = ({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, selected }: any) => {
     const [path, lx, ly] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, borderRadius: 0 });
     return (
@@ -206,7 +259,7 @@ export default function PipelineBuilder() {
 
         const newNode: Node = {
             id: `${type}-${item.id}-${Date.now()}`,
-            type: type === "source" ? "dataSource" : "entityTarget",
+            type: type === "source" ? "dataSource" : type === "target" ? "entityTarget" : type,
             position,
             data: { ...item, label: item.name },
         };
@@ -302,12 +355,30 @@ export default function PipelineBuilder() {
                     {/* Left Sidebar (Library) */}
                     <div className="w-64 bg-white border-r border-[#CED9E0] flex flex-col shrink-0">
                         <div className="p-3 border-b border-[#CED9E0] bg-[#F5F8FA] text-[11px] font-bold text-[#5C7080] uppercase tracking-wider">
+                            Pipeline Nodes
+                        </div>
+                        <div className="p-3 space-y-2 overflow-auto max-h-[40%] border-b border-[#CED9E0]">
+                            <div draggable onDragStart={(e) => handleDragStart(e, { id: 'new-csv', name: 'CSV Upload' }, "csvUpload")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
+                                <div className="flex items-center gap-2"><FileText className="w-3.5 h-3.5 text-[#137CBD]" /> <span className="font-bold">CSV Upload</span></div>
+                            </div>
+                            <div draggable onDragStart={(e) => handleDragStart(e, { id: 'new-api', name: 'API Polling' }, "apiPolling")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
+                                <div className="flex items-center gap-2"><Activity className="w-3.5 h-3.5 text-[#137CBD]" /> <span className="font-bold">API Polling</span></div>
+                            </div>
+                            <div draggable onDragStart={(e) => handleDragStart(e, { id: 'new-webhook', name: 'Webhook Event' }, "webhookSource")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
+                                <div className="flex items-center gap-2"><ArrowRightLeft className="w-3.5 h-3.5 text-[#137CBD]" /> <span className="font-bold">Webhook Event</span></div>
+                            </div>
+                            <div draggable onDragStart={(e) => handleDragStart(e, { id: 'new-transform', name: 'Data Transform' }, "dataTransform")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
+                                <div className="flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-[#137CBD]" /> <span className="font-bold">Data Transform</span></div>
+                            </div>
+                        </div>
+
+                        <div className="p-3 border-b border-[#CED9E0] bg-[#F5F8FA] text-[11px] font-bold text-[#5C7080] uppercase tracking-wider">
                             Data Sources
                         </div>
-                        <div className="p-3 space-y-2 overflow-auto max-h-[50%] border-b border-[#CED9E0]">
+                        <div className="p-3 space-y-2 overflow-auto max-h-[30%] border-b border-[#CED9E0]">
                             {loading ? <Loader2 className="w-5 h-5 mx-auto animate-spin text-[#5C7080]" /> : null}
                             {sources.map(s => (
-                                <div key={s.id} draggable onDragStart={(e) => handleDragStart(e, s, "source")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
+                                <div key={s.id} draggable onDragStart={(e) => handleDragStart(e, s, "dataSource")} className="p-2 border border-[#CED9E0] rounded bg-white text-[12px] cursor-grab active:cursor-grabbing hover:border-[#137CBD] flex items-center justify-between">
                                     <div className="flex items-center gap-2"><Server className="w-3.5 h-3.5 text-[#137CBD]" /> <span className="font-bold">{s.name}</span></div>
                                 </div>
                             ))}
@@ -329,7 +400,7 @@ export default function PipelineBuilder() {
                         <ReactFlow
                             nodes={nodes} edges={edges.map(e => ({ ...e, style: { strokeWidth: 1.5, stroke: '#CED9E0' }, type: 'mappingEdge' }))}
                             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onEdgeClick={onEdgeClick} onPaneClick={() => setSelectedEdgeId(null)}
-                            nodeTypes={{ dataSource: DataSourceNode, entityTarget: EntityTargetNode }} edgeTypes={{ mappingEdge: MappingEdge }}
+                            nodeTypes={{ dataSource: DataSourceNode, entityTarget: EntityTargetNode, csvUpload: CsvUploadNode, apiPolling: ApiPollingNode, webhookSource: WebhookSourceNode, dataTransform: DataTransformNode }} edgeTypes={{ mappingEdge: MappingEdge }}
                             fitView minZoom={0.2} maxZoom={2} proOptions={{ hideAttribution: true }}>
                             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#CED9E0" />
                             <Controls showInteractive={false} className="!bg-white !border-[#CED9E0] !shadow-sm" />

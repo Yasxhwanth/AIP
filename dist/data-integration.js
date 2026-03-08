@@ -7,6 +7,7 @@ exports.startScheduler = startScheduler;
 const policy_engine_1 = require("./policy-engine");
 const identity_service_1 = require("./identity-service");
 const provenance_service_1 = require("./provenance-service");
+const ontology_reasoner_1 = require("./ontology-reasoner");
 const connectors = {
     /**
      * REST_API — Fetch records from an HTTP endpoint.
@@ -170,6 +171,10 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
                 validFrom: now.toISOString(),
             },
         }, prisma);
+        // Fire-and-forget: trigger semantic reasoner to derive ontology properties natively 
+        (0, ontology_reasoner_1.runReasonerForEntity)(logicalId, entityType.projectId, prisma).catch(err => {
+            console.error(`[Semantic Reasoner Error] Failed to reason for entity ${logicalId}:`, err);
+        });
         return { success: true, instanceId };
     }
     catch (error) {
@@ -216,6 +221,7 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             id: job.targetEntityType.id,
             version: job.targetEntityType.version,
             name: job.targetEntityType.name,
+            projectId: job.targetEntityType.projectId,
         };
         for (const raw of rawRecords) {
             let externalId = raw[job.logicalIdField];

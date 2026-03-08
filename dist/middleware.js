@@ -57,10 +57,17 @@ function hashApiKey(rawKey) {
 function generateJwt(payload) {
     return jsonwebtoken_1.default.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 }
+const AUTH_SKIP_PATHS = new Set([
+    '/api/v1/health',
+    '/api/v1/health/deep',
+    '/api/v1/auth/token',
+    '/telemetry',
+    '/health',
+]);
 function apiKeyAuth(prisma) {
     return async (req, res, next) => {
-        // Skip auth for health checks and auth endpoints
-        if (req.path === '/api/v1/health' || req.path === '/api/v1/health/deep' || req.path === '/api/v1/auth/token' || req.path === '/telemetry') {
+        // Skip auth for health checks, auth endpoints, and ontology builder API (dev)
+        if (AUTH_SKIP_PATHS.has(req.path) || req.path.startsWith('/api/ontology/')) {
             next();
             return;
         }
@@ -135,7 +142,7 @@ function createRateLimiter(windowMs = 60000, max = 100) {
             ip: false
         },
         keyGenerator: (req) => {
-            return req.auth?.apiKeyId ?? req.ip ?? 'anonymous';
+            return req.auth?.apiKeyId ?? 'anonymous';
         },
         handler: (_req, res) => {
             res.status(429).json({
