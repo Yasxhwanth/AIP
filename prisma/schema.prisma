@@ -37,6 +37,7 @@ model Project {
   aipMetrics          AIPMetric[]
   workshopApps        WorkshopApp[]
   automations         AIPAutomate[]
+  aiWorkflows         AIWorkflow[]
 }
 
 model EntityType {
@@ -1014,5 +1015,46 @@ model AIPAutomateRun {
   automation   AIPAutomate @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@index([automationId, startedAt(sort: Desc)])
+  @@index([projectId, status])
+}
+
+// ── Phase 14: AIP Logic Visual Workflow Builder ───────────────────
+
+model AIWorkflow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  nodes       Json     @default("[]")
+  edges       Json     @default("[]")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs        AIWorkflowRun[]
+
+  @@index([projectId])
+}
+
+model AIWorkflowRun {
+  id         String   @id @default(uuid())
+  workflowId String
+  projectId  String
+  status     String   @default("running")  // running | success | failed | cancelled
+  trigger    String   @default("manual")   // manual | schedule | event
+
+  inputs     Json?                          // user-supplied inputs
+  steps      Json     @default("[]")        // [{stepId, name, type, status, input, output, error, durationMs}]
+  logs       Json     @default("[]")
+  summary    Json?                          // final output
+
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  duration   Int?
+
+  workflow   AIWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, startedAt(sort: Desc)])
   @@index([projectId, status])
 }
