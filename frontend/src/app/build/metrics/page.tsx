@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     BarChart2, Plus, Settings, Maximize2, X, ChevronDown,
-    Play, AlertTriangle, Info, Check, RefreshCw, Share2
+    Play, AlertTriangle, Info, Check, RefreshCw, Share2, Activity
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,8 +25,8 @@ interface Metric {
     status: MetricStatus;
 }
 
-// ── Ontology object types (from the actual AIP ontology) ──────────────────────
-const OBJECT_TYPES = ["Drone", "Mission", "Pilot", "Equipment", "Alert"];
+// ── Ontology object types — loaded dynamically from the Ontology API ─────────
+const FALLBACK_OBJECT_TYPES = ["Drone", "Mission", "Pilot", "Equipment", "Alert"];
 
 const PROPERTIES: Record<string, { name: string; unit: string }[]> = {
     Drone: [{ name: "batteryLevel", unit: "%" }, { name: "flightHours", unit: "hr" }, { name: "altitude", unit: "m" }, { name: "speed", unit: "km/h" }],
@@ -159,6 +159,10 @@ export default function MetricsPage() {
     const [canvasTab, setCanvasTab] = useState("Time Series");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [ontologyTypes, setOntologyTypes] = useState<string[]>(FALLBACK_OBJECT_TYPES);
+    const [breachSummary, setBreachSummary] = useState<{ name: string; value: number; unit: string; op: string; threshold: number }[]>([]);
+    const [lastRefresh, setLastRefresh] = useState(new Date());
+    const refreshRef = useRef<any>(null);
     // Live chart data
     const [chartSeries, setChartSeries] = useState<ChartSeries[]>([]);
     const [liveStats, setLiveStats] = useState<{
@@ -170,6 +174,32 @@ export default function MetricsPage() {
     } | null>(null);
     const [loadingChart, setLoadingChart] = useState(false);
 
+    // ── Load dynamic entity types from Ontology ─────────────────────────────
+    useEffect(() => {
+        fetch(`${API}/api/ontology/entity-types`)
+            .then(r => r.json())
+            .then((ets: any[]) => { if (ets?.length > 0) setOntologyTypes(ets.map(e => e.name)); })
+            .catch(() => { });
+    }, []);
+
+    // ── Check breaches across all saved metrics ─────────────────────────────
+    const checkAllBreaches = async (metricList: Metric[]) => {
+        const dbMetrics = metricList.filter(m => !m.id.startsWith('m') && !m.id.startsWith('local_'));
+        const breaches: typeof breachSummary = [];
+        for (const m of dbMetrics) {
+            try {
+                const r = await fetch(`${API}/api/metrics/${m.id}/data`);
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d.breaching && d.currentValue !== null) {
+                        breaches.push({ name: m.name, value: d.currentValue, unit: m.unit, op: m.thresholdOp, threshold: m.threshold });
+                    }
+                }
+            } catch { }
+        }
+        setBreachSummary(breaches);
+    };
+
     // ── Fetch metric definitions from DB ────────────────────────────────────
     const fetchMetrics = async () => {
         try {
@@ -180,24 +210,35 @@ export default function MetricsPage() {
                 if (data.length > 0) {
                     setMetrics(data);
                     if (!sel) setSel(data[0]);
+                    checkAllBreaches(data);
                 } else {
-                    // No metrics in DB yet — show seed metrics as default
-                    setMetrics(SEED_METRICS);
-                    setSel(SEED_METRICS[0]);
+                    // Seed default metrics to DB on first load
+                    await Promise.all(SEED_METRICS.map(m =>
+                        fetch(`${API}/api/metrics`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: m.name, objectType: m.objectType, property: m.property,
+                                unit: m.unit, aggr: m.aggr, window: m.window, threshold: m.threshold,
+                                thresholdOp: m.thresholdOp, alertOutputType: m.alertOutputType, status: m.status
+                            })
+                        })
+                    ));
+                    const res2 = await fetch(`${API}/api/metrics`);
+                    const seeded = res2.ok ? await res2.json() : SEED_METRICS;
+                    setMetrics(seeded);
+                    setSel(seeded[0]);
+                    checkAllBreaches(seeded);
                 }
             }
         } catch {
-            setMetrics(SEED_METRICS);
-            setSel(SEED_METRICS[0]);
-        } finally {
-            setLoading(false);
-        }
+            setMetrics(SEED_METRICS); setSel(SEED_METRICS[0]);
+        } finally { setLoading(false); }
     };
 
     // ── Fetch live chart data when a metric is selected ─────────────────────
     const fetchChartData = async (metricId: string) => {
-        // Skip for local/seed metrics not in DB
-        if (!metricId || metricId.startsWith('m')) return;
+        // Now allows all DB metrics (no more startsWith('m') skip)
+        if (!metricId || metricId.startsWith('local_')) return;
         setLoadingChart(true);
         try {
             const res = await fetch(`${API}/api/metrics/${metricId}/data`);
@@ -213,14 +254,20 @@ export default function MetricsPage() {
                 });
             }
         } catch {
-            setChartSeries([]);
-            setLiveStats(null);
-        } finally {
-            setLoadingChart(false);
-        }
+            setChartSeries([]); setLiveStats(null);
+        } finally { setLoadingChart(false); }
     };
 
-    useEffect(() => { fetchMetrics(); }, []);
+    // ── Auto-refresh every 30 seconds ──────────────────────────────────────
+    useEffect(() => {
+        fetchMetrics();
+        refreshRef.current = setInterval(() => {
+            setLastRefresh(new Date());
+            if (sel?.id && !sel.id.startsWith('local_')) fetchChartData(sel.id);
+        }, 30_000);
+        return () => clearInterval(refreshRef.current);
+    }, []);
+
     useEffect(() => {
         if (sel) fetchChartData(sel.id);
     }, [sel?.id]);
@@ -283,10 +330,24 @@ export default function MetricsPage() {
     if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#5C7080", fontSize: 13, fontFamily: "Inter, sans-serif" }}>Loading metrics...</div>;
     if (!sel) return null;
 
-    const objProps = PROPERTIES[sel.objectType] ?? [];
+    const objProps = PROPERTIES[sel.objectType] ?? [{ name: sel.property || 'value', unit: sel.unit || '' }];
+    const allObjectTypes = [...new Set([...FALLBACK_OBJECT_TYPES, ...ontologyTypes])];
 
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#F5F8FA", fontFamily: "Inter, sans-serif" }}>
+
+            {/* ── Breach Alert Banner ── */}
+            {breachSummary.length > 0 && (
+                <div style={{ background: "rgba(239,68,68,0.07)", borderBottom: "1px solid #FCA5A5", padding: "6px 14px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+                    <AlertTriangle style={{ width: 14, height: 14, color: "#EF4444", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#EF4444" }}>⚠ {breachSummary.length} threshold breach{breachSummary.length > 1 ? 'es' : ''}:</span>
+                    {breachSummary.map((b, i) => (
+                        <span key={i} style={{ fontSize: 11, padding: "1px 8px", background: "rgba(239,68,68,0.12)", borderRadius: 10, color: "#B91C1C", fontWeight: 600 }}>
+                            {b.name}: {b.value.toFixed(1)}{b.unit} {b.op} {b.threshold}{b.unit}
+                        </span>
+                    ))}
+                </div>
+            )}
 
             {/* ── Top bar ── */}
             <div style={{
@@ -298,6 +359,10 @@ export default function MetricsPage() {
                 <div style={{ width: 1, height: 16, background: "#CED9E0", margin: "0 4px" }} />
                 <span style={{ fontSize: 11, color: "#5C7080" }}>Time-series thresholds · Alert automations</span>
                 <div style={{ flex: 1 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#8A9BA8" }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#10B981", animation: "pulse 2s infinite" }} />
+                    Live · {lastRefresh.toLocaleTimeString()}
+                </div>
                 <button onClick={fetchMetrics} style={btn()}><RefreshCw style={{ width: 12, height: 12 }} /> Refresh</button>
                 <button style={btn()}><Share2 style={{ width: 12, height: 12 }} /> Share</button>
                 <button onClick={handleNew} style={btn(true)}><Plus style={{ width: 13, height: 13 }} /> New Metric</button>
@@ -355,7 +420,7 @@ export default function MetricsPage() {
                                         <input value={sel.name} onChange={e => update({ name: e.target.value })}
                                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #CED9E0", borderRadius: 3, fontSize: 13, background: "#fff" }} />
                                     )}
-                                    {field("Object Type", select(sel.objectType, OBJECT_TYPES, v => update({ objectType: v, property: PROPERTIES[v]?.[0]?.name ?? "" })))}
+                                    {field("Object Type", select(sel.objectType, allObjectTypes, v => update({ objectType: v, property: PROPERTIES[v]?.[0]?.name ?? sel.property })))}
                                     {field("Property", select(sel.property, objProps.map(p => p.name), v => update({ property: v, unit: objProps.find(p => p.name === v)?.unit ?? sel.unit })))}
                                     {field("Unit",
                                         <input value={sel.unit} onChange={e => update({ unit: e.target.value })}
@@ -694,7 +759,8 @@ export default function MetricsPage() {
                                                 fontSize: 10, color: "#5C7080", padding: "6px 4px",
                                                 borderTop: "1px solid #EBF1F5", marginTop: 2
                                             }}>
-                                                🔷 {(Math.floor(Math.random() * 800) + 100)} {sel.objectType}s
+                                                🔷 {liveStats?.entityCount ?? '...'} {sel.objectType}s
+                                                {liveStats?.hasRealData && <span style={{ marginLeft: 4, padding: "0 4px", background: "#7C3AED", color: "#fff", borderRadius: 3, fontSize: 8, fontWeight: 700 }}>LIVE</span>}
                                                 <span style={{ float: "right", color: "#137CBD", cursor: "pointer" }}>Properties</span>
                                             </div>
                                         </div>
