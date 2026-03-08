@@ -5288,6 +5288,42 @@ app.get('/api/workshop/:id/widget-data', async (req, res) => {
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
+// POST /api/workshop/query — live filtered entity query for Workshop variable bindings
+// Used by the WorkshopRuntime to propagate inter-widget state (e.g. selected row → filter)
+app.post('/api/workshop/query', async (req, res) => {
+  try {
+    const { entityType, filterProperty, filterValue, limit = 100 } = req.body;
+    if (!entityType) return res.status(400).json({ error: 'entityType required' });
+
+    const et = await prisma.entityType.findFirst({
+      where: { name: { equals: entityType, mode: 'insensitive' } }
+    });
+    if (!et) return res.json({ rows: [], total: 0, columns: [], hasData: false });
+
+    const states = await prisma.currentEntityState.findMany({
+      where: { entityTypeId: et.id },
+      orderBy: { updatedAt: 'desc' },
+      take: Math.min(limit, 500),
+    });
+
+    let rows = states.map((s: any) => ({ id: s.logicalId, ...(s.data as any) }));
+
+    // Apply optional property filter (for inter-widget bindings)
+    if (filterProperty && filterValue !== undefined && filterValue !== null && filterValue !== '') {
+      rows = rows.filter((r: any) => {
+        const v = r[filterProperty];
+        return v !== undefined && String(v).toLowerCase().includes(String(filterValue).toLowerCase());
+      });
+    }
+
+    const columns = rows.length > 0
+      ? Object.keys(rows[0]).filter(k => k !== '__typename').slice(0, 10)
+      : [];
+
+    return res.json({ rows: rows.slice(0, limit), total: rows.length, columns, hasData: rows.length > 0, entityType });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 8: AIP Actions API — Foundry-style write-back Operations
 // ─────────────────────────────────────────────────────────────────────────────

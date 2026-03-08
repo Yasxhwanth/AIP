@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { WorkshopRuntime } from "@/components/WorkshopRuntime";
 import {
     LayoutGrid, Plus, Eye, EyeOff, ChevronDown, ChevronRight,
     Table2, BarChart2, MousePointerClick, FormInput, Brain,
@@ -547,7 +548,7 @@ export default function ApplicationsPage() {
 
     // ── Fetch live widget data for preview mode ──────────────────────────────
     const fetchWidgetData = async () => {
-        if (!selApp || selApp.id.startsWith('app')) return; // skip seed IDs
+        if (!selApp || selApp.id.startsWith('local_')) return; // skip only truly local
         try {
             const res = await fetch(`${API}/api/workshop/${selApp.id}/widget-data`);
             if (res.ok) {
@@ -792,110 +793,120 @@ export default function ApplicationsPage() {
 
                     {/* Canvas area */}
                     <div style={{
-                        flex: 1, overflow: "auto", padding: 20,
+                        flex: 1, overflow: "auto",
                         background: preview ? "#fff" : "repeating-linear-gradient(0deg,transparent,transparent 19px,#EBF1F5 20px), repeating-linear-gradient(90deg,transparent,transparent 19px,#EBF1F5 20px)"
                     }}>
-                        <div style={{ maxWidth: preview && device === "mobile" ? 375 : "100%", margin: "0 auto" }}>
+                        {/* ─── PREVIEW MODE: Full WorkshopRuntime with live data + inter-widget bindings ─── */}
+                        {preview ? (
+                            <WorkshopRuntime
+                                appId={selApp.id}
+                                appName={selApp.name}
+                                pages={selApp.pages}
+                                mode="preview"
+                            />
+                        ) : (
+                            <div style={{ maxWidth: "100%", margin: "0 auto", padding: 20 }}>
 
-                            {currentPage.sections.map(s => (
-                                <div key={s.id} onClick={() => { if (!preview) { setSelSection(s); setSelWidget(null); setRightTab("config"); } }}
-                                    style={{
-                                        marginBottom: 16,
-                                        outline: !preview && selSection?.id === s.id && !selWidget ? "2px solid #137CBD" : "none",
-                                        borderRadius: 4, position: "relative"
-                                    }}>
-
-                                    {/* Section label (builder mode) */}
-                                    {!preview && (
-                                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                                            <span style={{
-                                                fontSize: 10, fontWeight: 700, color: "#5C7080", textTransform: "uppercase",
-                                                letterSpacing: "0.07em"
-                                            }}>§ {s.name}</span>
-                                            <span style={{ fontSize: 9, color: "#8A9BA8" }}>{s.columns}-col</span>
-                                            {!Object.values(s.roleVisibility).every(Boolean) && (
-                                                <span style={{
-                                                    fontSize: 9, padding: "1px 5px", borderRadius: 3,
-                                                    background: "rgba(217,130,43,0.1)", color: "#D9822B", fontWeight: 700
-                                                }}>
-                                                    RESTRICTED
-                                                </span>
-                                            )}
-                                            <button onClick={e => { e.stopPropagation(); updateSection({ ...s, collapsed: !s.collapsed }); }}
-                                                style={{ border: "none", background: "transparent", cursor: "pointer", color: "#8A9BA8", marginLeft: "auto" }}>
-                                                {s.collapsed ? <ChevronRight style={{ width: 12, height: 12 }} /> : <ChevronDown style={{ width: 12, height: 12 }} />}
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {!s.collapsed && (
-                                        <div style={{
-                                            display: "grid",
-                                            gridTemplateColumns: `repeat(${s.columns}, 1fr)`, gap: 10
+                                {currentPage.sections.map(s => (
+                                    <div key={s.id} onClick={() => { if (!preview) { setSelSection(s); setSelWidget(null); setRightTab("config"); } }}
+                                        style={{
+                                            marginBottom: 16,
+                                            outline: !preview && selSection?.id === s.id && !selWidget ? "2px solid #137CBD" : "none",
+                                            borderRadius: 4, position: "relative"
                                         }}>
-                                            {s.widgets.map(w => (
-                                                <div key={w.id}
-                                                    style={{
-                                                        gridColumn: `span ${Math.min(w.colSpan, s.columns)}`,
-                                                        background: "#fff",
-                                                        border: !preview && selWidget?.id === w.id ? "2px solid #7157D9"
-                                                            : !preview ? "1px dashed #CED9E0" : "1px solid #EBF1F5",
-                                                        borderRadius: 4, cursor: preview ? "default" : "pointer",
-                                                        minHeight: preview ? undefined : 80, overflow: "hidden",
-                                                        boxShadow: preview ? "0 1px 4px rgba(0,0,0,0.06)" : "none"
-                                                    }}
-                                                    onClick={e => { e.stopPropagation(); if (!preview) { setSelWidget(w); setSelSection(s); setRightTab("binding"); } }}>
-                                                    <WidgetPreview w={w} preview={preview} />
-                                                    {/* Delete button in builder mode */}
-                                                    {!preview && selWidget?.id === w.id && (
-                                                        <div style={{
-                                                            display: "flex", gap: 4, padding: "4px 6px",
-                                                            borderTop: "1px solid #EBF1F5", background: "#F5F8FA"
-                                                        }}>
-                                                            <button onClick={e => { e.stopPropagation(); deleteWidget(s.id, w.id); }}
-                                                                style={{ ...btn(false, true, true), flex: 1 }}>
-                                                                <Trash2 style={{ width: 10, height: 10 }} /> Remove
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
 
-                                            {/* Drop zone */}
-                                            {!preview && (
-                                                <div
-                                                    onDragOver={e => e.preventDefault()}
-                                                    onDrop={e => { e.preventDefault(); if (dragType) addWidgetToSection(s, dragType); }}
-                                                    onClick={() => setRightTab("palette")}
-                                                    style={{
-                                                        gridColumn: `span 1`, minHeight: 80,
-                                                        border: "1.5px dashed #CED9E0", borderRadius: 4,
-                                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                                        cursor: "pointer", color: "#8A9BA8", fontSize: 11, gap: 5,
-                                                        background: dragType ? "rgba(19,124,189,0.04)" : "transparent",
-                                                        transition: "background 0.15s"
+                                        {/* Section label (builder mode) */}
+                                        {!preview && (
+                                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                                                <span style={{
+                                                    fontSize: 10, fontWeight: 700, color: "#5C7080", textTransform: "uppercase",
+                                                    letterSpacing: "0.07em"
+                                                }}>§ {s.name}</span>
+                                                <span style={{ fontSize: 9, color: "#8A9BA8" }}>{s.columns}-col</span>
+                                                {!Object.values(s.roleVisibility).every(Boolean) && (
+                                                    <span style={{
+                                                        fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                                                        background: "rgba(217,130,43,0.1)", color: "#D9822B", fontWeight: 700
                                                     }}>
-                                                    <Plus style={{ width: 14, height: 14 }} /> Add widget
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                                        RESTRICTED
+                                                    </span>
+                                                )}
+                                                <button onClick={e => { e.stopPropagation(); updateSection({ ...s, collapsed: !s.collapsed }); }}
+                                                    style={{ border: "none", background: "transparent", cursor: "pointer", color: "#8A9BA8", marginLeft: "auto" }}>
+                                                    {s.collapsed ? <ChevronRight style={{ width: 12, height: 12 }} /> : <ChevronDown style={{ width: 12, height: 12 }} />}
+                                                </button>
+                                            </div>
+                                        )}
 
-                            {/* Add section button */}
-                            {!preview && (
-                                <button onClick={addSection}
-                                    style={{
-                                        width: "100%", padding: "12px", border: "1.5px dashed #CED9E0",
-                                        borderRadius: 4, background: "transparent", cursor: "pointer",
-                                        color: "#8A9BA8", fontSize: 12, display: "flex", alignItems: "center",
-                                        justifyContent: "center", gap: 6
-                                    }}>
-                                    <Plus style={{ width: 14, height: 14 }} /> Add section
-                                </button>
-                            )}
-                        </div>
+                                        {!s.collapsed && (
+                                            <div style={{
+                                                display: "grid",
+                                                gridTemplateColumns: `repeat(${s.columns}, 1fr)`, gap: 10
+                                            }}>
+                                                {s.widgets.map(w => (
+                                                    <div key={w.id}
+                                                        style={{
+                                                            gridColumn: `span ${Math.min(w.colSpan, s.columns)}`,
+                                                            background: "#fff",
+                                                            border: !preview && selWidget?.id === w.id ? "2px solid #7157D9"
+                                                                : !preview ? "1px dashed #CED9E0" : "1px solid #EBF1F5",
+                                                            borderRadius: 4, cursor: preview ? "default" : "pointer",
+                                                            minHeight: preview ? undefined : 80, overflow: "hidden",
+                                                            boxShadow: preview ? "0 1px 4px rgba(0,0,0,0.06)" : "none"
+                                                        }}
+                                                        onClick={e => { e.stopPropagation(); if (!preview) { setSelWidget(w); setSelSection(s); setRightTab("binding"); } }}>
+                                                        <WidgetPreview w={w} preview={preview} />
+                                                        {/* Delete button in builder mode */}
+                                                        {!preview && selWidget?.id === w.id && (
+                                                            <div style={{
+                                                                display: "flex", gap: 4, padding: "4px 6px",
+                                                                borderTop: "1px solid #EBF1F5", background: "#F5F8FA"
+                                                            }}>
+                                                                <button onClick={e => { e.stopPropagation(); deleteWidget(s.id, w.id); }}
+                                                                    style={{ ...btn(false, true, true), flex: 1 }}>
+                                                                    <Trash2 style={{ width: 10, height: 10 }} /> Remove
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+
+                                                {/* Drop zone */}
+                                                {!preview && (
+                                                    <div
+                                                        onDragOver={e => e.preventDefault()}
+                                                        onDrop={e => { e.preventDefault(); if (dragType) addWidgetToSection(s, dragType); }}
+                                                        onClick={() => setRightTab("palette")}
+                                                        style={{
+                                                            gridColumn: `span 1`, minHeight: 80,
+                                                            border: "1.5px dashed #CED9E0", borderRadius: 4,
+                                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                                            cursor: "pointer", color: "#8A9BA8", fontSize: 11, gap: 5,
+                                                            background: dragType ? "rgba(19,124,189,0.04)" : "transparent",
+                                                            transition: "background 0.15s"
+                                                        }}>
+                                                        <Plus style={{ width: 14, height: 14 }} /> Add widget
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+
+                                {/* Add section button */}
+                                {!preview && (
+                                    <button onClick={addSection}
+                                        style={{
+                                            width: "100%", padding: "12px", border: "1.5px dashed #CED9E0",
+                                            borderRadius: 4, background: "transparent", cursor: "pointer",
+                                            color: "#8A9BA8", fontSize: 12, display: "flex", alignItems: "center",
+                                            justifyContent: "center", gap: 6
+                                        }}>
+                                        <Plus style={{ width: 14, height: 14 }} /> Add section
+                                    </button>
+                                )}
+                            </div>
+                        )/* end builder mode */}
                     </div>
                 </div>
 
