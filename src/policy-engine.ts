@@ -132,3 +132,32 @@ export async function evaluatePolicies(
         console.error('[PolicyEngine] Error evaluating policies:', error);
     }
 }
+
+export async function simulatePolicy(
+    policyId: string,
+    dataPayload: Record<string, unknown>,
+    prisma: PrismaClient,
+): Promise<{ matched: boolean; trace: Record<string, unknown>; error?: string }> {
+    try {
+        const policy = await prisma.policyDefinition.findUnique({ where: { id: policyId } });
+        if (!policy) {
+            return { matched: false, trace: {}, error: 'Policy not found' };
+        }
+
+        const condition = policy.condition as unknown as PolicyCondition;
+        const fieldValue = dataPayload[condition.field];
+        const matched = evaluateCondition(condition, dataPayload);
+
+        return {
+            matched,
+            trace: {
+                condition: policy.condition,
+                fieldValue,
+                result: matched,
+                evaluatedAt: new Date().toISOString(),
+            }
+        };
+    } catch (error) {
+        return { matched: false, trace: {}, error: String(error) };
+    }
+}

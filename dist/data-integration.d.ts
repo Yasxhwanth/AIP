@@ -31,6 +31,7 @@ export declare function executeJob(jobId: string, prisma: PrismaClient, queueId?
     status: string;
     recordsProcessed: number;
     recordsFailed: number;
+    recordsDropped: number;
     error?: string;
 }>;
 /**

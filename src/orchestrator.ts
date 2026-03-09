@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma';
+import { PrismaClient, Prisma } from './generated/prisma';
 import { executeJob } from './data-integration';
 import { computeAllRecentRollups } from './rollup-engine';
 import { RelationshipDerivationService } from './relationship-derivation-service';
@@ -20,6 +20,10 @@ export class Orchestrator {
     // Timeouts
     private HEARTBEAT_INTERVAL = 30_000; // 30s
     private POLL_INTERVAL = 5_000; // 5s
+
+    // Concurrency
+    private activeJobs = 0;
+    private MAX_CONCURRENT_JOBS = 5;
 
     constructor(prisma: PrismaClient) {
         this.prisma = prisma;
@@ -120,6 +124,11 @@ export class Orchestrator {
     private async pollForJobs() {
         while (this.isRunning) {
             try {
+                if (this.activeJobs >= this.MAX_CONCURRENT_JOBS) {
+                    await new Promise(res => setTimeout(res, 1000));
+                    continue;
+                }
+
                 // Find a QUEUED job or a job ready for retry
                 // PostgreSQL SKIP LOCKED equivalent logic conceptually achieved by finding and atomically locking
                 const now = new Date();
@@ -140,6 +149,9 @@ export class Orchestrator {
                                 ]
                             }
                         ]
+                    },
+                    include: {
+                        integrationJob: true
                     },
                     orderBy: [
                         { priority: 'desc' },
@@ -165,7 +177,12 @@ export class Orchestrator {
 
                     // If we successfully locked it, process it!
                     if (lockedJob.count > 0) {
-                        await this.processJob(candidate);
+                        this.activeJobs++;
+                        this.processJob(candidate).catch(err => {
+                            console.error('[Orchestrator] Unhandled process error:', err);
+                        }).finally(() => {
+                            this.activeJobs--;
+                        });
                         // Loop immediately to grab more jobs without waiting for interval
                         continue;
                     }
@@ -206,6 +223,7 @@ export class Orchestrator {
                     data: {
                         recordsProcessed: result.recordsProcessed,
                         recordsFailed: result.recordsFailed,
+                        recordsDropped: result.recordsDropped,
                     }
                 });
             } else if (job.jobType === 'TELEMETRY_ROLLUP_TRIGGER') {
@@ -218,6 +236,9 @@ export class Orchestrator {
             } else if (job.jobType === 'RELATIONSHIP_DECAY') {
                 const count = await RelationshipDerivationService.applyConfidenceDecay(this.prisma);
                 console.log(`[Orchestrator] RELATIONSHIP_DECAY completed. Decayed ${count} probabilistic edges.`);
+            } else if (job.jobType === 'MLOPS_DRIFT_MONITOR') {
+                await this.checkModelDrift();
+                console.log("[Orchestrator] Processed MLOPS_DRIFT_MONITOR.");
             } else if (job.jobType === 'SYSTEM_PING') {
                 console.log("[Orchestrator] Processed system ping.");
             } else {
@@ -247,8 +268,12 @@ export class Orchestrator {
             console.log(`[Orchestrator] Job ${job.id} completed in ${duration}ms`);
         } else {
             // Check for retry / DLQ threshold
+            const retryPolicy = job.integrationJob?.retryPolicy as { maxAttempts?: number, backoffMultiplier?: number } | undefined;
+            const maxAttempts = retryPolicy?.maxAttempts ?? job.maxAttempts;
+            const backoffMultiplier = retryPolicy?.backoffMultiplier ?? 2;
+
             const nextAttempt = job.attempts + 1;
-            const isDead = nextAttempt >= job.maxAttempts;
+            const isDead = nextAttempt >= maxAttempts;
 
             await this.prisma.jobQueue.update({
                 where: { id: job.id },
@@ -258,12 +283,83 @@ export class Orchestrator {
                     lockedAt: null,
                     lockedByWorkerId: null,
                     // Exponential backoff
-                    nextAttemptAt: isDead ? null : new Date(Date.now() + (Math.pow(2, nextAttempt) * 1000)),
+                    nextAttemptAt: isDead ? null : new Date(Date.now() + (Math.pow(backoffMultiplier, nextAttempt) * 1000)),
                 }
             });
 
             if (isDead) {
                 console.log(`[Orchestrator] Job ${job.id} moved to DEAD_LETTER queue.`);
+            }
+        }
+    }
+
+    /**
+     * Checks all PRODUCTION models for recent drift metrics violating thresholds.
+     */
+    private async checkModelDrift() {
+        // Find all production models
+        const prodModels = await this.prisma.modelVersion.findMany({
+            where: { status: 'PRODUCTION' },
+            include: { modelDefinition: true }
+        });
+
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        for (const model of prodModels) {
+            // Find recent drift metrics
+            const recentMetrics = await this.prisma.modelDriftMetric.findMany({
+                where: {
+                    modelVersionId: model.id,
+                    createdAt: { gte: oneDayAgo }
+                }
+            });
+
+            for (const metric of recentMetrics) {
+                // Example threshold logic: if JS divergence > 0.1, alert
+                let thresholdViolated = false;
+                if (metric.metricType === 'JENSEN_SHANNON' && metric.value > 0.1) thresholdViolated = true;
+                if (metric.metricType === 'PSI' && metric.value > 0.2) thresholdViolated = true;
+
+                if (thresholdViolated) {
+                    const alertPayload = {
+                        featureName: metric.featureName,
+                        metricType: metric.metricType,
+                        value: metric.value,
+                        modelName: model.modelDefinition.name,
+                        version: model.version
+                    };
+
+                    // Check for active alerts to prevent spam (Idempotency) using entityTypeId for model Definition instead
+                    const existingAlert = await this.prisma.alert.findFirst({
+                        where: {
+                            alertType: 'ModelDrift',
+                            entityTypeId: model.modelDefinitionId,
+                            logicalId: model.id,
+                            acknowledged: false
+                        }
+                    });
+
+                    if (!existingAlert) {
+                        try {
+                            await this.prisma.alert.create({
+                                data: {
+                                    alertType: 'ModelDrift',
+                                    severity: 'warning',
+                                    entityTypeId: model.modelDefinitionId,  // using entityTypeId to hold ModelDef ID
+                                    logicalId: model.id,                    // using logicalId to hold ModelVersion ID
+                                    policyId: 'SYSTEM_DRIFT_MONITOR',       // dummy policyId as required by schema
+                                    payload: {
+                                        message: `Drift detected in production model ${model.modelDefinition.name} v${model.version} on feature ${metric.featureName}`,
+                                        ...alertPayload
+                                    } as Prisma.InputJsonValue,
+                                }
+                            });
+                            console.log(`[Orchestrator] Created ModelDrift alert for ${model.id}`);
+                        } catch (e) {
+                            console.error('[Orchestrator] Could not create drift alert', e);
+                        }
+                    }
+                }
             }
         }
     }

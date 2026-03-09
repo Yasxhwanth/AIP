@@ -65,7 +65,11 @@ export function requestLogger() {
 
 // ── API Key Auth ─────────────────────────────────────────────────
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'c3-aip-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('CRITICAL: JWT_SECRET environment variable is missing.');
+    process.exit(1);
+}
 // Auth: Secure by default. Must explicitly turn off if running local unit tests.
 const AUTH_REQUIRED = process.env.AUTH_REQUIRED !== 'false';
 
@@ -74,7 +78,7 @@ export function hashApiKey(rawKey: string): string {
 }
 
 export function generateJwt(payload: AuthContext): string {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+    return jwt.sign(payload, JWT_SECRET as string, { expiresIn: '24h' });
 }
 
 const AUTH_SKIP_PATHS = new Set([
@@ -87,8 +91,8 @@ const AUTH_SKIP_PATHS = new Set([
 
 export function apiKeyAuth(prisma: PrismaClient) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-        // Skip auth for health checks, auth endpoints, and ontology builder API (dev)
-        if (AUTH_SKIP_PATHS.has(req.path) || req.path.startsWith('/api/ontology/')) {
+        // Skip auth for health checks and auth endpoints
+        if (AUTH_SKIP_PATHS.has(req.path)) {
             next();
             return;
         }
@@ -133,7 +137,7 @@ export function apiKeyAuth(prisma: PrismaClient) {
         if (authHeader?.startsWith('Bearer ')) {
             try {
                 const token = authHeader.slice(7);
-                const decoded = jwt.verify(token, JWT_SECRET) as AuthContext;
+                const decoded = jwt.verify(token, JWT_SECRET as string) as unknown as AuthContext;
                 req.auth = decoded;
                 next();
             } catch {

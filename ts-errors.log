@@ -1,0 +1,40 @@
+﻿src/server.ts(4097,15): error TS2322: Type 'number | undefined' is not assignable to type 'number | null'.
+  Type 'undefined' is not assignable to type 'number | null'.
+src/server.ts(4102,15): error TS2322: Type 'number | undefined' is not assignable to type 'number | null'.
+  Type 'undefined' is not assignable to type 'number | null'.
+src/server.ts(4107,15): error TS2322: Type 'number | undefined' is not assignable to type 'number | null'.
+  Type 'undefined' is not assignable to type 'number | null'.
+src/server.ts(4121,15): error TS2322: Type 'number | null' is not assignable to type 'number'.
+  Type 'null' is not assignable to type 'number'.
+src/server.ts(4438,26): error TS2353: Object literal may only specify known properties, and 'entityTypeId_logicalId' does not exist in type 'CurrentEntityStateWhereUniqueInput'.
+src/server.ts(4439,59): error TS2353: Object literal may only specify known properties, and 'projectId' does not exist in type 'Without<CurrentEntityStateCreateInput, CurrentEntityStateUncheckedCreateInput> & CurrentEntityStateUncheckedCreateInput'.
+src/server.ts(4723,26): error TS2353: Object literal may only specify known properties, and 'entityTypeId_logicalId' does not exist in type 'CurrentEntityStateWhereUniqueInput'.
+src/server.ts(4724,67): error TS2353: Object literal may only specify known properties, and 'projectId' does not exist in type 'Without<CurrentEntityStateCreateInput, CurrentEntityStateUncheckedCreateInput> & CurrentEntityStateUncheckedCreateInput'.
+src/server.ts(4974,19): error TS18048: 'minutePart' is possibly 'undefined'.
+src/server.ts(4975,38): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/server.ts(4979,19): error TS18048: 'secPart' is possibly 'undefined'.
+src/server.ts(4980,38): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/server.ts(5382,23): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/server.ts(5383,23): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/server.ts(5384,23): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/server.ts(5589,9): error TS2322: Type '{ message: string; } | null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput'.
+  Type 'null' is not assignable to type 'InputJsonValue | NullableJsonNullValueInput'.
+src/server.ts(5692,20): error TS2353: Object literal may only specify known properties, and 'entityTypeId_logicalId' does not exist in type 'CurrentEntityStateWhereUniqueInput'.
+src/server.ts(5693,61): error TS2353: Object literal may only specify known properties, and 'projectId' does not exist in type 'Without<CurrentEntityStateCreateInput, CurrentEntityStateUncheckedCreateInput> & CurrentEntityStateUncheckedCreateInput'.
+src/server.ts(5872,32): error TS2339: Property 'aIPEval' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5880,37): error TS2339: Property 'aIPEval' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5889,37): error TS2339: Property 'aIPEval' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5899,37): error TS2339: Property 'aIPEval' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5903,30): error TS2339: Property 'aIPEvalRun' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5925,20): error TS2339: Property 'aIPEvalRun' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5949,88): error TS2353: Object literal may only specify known properties, and 'config' does not exist in type 'PipelineSelect<DefaultArgs>'.
+src/server.ts(5951,21): error TS2339: Property 'config' does not exist on type '{ id: string; name: string; description: string | null; createdAt: Date; enabled: boolean; projectId: string; nodes: JsonValue; edges: JsonValue; }'.
+src/server.ts(5957,21): error TS2339: Property 'config' does not exist on type '{ id: string; name: string; description: string | null; createdAt: Date; enabled: boolean; projectId: string; nodes: JsonValue; edges: JsonValue; }'.
+src/server.ts(5984,35): error TS2339: Property 'functionVersion' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5994,33): error TS2339: Property 'functionVersion' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.
+src/server.ts(5997,30): error TS2339: Property 'functionVersion' does not exist on type 'PrismaClient<{ adapter: PrismaPg; }, never, DefaultArgs>'.

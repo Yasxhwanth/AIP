@@ -207,6 +207,7 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
         throw new Error(`Data source '${job.dataSource.name}' is disabled`);
     let recordsProcessed = 0;
     let recordsFailed = 0;
+    let recordsDropped = 0;
     try {
         // Step 1: Fetch records via connector
         const connectorFn = connectors[job.dataSource.type];
@@ -217,6 +218,7 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
         const rawRecords = await connectorFn(connectionConfig, inlineData);
         // Step 2: Transform + Ingest each record
         const fieldMapping = job.fieldMapping;
+        const dataContract = job.dataContract;
         const entityType = {
             id: job.targetEntityType.id,
             version: job.targetEntityType.version,
@@ -224,6 +226,31 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             projectId: job.targetEntityType.projectId,
         };
         for (const raw of rawRecords) {
+            // Data Contract Validation
+            if (dataContract) {
+                let contractFailed = false;
+                if (dataContract.required) {
+                    for (const reqField of dataContract.required) {
+                        if (raw[reqField] === undefined || raw[reqField] === null) {
+                            contractFailed = true;
+                            break;
+                        }
+                    }
+                }
+                if (!contractFailed && dataContract.types) {
+                    for (const [key, type] of Object.entries(dataContract.types)) {
+                        if (raw[key] !== undefined && raw[key] !== null && typeof raw[key] !== type) {
+                            contractFailed = true;
+                            break;
+                        }
+                    }
+                }
+                if (contractFailed) {
+                    recordsDropped++;
+                    console.warn(`[DataIntegration] Record dropped due to data contract violation:`, raw);
+                    continue;
+                }
+            }
             let externalId = raw[job.logicalIdField];
             if (!externalId || typeof externalId !== 'string') {
                 recordsFailed++;
@@ -263,6 +290,7 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             status: 'COMPLETED',
             recordsProcessed,
             recordsFailed,
+            recordsDropped,
         };
     }
     catch (error) {
@@ -271,6 +299,7 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             status: 'FAILED',
             recordsProcessed,
             recordsFailed,
+            recordsDropped,
             error: String(error),
         };
     }

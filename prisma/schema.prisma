@@ -38,6 +38,7 @@ model Project {
   workshopApps        WorkshopApp[]
   automations         AIPAutomate[]
   aiWorkflows         AIWorkflow[]
+  changeRequests      ChangeRequest[]
 }
 
 model EntityType {
@@ -286,6 +287,25 @@ model AbacPolicy {
   @@index([action, resourceType])
 }
 
+model ChangeRequest {
+  id              String   @id @default(uuid())
+  resourceType    String   // "EntityType", "Pipeline", "DecisionRule", etc.
+  resourceId      String?  // Can be null if it's a creation request
+  proposedChanges Json     // The desired delta
+  status          String   @default("DRAFT") // DRAFT, IN_REVIEW, APPROVED, REJECTED
+  createdBy       String   // apiKeyName
+  reviewedBy      String?  // apiKeyName
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@index([resourceType, resourceId])
+}
+
 model Alert {
   id              String   @id @default(uuid())
   alertType       String
@@ -423,6 +443,8 @@ model IntegrationJob {
   fieldMapping       Json // { "external_field": "ontology_attribute", ... }
   logicalIdField     String // Which external field becomes logicalId
   schedule           String? // Cron expression for polling (null = manual only)
+  retryPolicy        Json? // { maxAttempts: 5, backoffMultiplier: 2 }
+  dataContract       Json? // JSON Schema for validating incoming records
   enabled            Boolean  @default(true)
   createdAt          DateTime @default(now())
 
@@ -476,6 +498,7 @@ model JobQueue {
   // Metrics (mapped from old JobExecution)
   recordsProcessed Int       @default(0)
   recordsFailed    Int       @default(0)
+  recordsDropped   Int       @default(0)
   
   // Optional References to parent definitions
   integrationJobId String?

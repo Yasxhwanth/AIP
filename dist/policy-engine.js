@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.evaluatePolicies = evaluatePolicies;
+exports.simulatePolicy = simulatePolicy;
 // ── Condition Evaluator ──────────────────────────────────────────
 function evaluateCondition(condition, data) {
     const actual = data[condition.field];
@@ -87,6 +88,29 @@ async function evaluatePolicies(event, prisma) {
         // Policy evaluation must never crash the main request
         // eslint-disable-next-line no-console
         console.error('[PolicyEngine] Error evaluating policies:', error);
+    }
+}
+async function simulatePolicy(policyId, dataPayload, prisma) {
+    try {
+        const policy = await prisma.policyDefinition.findUnique({ where: { id: policyId } });
+        if (!policy) {
+            return { matched: false, trace: {}, error: 'Policy not found' };
+        }
+        const condition = policy.condition;
+        const fieldValue = dataPayload[condition.field];
+        const matched = evaluateCondition(condition, dataPayload);
+        return {
+            matched,
+            trace: {
+                condition: policy.condition,
+                fieldValue,
+                result: matched,
+                evaluatedAt: new Date().toISOString(),
+            }
+        };
+    }
+    catch (error) {
+        return { matched: false, trace: {}, error: String(error) };
     }
 }
 //# sourceMappingURL=policy-engine.js.map

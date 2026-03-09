@@ -87,9 +87,9 @@ export declare const CreateModelVersionSchema: z.ZodObject<{
 export declare const UpdateModelVersionStatusSchema: z.ZodObject<{
     status: z.ZodEnum<{
         PRODUCTION: "PRODUCTION";
-        DRAFT: "DRAFT";
         STAGING: "STAGING";
         RETIRED: "RETIRED";
+        DRAFT: "DRAFT";
     }>;
 }, z.core.$strip>;
 export declare const CreateDecisionRuleSchema: z.ZodObject<{

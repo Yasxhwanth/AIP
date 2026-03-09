@@ -48,7 +48,11 @@ function requestLogger() {
     };
 }
 // ── API Key Auth ─────────────────────────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET ?? 'c3-aip-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('CRITICAL: JWT_SECRET environment variable is missing.');
+    process.exit(1);
+}
 // Auth: Secure by default. Must explicitly turn off if running local unit tests.
 const AUTH_REQUIRED = process.env.AUTH_REQUIRED !== 'false';
 function hashApiKey(rawKey) {
@@ -66,8 +70,8 @@ const AUTH_SKIP_PATHS = new Set([
 ]);
 function apiKeyAuth(prisma) {
     return async (req, res, next) => {
-        // Skip auth for health checks, auth endpoints, and ontology builder API (dev)
-        if (AUTH_SKIP_PATHS.has(req.path) || req.path.startsWith('/api/ontology/')) {
+        // Skip auth for health checks and auth endpoints
+        if (AUTH_SKIP_PATHS.has(req.path)) {
             next();
             return;
         }

@@ -255,7 +255,7 @@ export async function executeJob(
     prisma: PrismaClient,
     queueId?: string,
     inlineData?: unknown[],
-): Promise<{ status: string; recordsProcessed: number; recordsFailed: number; error?: string }> {
+): Promise<{ status: string; recordsProcessed: number; recordsFailed: number; recordsDropped: number; error?: string }> {
     // Load the job with its data source and target entity type
     const job = await prisma.integrationJob.findUnique({
         where: { id: jobId },
@@ -271,6 +271,7 @@ export async function executeJob(
 
     let recordsProcessed = 0;
     let recordsFailed = 0;
+    let recordsDropped = 0;
 
     try {
         // Step 1: Fetch records via connector
@@ -284,6 +285,7 @@ export async function executeJob(
 
         // Step 2: Transform + Ingest each record
         const fieldMapping = job.fieldMapping as unknown as FieldMapping;
+        const dataContract = job.dataContract as { required?: string[]; types?: Record<string, string> } | null;
         const entityType = {
             id: job.targetEntityType.id,
             version: job.targetEntityType.version,
@@ -292,6 +294,31 @@ export async function executeJob(
         };
 
         for (const raw of rawRecords) {
+            // Data Contract Validation
+            if (dataContract) {
+                let contractFailed = false;
+                if (dataContract.required) {
+                    for (const reqField of dataContract.required) {
+                        if (raw[reqField] === undefined || raw[reqField] === null) {
+                            contractFailed = true; break;
+                        }
+                    }
+                }
+                if (!contractFailed && dataContract.types) {
+                    for (const [key, type] of Object.entries(dataContract.types)) {
+                        if (raw[key] !== undefined && raw[key] !== null && typeof raw[key] !== type) {
+                            contractFailed = true; break;
+                        }
+                    }
+                }
+
+                if (contractFailed) {
+                    recordsDropped++;
+                    console.warn(`[DataIntegration] Record dropped due to data contract violation:`, raw);
+                    continue;
+                }
+            }
+
             let externalId = raw[job.logicalIdField] as string;
             if (!externalId || typeof externalId !== 'string') {
                 recordsFailed++;
@@ -337,6 +364,7 @@ export async function executeJob(
             status: 'COMPLETED',
             recordsProcessed,
             recordsFailed,
+            recordsDropped,
         };
     } catch (error) {
         // Orchestrator will handle the failure update to JobQueue
@@ -344,6 +372,7 @@ export async function executeJob(
             status: 'FAILED',
             recordsProcessed,
             recordsFailed,
+            recordsDropped,
             error: String(error),
         };
     }

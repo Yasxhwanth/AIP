@@ -1,10 +1,12 @@
-import { PrismaClient } from './generated/prisma';
+import { PrismaClient, Prisma } from './generated/prisma';
 export declare class Orchestrator {
     private prisma;
     private workerId;
     private isRunning;
     private HEARTBEAT_INTERVAL;
     private POLL_INTERVAL;
+    private activeJobs;
+    private MAX_CONCURRENT_JOBS;
     constructor(prisma: PrismaClient);
     /**
      * Start the worker node, register it in the DB, and begin polling for jobs
@@ -27,13 +29,14 @@ export declare class Orchestrator {
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        payload: import("./generated/prisma/runtime/client").JsonValue;
+        payload: Prisma.JsonValue;
         status: string;
         startedAt: Date | null;
         completedAt: Date | null;
         idempotencyKey: string | null;
         recordsProcessed: number;
         recordsFailed: number;
+        recordsDropped: number;
         jobType: string;
         priority: number;
         lockedAt: Date | null;
@@ -53,5 +56,9 @@ export declare class Orchestrator {
      * Route and process the selected job
      */
     private processJob;
+    /**
+     * Checks all PRODUCTION models for recent drift metrics violating thresholds.
+     */
+    private checkModelDrift;
 }
 //# sourceMappingURL=orchestrator.d.ts.map

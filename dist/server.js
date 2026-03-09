@@ -21,10 +21,13 @@ const provenance_service_1 = require("./provenance-service");
 const apollo_service_1 = require("./apollo-service");
 const spark_service_1 = require("./spark-service");
 const identity_service_1 = require("./identity-service");
+const lineage_service_1 = require("./lineage-service");
 const abac_engine_1 = require("./abac-engine");
 const helmet_1 = __importDefault(require("helmet"));
 const cors_1 = __importDefault(require("cors"));
 const logger_1 = __importDefault(require("./logger"));
+const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const swagger_1 = require("./swagger");
 const middleware_1 = require("./middleware");
 const crypto_1 = require("crypto");
 const amqplib_1 = __importDefault(require("amqplib"));
@@ -71,10 +74,15 @@ const prisma = new prisma_1.PrismaClient({
 const apolloService = new apollo_service_1.ApolloService(prisma);
 const sparkService = new spark_service_1.SparkService(prisma);
 // Global maps for WebSockets and Jobs
-const wsClients = new Set();
+const lineageSvc = new lineage_service_1.LineageService(prisma);
 // ── Enterprise Middleware ─────────────────────────────────────────
 app.use((0, helmet_1.default)());
-app.use((0, cors_1.default)({ origin: process.env.CORS_ORIGIN ?? '*' }));
+const corsOrigin = process.env.CORS_ORIGIN;
+if (process.env.NODE_ENV === 'production' && (!corsOrigin || corsOrigin === '*')) {
+    console.error('CRITICAL: Strict CORS_ORIGIN is required in production.');
+    process.exit(1);
+}
+app.use((0, cors_1.default)({ origin: corsOrigin ?? '*' }));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use((0, middleware_1.correlationId)());
 app.use((0, middleware_1.requestLogger)());
@@ -383,6 +391,213 @@ app.get('/api/v1/pipelines', async (req, res) => {
         return res.status(500).json({ error: String(err) });
     }
 });
+app.post('/api/v1/integration/jobs/:id/run', async (req, res) => {
+    try {
+        const job = await prisma.integrationJob.findUnique({ where: { id: req.params.id } });
+        if (!job)
+            return res.status(404).json({ error: 'Job not found' });
+        const queueItem = await prisma.jobQueue.create({
+            data: {
+                jobType: 'INTEGRATION_SYNC',
+                integrationJobId: job.id,
+                payload: { manualRun: true },
+                priority: 10, // Manual runs get higher priority
+            }
+        });
+        return res.status(202).json(queueItem);
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+app.post('/api/v1/integration/jobs/:id/backfill', async (req, res) => {
+    try {
+        const { startDate, endDate, batchSize } = req.body;
+        const job = await prisma.integrationJob.findUnique({ where: { id: req.params.id } });
+        if (!job)
+            return res.status(404).json({ error: 'Job not found' });
+        if (!startDate || !endDate)
+            return res.status(400).json({ error: 'startDate and endDate required' });
+        const queueItem = await prisma.jobQueue.create({
+            data: {
+                jobType: 'INTEGRATION_SYNC',
+                integrationJobId: job.id,
+                payload: { backfill: true, startDate, endDate, batchSize },
+                priority: 2, // Backfills get lower priority
+            }
+        });
+        return res.status(202).json(queueItem);
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+app.post('/api/v1/jobs/replay/:jobQueueId', async (req, res) => {
+    try {
+        const queueItem = await prisma.jobQueue.findUnique({ where: { id: req.params.jobQueueId } });
+        if (!queueItem)
+            return res.status(404).json({ error: 'JobQueue item not found' });
+        if (queueItem.status !== 'DEAD_LETTER') {
+            return res.status(400).json({ error: 'Only DEAD_LETTER jobs can be replayed' });
+        }
+        const replayed = await prisma.jobQueue.update({
+            where: { id: queueItem.id },
+            data: {
+                status: 'QUEUED',
+                attempts: 0,
+                nextAttemptAt: new Date(),
+                lastError: null,
+            }
+        });
+        return res.json(replayed);
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+app.post('/api/v1/policies/:id/simulate', async (req, res) => {
+    try {
+        const { dataPayload } = req.body;
+        if (!dataPayload)
+            return res.status(400).json({ error: 'dataPayload is required' });
+        const result = await (0, policy_engine_1.simulatePolicy)(req.params.id, dataPayload, prisma);
+        if (result.error && result.error === 'Policy not found') {
+            return res.status(404).json({ error: result.error });
+        }
+        return res.json(result);
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+// Rotate an API key
+app.post('/api/v1/auth/keys/:id/rotate', (0, middleware_1.requireRole)('ADMIN'), async (req, res) => {
+    try {
+        const existingKey = await prisma.apiKey.findUnique({
+            where: { id: req.params.id }
+        });
+        if (!existingKey) {
+            return res.status(404).json({ error: 'API key not found' });
+        }
+        // Generate new key
+        const rawKey = (0, crypto_1.randomUUID)().replace(/-/g, '');
+        const plainTextKey = `c3-aip-${rawKey}`;
+        const newKeyHash = (0, middleware_1.hashApiKey)(plainTextKey);
+        // Update in DB
+        const updatedKey = await prisma.apiKey.update({
+            where: { id: existingKey.id },
+            data: {
+                keyHash: newKeyHash,
+            }
+        });
+        return res.json({
+            id: updatedKey.id,
+            name: updatedKey.name,
+            key: plainTextKey, // Returned exactly once upon rotation
+            enabled: updatedKey.enabled,
+            role: updatedKey.role
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+// ── MLOps Endpoints ────────────────────────────────────────────────────────
+app.post('/api/v1/ml/models/:modelVersionId/promote', async (req, res) => {
+    try {
+        const { status } = req.body; // e.g. "STAGING" or "PRODUCTION"
+        if (!['STAGING', 'PRODUCTION', 'RETIRED'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid promotion status' });
+        }
+        const mv = await prisma.modelVersion.findUnique({ where: { id: req.params.modelVersionId } });
+        if (!mv)
+            return res.status(404).json({ error: 'Model version not found' });
+        // Enforce basic promotion rules (DRAFT -> STAGING -> PRODUCTION)
+        if (status === 'PRODUCTION') {
+            if (mv.status !== 'STAGING' && mv.status !== 'DRAFT') { // Allow fast-track from DRAFT for admin logic
+                return res.status(400).json({ error: 'Can only promote to PRODUCTION from STAGING or DRAFT' });
+            }
+            // Retire the existing PRODUCTION model for this definition
+            await prisma.modelVersion.updateMany({
+                where: {
+                    modelDefinitionId: mv.modelDefinitionId,
+                    status: 'PRODUCTION'
+                },
+                data: { status: 'RETIRED' }
+            });
+        }
+        const updated = await prisma.modelVersion.update({
+            where: { id: mv.id },
+            data: { status }
+        });
+        return res.json(updated);
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+app.post('/api/v1/ml/models/:modelVersionId/metrics/drift', async (req, res) => {
+    try {
+        const { featureName, metricType, value, referenceStart, referenceEnd, currentStart, currentEnd } = req.body;
+        const mv = await prisma.modelVersion.findUnique({ where: { id: req.params.modelVersionId } });
+        if (!mv)
+            return res.status(404).json({ error: 'Model version not found' });
+        const metric = await prisma.modelDriftMetric.create({
+            data: {
+                modelVersionId: mv.id,
+                featureName,
+                metricType,
+                value,
+                referenceStart: new Date(referenceStart),
+                referenceEnd: new Date(referenceEnd),
+                currentStart: new Date(currentStart),
+                currentEnd: new Date(currentEnd)
+            }
+        });
+        return res.status(201).json(metric);
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
+// ──────────────────────────────────────────────────────────────────────────
+app.get('/api/v1/governance/impact-analysis', async (req, res) => {
+    try {
+        const { sourceId, sourceType } = req.query;
+        if (!sourceId || !sourceType) {
+            return res.status(400).json({ error: 'sourceId and sourceType are required' });
+        }
+        // Simple BFS for downstream graph
+        const impactNodes = new Set();
+        const impactEdges = [];
+        const queue = [{ id: String(sourceId), type: String(sourceType) }];
+        const visited = new Set();
+        while (queue.length > 0) {
+            const current = queue.shift();
+            const key = `${current.type}:${current.id}`;
+            if (visited.has(key))
+                continue;
+            visited.add(key);
+            impactNodes.add(key);
+            const downstreams = await prisma.lineageEdge.findMany({
+                where: { sourceId: current.id, sourceType: current.type }
+            });
+            for (const edge of downstreams) {
+                impactEdges.push(edge);
+                queue.push({ id: edge.targetId, type: edge.targetType });
+            }
+        }
+        return res.json({
+            source: { id: sourceId, type: sourceType },
+            impactedNodeCount: impactNodes.size - 1,
+            nodes: Array.from(impactNodes),
+            edges: impactEdges
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ error: String(error) });
+    }
+});
 app.post('/api/v1/ontology/derive-relationships', async (req, res) => {
     try {
         const { sourceEntityTypeId, targetEntityTypeId, relationshipDefId, maxDistanceKm } = req.body;
@@ -445,9 +660,21 @@ app.post('/api/ontology/entity-types', async (req, res) => {
         const projectId = getProjectId(req);
         if (!projectId)
             return res.status(400).json({ error: 'Project ID required' });
-        const { name, attributes = [] } = req.body;
+        const { name, attributes = [], strictGovernance = false } = req.body;
         if (!name)
             return res.status(400).json({ error: 'name is required' });
+        if (strictGovernance) {
+            const changeRequest = await prisma.changeRequest.create({
+                data: {
+                    resourceType: 'EntityType',
+                    proposedChanges: { name, attributes },
+                    status: 'DRAFT',
+                    createdBy: req.auth?.apiKeyName || 'system',
+                    projectId
+                }
+            });
+            return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
+        }
         const created = await prisma.entityType.create({
             data: {
                 projectId,
@@ -517,12 +744,25 @@ app.post('/api/ontology/entity-types/:id/instances', async (req, res) => {
 // ── PATCH /api/ontology/entity-types/:id — rename an entity type ──────────────
 app.patch('/api/ontology/entity-types/:id', async (req, res) => {
     try {
-        const { name } = req.body;
+        const { name, strictGovernance = false } = req.body;
         if (!name)
             return res.status(400).json({ error: 'name is required' });
         const et = await prisma.entityType.findUnique({ where: { id: req.params.id } });
         if (!et)
             return res.status(404).json({ error: 'Not found' });
+        if (strictGovernance) {
+            const changeRequest = await prisma.changeRequest.create({
+                data: {
+                    resourceType: 'EntityType',
+                    resourceId: et.id,
+                    proposedChanges: { name },
+                    status: 'DRAFT',
+                    createdBy: req.auth?.apiKeyName || 'system',
+                    projectId: et.projectId
+                }
+            });
+            return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
+        }
         // Create a new version with updated name by updating in-place (name field is mutable metadata)
         // For just a rename we update name directly as it is not a schema-breaking change
         const updated = await prisma.entityType.update({
@@ -1972,6 +2212,7 @@ app.get('/integration-jobs/:id/executions', async (req, res) => {
         return res.status(500).json({ error: 'failed to list executions', details: String(error) });
     }
 });
+app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_1.swaggerSpec, { explorer: true }));
 // ── Orchestration & Job Queue ──────────────────────────────────────
 app.get('/api/v1/orchestration/jobs', async (req, res) => {
     try {
@@ -2468,7 +2709,7 @@ app.post('/decisions/:logicalId/evaluate', async (req, res) => {
             return res.json(result);
         }
         else {
-            const result = await evaluateAllRules(logicalId, 'MANUAL', data, prisma);
+            const result = await (0, decision_engine_1.evaluateAllRules)(logicalId, 'MANUAL', data, prisma);
             return res.json(result);
         }
     }
@@ -2492,7 +2733,7 @@ app.post('/decisions/:logicalId/simulate', async (req, res) => {
             return res.json(result);
         }
         else {
-            const result = await evaluateAllRules(logicalId, 'SIMULATION', data, prisma, true);
+            const result = await (0, decision_engine_1.evaluateAllRules)(logicalId, 'SIMULATION', data, prisma, true);
             return res.json(result);
         }
     }
@@ -5935,7 +6176,7 @@ app.post('/api/spark/jobs/:id/run', async (req, res) => {
         // ws.send payload wrapper 
         const broadcastFn = (eventUrl, payload) => {
             const msg = JSON.stringify({ type: eventUrl, payload });
-            for (const client of wsClients) {
+            for (const client of wsClients.values()) {
                 if (client.ws.readyState === ws_1.WebSocket.OPEN)
                     client.ws.send(msg);
             }
