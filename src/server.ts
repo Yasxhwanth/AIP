@@ -33,6 +33,7 @@ import {
   hashApiKey,
   generateJwt,
   requireRole,
+  enforceIdempotency,
 } from './middleware';
 import { randomUUID } from 'crypto';
 import amqp from 'amqplib';
@@ -460,7 +461,8 @@ app.post('/api/v1/pipelines', async (req, res) => {
 
 app.get('/api/v1/pipelines', async (req, res) => {
   try {
-    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    const headerProjectId = req.header('X-Project-Id');
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || (Array.isArray(headerProjectId) ? headerProjectId[0] : headerProjectId);
     if (!projectId && process.env.NODE_ENV !== 'production') {
       projectId = (global as any).DEFAULT_PROJECT_ID;
     }
@@ -476,15 +478,24 @@ app.get('/api/v1/pipelines', async (req, res) => {
   }
 });
 
-app.post('/api/v1/integration/jobs/:id/run', async (req, res) => {
+app.post('/api/v1/integration/jobs/:id/run', enforceIdempotency(prisma), async (req, res) => {
   try {
-    const job = await prisma.integrationJob.findUnique({ where: { id: req.params.id } });
+    const job = await prisma.integrationJob.findUnique({ where: { id: req.params.id as string } });
     if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    let idempotencyKeyHeader = req.headers['x-idempotency-key'];
+    let idempotencyKey: string | undefined = undefined;
+    if (Array.isArray(idempotencyKeyHeader)) {
+      idempotencyKey = idempotencyKeyHeader[0];
+    } else if (idempotencyKeyHeader) {
+      idempotencyKey = idempotencyKeyHeader;
+    }
 
     const queueItem = await prisma.jobQueue.create({
       data: {
         jobType: 'INTEGRATION_SYNC',
         integrationJobId: job.id,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
         payload: { manualRun: true },
         priority: 10, // Manual runs get higher priority
       }
@@ -539,6 +550,182 @@ app.post('/api/v1/jobs/replay/:jobQueueId', async (req, res) => {
     return res.json(replayed);
   } catch (error) {
     return res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/jobs/dead-letter:
+ *   get:
+ *     summary: Bulk view of DEAD_LETTER jobs
+ *     tags: [Orchestration]
+ *     security: [{ ApiKeyAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: jobType
+ *         schema: { type: string }
+ *       - in: query
+ *         name: integrationJobId
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Summary and paginated records
+ */
+app.get('/api/v1/jobs/dead-letter', async (req, res) => {
+  try {
+    const { jobType, integrationJobId, take = 50, skip = 0 } = req.query;
+
+    // Base where clause for DEAD_LETTER
+    const where: Prisma.JobQueueWhereInput = {
+      status: 'DEAD_LETTER'
+    };
+
+    if (jobType) where.jobType = String(jobType);
+    if (integrationJobId) where.integrationJobId = String(integrationJobId);
+
+    // Fetch aggregate counts grouped by jobType to give a dashboard overview
+    const summary = await prisma.jobQueue.groupBy({
+      by: ['jobType', 'integrationJobId'],
+      where,
+      _count: { id: true },
+    });
+
+    // Fetch the actual paginated records
+    const records = await prisma.jobQueue.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: Number(take),
+      skip: Number(skip),
+      select: {
+        id: true,
+        jobType: true,
+        integrationJobId: true,
+        payload: true,
+        attempts: true,
+        lastError: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({
+      summary: summary.map(s => ({
+        jobType: s.jobType,
+        integrationJobId: s.integrationJobId,
+        count: s._count.id
+      })),
+      records
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/jobs/replay-all:
+ *   post:
+ *     summary: Bulk requeue DEAD_LETTER jobs
+ *     tags: [Orchestration]
+ *     security: [{ ApiKeyAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties: { jobType: { type: string } }
+ *     responses:
+ *       200:
+ *         description: Number of jobs requeued
+ */
+app.post('/api/v1/jobs/replay-all', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { jobType } = req.body;
+
+    const where: Prisma.JobQueueWhereInput = {
+      status: 'DEAD_LETTER'
+    };
+    if (jobType) {
+      where.jobType = String(jobType);
+    }
+
+    const result = await prisma.jobQueue.updateMany({
+      where,
+      data: {
+        status: 'QUEUED',
+        attempts: 0,
+        nextAttemptAt: new Date(),
+        lastError: null,
+      }
+    });
+
+    res.json({
+      message: `Successfully requeued jobs`,
+      count: result.count
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/**
+ * @openapi
+ * /api/v1/telemetry/pipelines/slo:
+ *   get:
+ *     summary: Get Pipeline SLO telemetry (success rate, p50/p90/p99) over last 24h
+ *     tags: [Telemetry]
+ *     security: [{ ApiKeyAuth: [] }, { BearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Telemetry statistics
+ */
+app.get('/api/v1/telemetry/pipelines/slo', async (req, res) => {
+  try {
+    const rawProjectId = getProjectId(req);
+    const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    // 24 hours ago
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const runs = await prisma.pipelineRun.findMany({
+      where: {
+        projectId,
+        startedAt: { gte: since }
+      },
+      select: {
+        status: true,
+        duration: true
+      }
+    });
+
+    const total = runs.length;
+    if (total === 0) {
+      return res.json({ successRate: 100, p50: 0, p90: 0, p99: 0, count: 0 });
+    }
+
+    const successes = runs.filter(r => r.status === 'success');
+    const successRate = (successes.length / total) * 100;
+
+    // Calculate percentiles manually (DB agnostic)
+    const durations = successes.map(r => r.duration ?? 0).sort((a, b) => a - b);
+
+    const getPercentile = (p: number) => {
+      if (durations.length === 0) return 0;
+      const index = Math.ceil((p / 100) * durations.length) - 1;
+      return durations[Math.max(0, index)];
+    };
+
+    res.json({
+      successRate: Number(successRate.toFixed(2)),
+      p50: getPercentile(50),
+      p90: getPercentile(90),
+      p99: getPercentile(99),
+      count: total
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
   }
 });
 
@@ -728,7 +915,9 @@ app.post('/api/v1/ontology/derive-relationships', async (req, res) => {
 import { runFullReasoner } from './ontology-reasoner';
 
 function getProjectId(req: express.Request): string | null {
-  let id = (req as any).auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id') || req.body?.projectId;
+  const headerId = req.header('X-Project-Id');
+  const projectIdStr = Array.isArray(headerId) ? headerId[0] : headerId;
+  let id = (req as any).auth?.projectId || (req.query.projectId as string) || projectIdStr || req.body?.projectId;
   if (!id && process.env.NODE_ENV !== 'production') id = (global as any).DEFAULT_PROJECT_ID;
   return id ?? null;
 }
@@ -811,9 +1000,9 @@ app.post('/api/ontology/entity-types', async (req, res) => {
 });
 
 // ── POST /api/ontology/entity-types/:id/instances — create data row ──────────
-app.post('/api/ontology/entity-types/:id/instances', async (req, res) => {
+app.post('/api/ontology/entity-types/:id/instances', enforceIdempotency(prisma), async (req, res) => {
   try {
-    const entityTypeId = req.params.id;
+    const entityTypeId = req.params.id as string;
     const { logicalId, data } = req.body;
     if (!logicalId) return res.status(400).json({ error: 'Missing logicalId' });
 
@@ -840,7 +1029,7 @@ app.post('/api/ontology/entity-types/:id/instances', async (req, res) => {
     } else {
       // Fallback if broker is down: Synchronous insert
       const newInstance = await prisma.currentEntityState.create({
-        data: { logicalId: String(logicalId), entityTypeId, data: data || {}, updatedAt: new Date() },
+        data: { logicalId: String(logicalId), entityTypeId, data: (data || {}) as Prisma.InputJsonValue, updatedAt: new Date() },
       });
       await (prisma as any).entityEvent.create({
         data: { logicalId: String(logicalId), entityTypeId, eventType: 'CREATED', payload: data || {} },

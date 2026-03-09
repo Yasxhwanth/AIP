@@ -191,6 +191,8 @@ export function createRateLimiter(windowMs = 60_000, max = 100) {
 
 // ── Zod Validation ───────────────────────────────────────────────
 
+// ── Zod Validation ───────────────────────────────────────────────
+
 export function validate(schema: ZodSchema) {
     return (req: Request, res: Response, next: NextFunction): void => {
         try {
@@ -204,6 +206,52 @@ export function validate(schema: ZodSchema) {
                         field: e.path.join('.'),
                         message: e.message,
                     })),
+                });
+            } else {
+                next(error);
+            }
+        }
+    };
+}
+
+// ── Idempotency Middleware ───────────────────────────────────────
+
+/**
+ * Ensures that a request with a given X-Idempotency-Key header is only processed once.
+ * Creates a stub DomainEvent to hold the idempotency key lock.
+ */
+export function enforceIdempotency(prisma: PrismaClient) {
+    return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+        const idempotencyKey = req.headers['x-idempotency-key'] as string | undefined;
+
+        if (!idempotencyKey) {
+            // If they don't provide a key, let the downstream handler deal with it (or ignore)
+            return next();
+        }
+
+        try {
+            // Attempt to claim the idempotency key by creating a marker record.
+            // If it already exists, this throws a unique constraint violation.
+            // (Using DomainEvent since it already has a unique idempotencyKey field).
+            await prisma.domainEvent.create({
+                data: {
+                    idempotencyKey,
+                    eventType: 'IdempotencyLock',
+                    entityTypeId: 'System',
+                    logicalId: 'System',
+                    entityVersion: 1,
+                    payload: { path: req.path, method: req.method },
+                }
+            });
+
+            // Lock acquired, continue to the handler
+            next();
+        } catch (error: any) {
+            if (error?.code === 'P2002') {
+                // Unique constraint failed -> key already used
+                res.status(409).json({
+                    error: 'Conflict: This request has already been processed (duplicate X-Idempotency-Key)',
+                    idempotencyKey
                 });
             } else {
                 next(error);

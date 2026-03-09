@@ -297,6 +297,11 @@ export async function executeJob(
             // Data Contract Validation
             if (dataContract) {
                 let contractFailed = false;
+
+                // Allow defining a custom threshold in the contract, default to 5%
+                const contractObj = dataContract as Record<string, any>;
+                const threshold = typeof contractObj.threshold === 'number' ? contractObj.threshold : 0.05;
+
                 if (dataContract.required) {
                     for (const reqField of dataContract.required) {
                         if (raw[reqField] === undefined || raw[reqField] === null) {
@@ -356,6 +361,16 @@ export async function executeJob(
                 recordsFailed++;
                 // eslint-disable-next-line no-console
                 console.warn(`[DataIntegration] Failed to ingest record ${logicalId}:`, result.error);
+            }
+        }
+        const totalProcessed = recordsProcessed + recordsFailed + recordsDropped;
+        if (dataContract && totalProcessed > 0) {
+            const contractObj = dataContract as Record<string, any>;
+            const threshold = typeof contractObj.threshold === 'number' ? contractObj.threshold : 0.05;
+            const dropRatio = recordsDropped / totalProcessed;
+
+            if (dropRatio > threshold) {
+                throw new Error(`Data Quality Violation: Dropped record ratio (${(dropRatio * 100).toFixed(1)}%) exceeds threshold (${(threshold * 100).toFixed(1)}%). Job aborted to prevent data corruption.`);
             }
         }
 
