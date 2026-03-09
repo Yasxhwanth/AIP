@@ -437,6 +437,19 @@ export async function dryRunJob(
 // ── Simple Scheduler (Upgraded to enqueue jobs instead of run) ────
 
 /**
+ * Live telemetry for the job scheduler — consumed by the deep health endpoint.
+ * All fields are null until the scheduler has started and run at least one tick.
+ */
+export const schedulerTelemetry = {
+    jobScheduler: {
+        startedAt: null as Date | null,
+        lastTickAt: null as Date | null,
+        lastError: null as string | null,
+        tickIntervalMs: 60_000, // expected tick interval
+    },
+};
+
+/**
  * A lightweight interval-based scheduler.
  * Checks every 60 seconds for jobs with a `schedule` field.
  * Supports simple interval patterns: "every:Xs", "every:Xm", "every:Xh"
@@ -461,6 +474,9 @@ function parseScheduleMs(schedule: string): number | null {
 
 export function startScheduler(prisma: PrismaClient): void {
     const TICK_INTERVAL = 60_000; // check every 60 seconds
+
+    schedulerTelemetry.jobScheduler.startedAt = new Date();
+    schedulerTelemetry.jobScheduler.tickIntervalMs = TICK_INTERVAL;
 
     setInterval(async () => {
         try {
@@ -504,9 +520,15 @@ export function startScheduler(prisma: PrismaClient): void {
                     });
                 }
             }
+
+            // Record successful tick
+            schedulerTelemetry.jobScheduler.lastTickAt = new Date();
+            schedulerTelemetry.jobScheduler.lastError = null;
         } catch (error) {
             // eslint-disable-next-line no-console
             console.error('[Scheduler] Tick error:', error);
+            schedulerTelemetry.jobScheduler.lastError = String(error);
+            schedulerTelemetry.jobScheduler.lastTickAt = new Date();
         }
     }, TICK_INTERVAL);
 

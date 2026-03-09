@@ -140,12 +140,27 @@ export async function computeAllRecentRollups(
 }
 
 /**
+ * Live telemetry for the rollup scheduler — consumed by the deep health endpoint.
+ */
+export const rollupTelemetry = {
+    rollupScheduler: {
+        startedAt: null as Date | null,
+        lastTickAt: null as Date | null,
+        lastError: null as string | null,
+        tickIntervalMs: 5 * 60 * 1000, // expected tick interval
+    },
+};
+
+/**
  * Start a background scheduler that periodically computes rollups.
  * Runs every 5 minutes and rolls up the last 10 minutes of data into 5m buckets.
  */
 export function startRollupScheduler(prisma: PrismaClient): void {
     const INTERVAL = 5 * 60 * 1000; // every 5 minutes
     const LOOKBACK = 10 * 60 * 1000; // look back 10 minutes
+
+    rollupTelemetry.rollupScheduler.startedAt = new Date();
+    rollupTelemetry.rollupScheduler.tickIntervalMs = INTERVAL;
 
     setInterval(() => {
         const idempotencyKey = `TELEMETRY_ROLLUP_${Math.floor(Date.now() / INTERVAL)}`;
@@ -159,8 +174,13 @@ export function startRollupScheduler(prisma: PrismaClient): void {
                 priority: 1, // lower priority than data ingest
             },
             update: {} // do nothing if it already exists
+        }).then(() => {
+            rollupTelemetry.rollupScheduler.lastTickAt = new Date();
+            rollupTelemetry.rollupScheduler.lastError = null;
         }).catch((err: any) => {
             console.error('[RollupScheduler] Failed to enqueue rollup job:', err);
+            rollupTelemetry.rollupScheduler.lastError = String(err);
+            rollupTelemetry.rollupScheduler.lastTickAt = new Date();
         });
     }, INTERVAL);
 

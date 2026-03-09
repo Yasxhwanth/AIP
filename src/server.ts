@@ -5,10 +5,10 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Prisma } from './generated/prisma';
 import { evaluatePolicies, simulatePolicy } from './policy-engine';
-import { executeJob, startScheduler, dryRunJob } from './data-integration';
+import { executeJob, startScheduler, dryRunJob, schedulerTelemetry } from './data-integration';
 import { RelationshipDerivationService, startConfidenceDecayScheduler } from './relationship-derivation-service';
 import { evaluateComputedMetrics } from './computed-metrics';
-import { computeRollups, computeAllRecentRollups, startRollupScheduler } from './rollup-engine';
+import { computeRollups, computeAllRecentRollups, startRollupScheduler, rollupTelemetry } from './rollup-engine';
 import { Orchestrator } from './orchestrator';
 import { runInference, runInferenceByModel, runAllModelsForEntity } from './inference-engine';
 import { executeDecision, evaluateAllRules } from './decision-engine';
@@ -94,8 +94,12 @@ const lineageSvc = new LineageService(prisma);
 app.use(helmet());
 const corsOrigin = process.env.CORS_ORIGIN;
 if (process.env.NODE_ENV === 'production' && (!corsOrigin || corsOrigin === '*')) {
-  console.error('CRITICAL: Strict CORS_ORIGIN is required in production.');
+  // Fail fast — insecure CORS default must never reach production
+  logger.error('CRITICAL: CORS_ORIGIN must be set to an explicit allowlist in production. Exiting.');
   process.exit(1);
+}
+if (!corsOrigin) {
+  logger.warn('CORS_ORIGIN not set — allowing all origins (*). Set CORS_ORIGIN before deploying to production.');
 }
 app.use(cors({ origin: corsOrigin ?? '*' }));
 app.use(express.json({ limit: '10mb' }));
@@ -171,18 +175,59 @@ app.get('/api/v1/health', (_req, res) => {
 
 app.get('/api/v1/health/deep', async (_req, res) => {
   try {
+    // 1. Database liveness
+    const dbStart = Date.now();
     await prisma.$queryRaw`SELECT 1`;
-    res.json({
-      status: 'ok',
-      database: 'connected',
-      schedulers: { jobScheduler: 'running', rollupScheduler: 'running' },
+    const dbLatencyMs = Date.now() - dbStart;
+
+    // 2. Derive scheduler status from live telemetry
+    const now = Date.now();
+    const STALL_MULTIPLIER = 2; // flag as stalled if silent for 2× the expected interval
+
+    function deriveSchedulerStatus(telemetry: {
+      startedAt: Date | null;
+      lastTickAt: Date | null;
+      lastError: string | null;
+      tickIntervalMs: number;
+    }): { status: string; lagMs: number | null; lastTickAt: string | null; lastError: string | null } {
+      if (!telemetry.startedAt) {
+        return { status: 'not_started', lagMs: null, lastTickAt: null, lastError: null };
+      }
+      const lagMs = telemetry.lastTickAt ? now - telemetry.lastTickAt.getTime() : null;
+      const stalled = lagMs !== null && lagMs > STALL_MULTIPLIER * telemetry.tickIntervalMs;
+      const status = stalled ? 'stalled' : telemetry.lastError ? 'error' : 'ok';
+      return {
+        status,
+        lagMs,
+        lastTickAt: telemetry.lastTickAt?.toISOString() ?? null,
+        lastError: telemetry.lastError,
+      };
+    }
+
+    const jobSchedulerHealth = deriveSchedulerStatus(schedulerTelemetry.jobScheduler);
+    const rollupSchedulerHealth = deriveSchedulerStatus(rollupTelemetry.rollupScheduler);
+
+    const allHealthy =
+      jobSchedulerHealth.status === 'ok' &&
+      rollupSchedulerHealth.status === 'ok';
+
+    const responseBody = {
+      status: allHealthy ? 'ok' : 'degraded',
+      database: { status: 'connected', latencyMs: dbLatencyMs },
+      schedulers: {
+        jobScheduler: jobSchedulerHealth,
+        rollupScheduler: rollupSchedulerHealth,
+      },
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    res.status(allHealthy ? 200 : 503).json(responseBody);
   } catch (error) {
     res.status(503).json({
       status: 'degraded',
-      database: 'disconnected',
+      database: { status: 'disconnected' },
       error: String(error),
+      timestamp: new Date().toISOString(),
     });
   }
 });
