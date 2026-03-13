@@ -14,6 +14,7 @@ import {
     AlertCircle, Check, Loader2, Activity, Link2, BookOpen,
     Sparkles, MoreHorizontal, ArrowRightLeft, Key
 } from "lucide-react";
+import { PreFlightModal } from "@/components/PreFlightModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -150,6 +151,13 @@ export default function NoCodeOntologyBuilder() {
     const [searchTerm, setSearchTerm] = useState("");
     const [graphMode, setGraphMode] = useState<"ontology" | "pipeline">("ontology");
 
+    // Pre-Flight Modal State
+    const [preFlight, setPreFlight] = useState<{
+        isOpen: boolean;
+        targetId: string;
+        targetName: string;
+    } | null>(null);
+
     // ReactFlow state
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -216,14 +224,24 @@ export default function NoCodeOntologyBuilder() {
     };
 
     // ── Delete entity type ─────────────────────────────────────────────────────
-    const handleDeleteEntity = async (id: string, name: string) => {
-        if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const handleDeleteEntity = (id: string, name: string) => {
+        setPreFlight({ isOpen: true, targetId: id, targetName: name });
+    };
+
+    const confirmDeleteEntity = async () => {
+        if (!preFlight) return;
+        const { targetId, targetName } = preFlight;
+        setPreFlight({ ...preFlight, isOpen: false });
         try {
-            await apiFetch(`/api/ontology/entity-types/${id}`, { method: "DELETE" });
-            showToast(`Deleted "${name}"`);
+            await apiFetch(`/api/ontology/entity-types/${targetId}`, { method: "DELETE" });
+            showToast(`Deleted "${targetName}"`);
             setSelectedId(null);
             loadEntityTypes();
-        } catch (e: any) { showToast(e.message, "err"); }
+            setPreFlight(null);
+        } catch (e: any) {
+            showToast(e.message, "err");
+            setPreFlight(null);
+        }
     };
 
     // ── Add property ───────────────────────────────────────────────────────────
@@ -326,6 +344,18 @@ export default function NoCodeOntologyBuilder() {
                     {toast.type === "ok" ? <Check className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                     {toast.msg}
                 </div>
+            )}
+
+            {/* ── PRE-FLIGHT MODAL ── */}
+            {preFlight && (
+                <PreFlightModal
+                    isOpen={preFlight.isOpen}
+                    onClose={() => setPreFlight(null)}
+                    onConfirm={confirmDeleteEntity}
+                    actionType="DELETE_ENTITY_TYPE"
+                    targetId={preFlight.targetId}
+                    actionDescription={`Drop Ontology Entity: ${preFlight.targetName}`}
+                />
             )}
 
             {/* ── TOOLBAR ── */}

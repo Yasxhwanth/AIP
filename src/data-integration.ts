@@ -3,6 +3,7 @@ import { evaluatePolicies } from './policy-engine';
 import { IdentityService } from './identity-service';
 import { ProvenanceService } from './provenance-service';
 import { runReasonerForEntity } from './ontology-reasoner';
+import { recordDomainEvent } from './domain-events';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -320,6 +321,23 @@ export async function executeJob(
                 if (contractFailed) {
                     recordsDropped++;
                     console.warn(`[DataIntegration] Record dropped due to data contract violation:`, raw);
+
+                    // Persist rejected record for quarantine/analysis
+                    try {
+                        await prisma.rejectedRecord.create({
+                            data: {
+                                projectId: job.targetEntityType.projectId ?? (global as any).DEFAULT_PROJECT_ID,
+                                dataSourceId: job.dataSourceId,
+                                jobId: job.id,
+                                rawRecord: raw as Prisma.InputJsonValue,
+                                errors: dataContract as Prisma.InputJsonValue,
+                            },
+                        });
+                    } catch (err) {
+                        // eslint-disable-next-line no-console
+                        console.warn('[DataIntegration] Failed to persist RejectedRecord:', err);
+                    }
+
                     continue;
                 }
             }

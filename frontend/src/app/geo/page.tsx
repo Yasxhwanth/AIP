@@ -75,6 +75,7 @@ const VISUAL_MODES: { id: VisualMode; label: string; icon: any; desc: string }[]
     { id: 'nightvision', label: 'Night Vision', icon: Eye, desc: 'Green amplified' },
     { id: 'flir', label: 'FLIR Thermal', icon: Thermometer, desc: 'Thermal false-color' },
     { id: 'crt', label: 'CRT Mode', icon: Tv2, desc: 'Retro scanlines' },
+    { id: 'ctos', label: 'ctOS 2.0', icon: Radio, desc: 'Central Operating System' },
 ];
 
 // ─── Main Component ─────────────────────────────────────────────────────────
@@ -161,9 +162,38 @@ function GeoExplorerInner() {
 
     return (
         <div
-            className="font-sans bg-transparent"
+            className={`font-sans bg-transparent transition-all duration-700 ${visualMode === 'ctos' ? 'ctos-vignette' : ''}`}
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, pointerEvents: 'none', overflow: 'hidden' }}
         >
+            {visualMode === 'ctos' && (
+                <>
+                    {/* Scanline overlay */}
+                    <div className="absolute inset-0 pointer-events-none z-[15] ctos-scanline opacity-10" />
+                    {/* Corner HUD brackets */}
+                    <div className="absolute inset-0 pointer-events-none z-[15]" style={{ background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%)' }} />
+                    {/* Top-left corner bracket */}
+                    <div className="absolute top-16 left-4 pointer-events-none z-[16]" style={{ width: 80, height: 80, borderTop: '2px solid rgba(0,251,255,0.55)', borderLeft: '2px solid rgba(0,251,255,0.55)' }} />
+                    {/* Top-right corner bracket */}
+                    <div className="absolute top-16 right-4 pointer-events-none z-[16]" style={{ width: 80, height: 80, borderTop: '2px solid rgba(0,251,255,0.55)', borderRight: '2px solid rgba(0,251,255,0.55)' }} />
+                    {/* Bottom-left corner bracket */}
+                    <div className="absolute bottom-20 left-4 pointer-events-none z-[16]" style={{ width: 80, height: 80, borderBottom: '2px solid rgba(0,251,255,0.55)', borderLeft: '2px solid rgba(0,251,255,0.55)' }} />
+                    {/* Bottom-right corner bracket */}
+                    <div className="absolute bottom-20 right-4 pointer-events-none z-[16]" style={{ width: 80, height: 80, borderBottom: '2px solid rgba(0,251,255,0.55)', borderRight: '2px solid rgba(0,251,255,0.55)' }} />
+                    {/* ctOS status bar */}
+                    <div className="absolute top-[68px] left-1/2 -translate-x-1/2 pointer-events-none z-[16] flex items-center gap-3 px-4 py-1" style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(0,251,255,0.25)', borderRadius: 2 }}>
+                        <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'rgba(0,251,255,0.9)', letterSpacing: 3, fontWeight: 900, textTransform: 'uppercase' }}>◈ ctOS 2.0 · SYSTEM ONLINE · SURVEILLANCE ACTIVE</span>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    </div>
+                    {/* Animated sweep line */}
+                    <div className="absolute inset-0 pointer-events-none z-[14] overflow-hidden">
+                        <div style={{
+                            position: 'absolute', top: 0, left: '-100%', width: '40%', height: '100%',
+                            background: 'linear-gradient(90deg, transparent 0%, rgba(0,251,255,0.04) 50%, transparent 100%)',
+                            animation: 'ctossweep 6s linear infinite',
+                        }} />
+                    </div>
+                </>
+            )}
 
             {/* BattlefieldOverview renders nothing here — Cesium lives on document.body at z-index 0 */}
             <BattlefieldOverview

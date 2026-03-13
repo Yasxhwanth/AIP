@@ -9,8 +9,55 @@ import { useWorkspaceStore } from "@/store/workspace";
 import {
     Home, Search, Bell, FolderOpen,
     Globe, HelpCircle, AlignJustify, ChevronDown,
-    ArrowLeftRight, User
+    ArrowLeftRight, User, Activity, AlertTriangle, XCircle
 } from "lucide-react";
+import { useWorkspaceHealth } from "@/store/workspace-health";
+
+// ─── Health Indicator Component ──────────────────────────────────────────────
+const HealthIndicator = ({ collapsed }: { collapsed: boolean }) => {
+    const { health, isPolling } = useWorkspaceHealth();
+
+    if (!isPolling) return null;
+
+    let icon = <Activity style={{ width: 14, height: 14, color: "#64748B", flexShrink: 0 }} />;
+    let text = "Connecting...";
+    let color = "#64748B";
+
+    if (health) {
+        if (health.status === 'ok') {
+            const lag = health.metrics?.maxQueueLagMs || 0;
+            const lagSec = Math.floor(lag / 1000);
+            icon = <Activity style={{ width: 14, height: 14, color: "#22C55E", flexShrink: 0 }} />;
+            text = `System Healthy (${lagSec}s lag)`;
+            color = "#A1E6B9"; // light green for text
+        } else if (health.status === 'degraded') {
+            icon = <AlertTriangle style={{ width: 14, height: 14, color: "#F59E0B", flexShrink: 0 }} />;
+            text = "System Degraded";
+            color = "#FCD34D"; // light amber
+        } else {
+            icon = <XCircle style={{ width: 14, height: 14, color: "#EF4444", flexShrink: 0 }} />;
+            text = "System Offline";
+            color = "#FCA5A5"; // light red
+        }
+    }
+
+    return (
+        <div style={{
+            display: "flex", alignItems: "center", gap: 9,
+            padding: "6px 14px", borderRadius: 5, cursor: "default",
+        }} title={collapsed ? text : undefined}>
+            {icon}
+            {!collapsed && (
+                <span style={{
+                    flex: 1, fontSize: 12, color: color, fontWeight: 500,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+                }}>
+                    {text}
+                </span>
+            )}
+        </div>
+    );
+};
 
 // ─── Palantir AIP app icon SVGs (matching the exact colors in reference) ──────
 // ─── Palantir Foundry logo mark (cylinder/database stack) ────────────────────
@@ -226,13 +273,16 @@ export default function Sidebar() {
 
             {/* ── Bottom controls ── */}
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.065)", paddingTop: 4, paddingBottom: 6, flexShrink: 0 }}>
+                {/* Dynamic Health Indicator */}
+                <div style={{ padding: "1px 6px" }}>
+                    <HealthIndicator collapsed={collapsed} />
+                </div>
 
-                {/* English (with dropdown) */}
+                {/* Standard Account Controls */}
                 <div style={{ padding: "1px 6px" }}>
                     {[
                         { icon: Globe, label: "English", dropdown: true },
                         { icon: ArrowLeftRight, label: "Track: Default", dropdown: true },
-                        { icon: HelpCircle, label: "Help & support", dropdown: false },
                         { icon: User, label: "Account", dropdown: false },
                         { icon: ArrowLeftRight, label: "Open other workspaces", dropdown: false },
                     ].map(({ icon: Icon, label, dropdown }) => (

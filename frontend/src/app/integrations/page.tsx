@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useWorkspaceStore } from "@/store/workspace";
 import {
     Database, UploadCloud, FileJson, FileSpreadsheet, ArrowRight,
@@ -11,6 +11,14 @@ import {
 import Papa from 'papaparse';
 import { PipelineEditor } from "@/components/PipelineEditor";
 import { ApiClient } from "@/lib/apiClient";
+
+interface DataQualitySourceSummary {
+    id: string;
+    name: string;
+    type: string;
+    createdAt: string;
+    rejectedRecords: number;
+}
 
 type IngestStep = 'UPLOAD' | 'MAP' | 'EXECUTE';
 type ViewMode = 'SOURCES' | 'WIZARD' | 'PIPELINES';
@@ -192,6 +200,28 @@ export default function IntegrationsPage() {
     const [mapping, setMapping] = useState<Record<string, string>>({});
     const [entityName, setEntityName] = useState("New_Entity_Type");
     const [viewMode, setViewMode] = useState<ViewMode>('SOURCES');
+
+    // Data Quality state
+    const [qualitySummary, setQualitySummary] = useState<DataQualitySourceSummary[]>([]);
+    const [qualityLoading, setQualityLoading] = useState(false);
+    const [qualityError, setQualityError] = useState<string | null>(null);
+
+    useEffect(() => {
+        async function loadQuality() {
+            try {
+                setQualityLoading(true);
+                setQualityError(null);
+                const data = await ApiClient.get<DataQualitySourceSummary[]>('/api/data/quality/summary');
+                setQualitySummary(data);
+            } catch (err: any) {
+                console.error("Failed to load data quality summary", err);
+                setQualityError("Failed to load data quality");
+            } finally {
+                setQualityLoading(false);
+            }
+        }
+        loadQuality();
+    }, []);
     const [inferring, setInferring] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -255,13 +285,16 @@ export default function IntegrationsPage() {
                     </div>
                     <div>
                         <h1 className="text-sm font-bold text-white">Data Integration</h1>
-                        <p className="text-[11px] text-slate-500">Connect sources and build your ontology graph</p>
+                        <p className="text-[11px] text-slate-500">Connect sources, validate quality, and build your ontology graph</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/8">
                     {(['SOURCES', 'WIZARD', 'PIPELINES'] as ViewMode[]).map(m => (
-                        <button key={m} onClick={() => setViewMode(m)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === m ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                        <button
+                            key={m}
+                            onClick={() => setViewMode(m)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === m ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                        >
                             {m}
                         </button>
                     ))}

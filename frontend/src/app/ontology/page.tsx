@@ -110,6 +110,14 @@ export default function OntologyPage() {
     const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
     const [previewData, setPreviewData] = useState<any[]>([]);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [selectedLogicalId, setSelectedLogicalId] = useState<string | null>(null);
+    const [historyEvents, setHistoryEvents] = useState<any[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyError, setHistoryError] = useState<string | null>(null);
+    const [selectedLogicalId, setSelectedLogicalId] = useState<string | null>(null);
+    const [historyEvents, setHistoryEvents] = useState<any[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyError, setHistoryError] = useState<string | null>(null);
 
     // ReactFlow hooks
     const [rfNodes, setRfNodes, onNodesChange] = useNodesState([]);
@@ -162,6 +170,9 @@ export default function OntologyPage() {
             try {
                 const res = await apiFetch(`/api/ontology/entity-types/${selectedEntityId}/instances?limit=50`);
                 setPreviewData(res.data ?? []);
+                setSelectedLogicalId(null);
+                setHistoryEvents([]);
+                setHistoryError(null);
             } catch {
                 setPreviewData([]);
             } finally {
@@ -170,6 +181,26 @@ export default function OntologyPage() {
         };
         loadPreview();
     }, [selectedEntityId]);
+
+    // â”€â”€ LOAD HISTORY FOR SELECTED ENTITY INSTANCE â”€â”€
+    useEffect(() => {
+        const loadHistory = async () => {
+            if (sidebarTab !== "history") return;
+            if (!selectedEntityId || !selectedLogicalId) return;
+            setHistoryLoading(true);
+            setHistoryError(null);
+            try {
+                const events = await apiFetch(`/api/ontology/entity-types/${selectedEntityId}/instances/${selectedLogicalId}/history`);
+                setHistoryEvents(events || []);
+            } catch (e: any) {
+                setHistoryEvents([]);
+                setHistoryError(e.message ?? "Failed to load history");
+            } finally {
+                setHistoryLoading(false);
+            }
+        };
+        loadHistory();
+    }, [sidebarTab, selectedEntityId, selectedLogicalId]);
 
     const handleNodeClick = (_: any, node: Node) => {
         setSelectedEntityId(node.id);

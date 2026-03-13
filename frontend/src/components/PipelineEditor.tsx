@@ -17,10 +17,22 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { Database, Filter, Layers, Share2, Play, Plus, Loader2 } from 'lucide-react';
 import { ApiClient } from '@/lib/apiClient';
+import { useCapabilities } from '@/store/capabilities';
 
 const nodeStyles = "shadow-2xl rounded-lg bg-[#181C25] min-w-[220px] overflow-hidden font-sans border border-[#2B3B52]";
 const headerStyles = "flex items-center justify-between px-3 py-2 border-b border-black/50";
 const contentStyles = "p-3 bg-[#0D1017]";
+
+// ─── Shared Trace Overlay Component ─────────────────────────────
+const TraceOverlay = ({ trace }: { trace?: any }) => {
+    if (!trace) return null;
+    return (
+        <div className="mt-2 text-[10px] bg-green-900/20 border border-green-500/30 rounded px-2 py-1 flex items-center justify-between">
+            <span className="text-green-400 font-semibold">{trace.recordsProcessed} rows</span>
+            <span className="text-green-500/70 font-mono">{trace.durationMs}ms</span>
+        </div>
+    );
+};
 
 const SourceNode = ({ data }: any) => (
     <div className={`${nodeStyles}`}>
@@ -36,6 +48,7 @@ const SourceNode = ({ data }: any) => (
             <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5">
                 <span className="text-cyan-400/70">{`{`}</span> {data.type} <span className="text-cyan-400/70">{`}`}</span>
             </div>
+            <TraceOverlay trace={data.trace} />
         </div>
         <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 bg-cyan-500 border-2 border-[#181C25]" />
     </div>
@@ -56,6 +69,7 @@ const TransformNode = ({ data }: any) => (
             <div className="bg-[#181C25] border border-white/5 rounded px-2 py-1.5">
                 <div className="text-[10px] text-yellow-400 font-mono tracking-tight leading-relaxed">{data.op}</div>
             </div>
+            <TraceOverlay trace={data.trace} />
         </div>
         <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 bg-yellow-500 border-2 border-[#181C25]" />
     </div>
@@ -76,6 +90,7 @@ const OntologyNode = ({ data }: any) => (
                 <span className="font-medium text-purple-300">Entity:</span>
                 <span className="font-mono text-white">{data.entityType}</span>
             </div>
+            <TraceOverlay trace={data.trace} />
         </div>
     </div>
 );
@@ -97,6 +112,13 @@ export const PipelineEditor: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [pipelineId, setPipelineId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [running, setRunning] = useState(false);
+    const [traceData, setTraceData] = useState<any[] | null>(null);
+
+    const capabilities = useCapabilities(state => state.capabilities);
+    const dryRunCap = capabilities?.pipeline_dry_run;
+    const isDryRunDisabled = !dryRunCap || dryRunCap.status === 'DISABLED';
+    const dryRunLabel = isDryRunDisabled ? 'DRY RUN (UNAVAILABLE)' : dryRunCap.status === 'BETA' ? 'DRY RUN (BETA)' : 'DRY RUN';
 
     // Initial Load - For demo purposes we just grab the first pipeline, or create one if none exist
     useEffect(() => {
@@ -150,6 +172,24 @@ export const PipelineEditor: React.FC = () => {
         return () => { mounted = false; };
     }, []);
 
+    // Merge trace data into nodes when available
+    useEffect(() => {
+        if (!traceData) {
+            // Clear traces
+            setNodes(nds => nds.map(n => ({
+                ...n,
+                data: { ...n.data, trace: undefined }
+            })));
+            return;
+        }
+
+        const traceMap = new Map(traceData.map(t => [t.nodeId, t]));
+        setNodes(nds => nds.map(n => ({
+            ...n,
+            data: { ...n.data, trace: traceMap.get(n.id) }
+        })));
+    }, [traceData]);
+
     const handleSave = async () => {
         if (!pipelineId) return;
         setSaving(true);
@@ -159,6 +199,25 @@ export const PipelineEditor: React.FC = () => {
             console.error("Failed to save pipeline:", e);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleDryRun = async () => {
+        if (!pipelineId || isDryRunDisabled) return;
+        setRunning(true);
+        setTraceData(null);
+        try {
+            // First save the current graph state
+            await ApiClient.put(`/api/v1/pipelines/${pipelineId}`, { nodes, edges });
+            // Then execute the dry run trace
+            const result = await ApiClient.post<any>(`/api/v1/pipelines/${pipelineId}/run?dryRun=true`, {});
+            if (result && result.trace) {
+                setTraceData(result.trace);
+            }
+        } catch (e) {
+            console.error("Failed to execute pipeline dry run:", e);
+        } finally {
+            setRunning(false);
         }
     };
 
@@ -212,8 +271,8 @@ export const PipelineEditor: React.FC = () => {
                     <button onClick={handleAddNode} className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 backdrop-blur-md transition-all border border-white/10">
                         <Plus className="w-3 h-3" /> ADD NODE
                     </button>
-                    <button disabled className="bg-white/5 text-slate-500 px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 border border-white/5 cursor-not-allowed">
-                        <Play className="w-3 h-3" /> DRY RUN
+                    <button disabled={isDryRunDisabled} title={dryRunCap?.reason || 'Capability check pending'} className={`px-3 py-1.5 rounded text-[10px] font-bold flex items-center gap-2 border transition-all ${isDryRunDisabled ? 'bg-white/5 text-slate-500 border-white/5 cursor-not-allowed' : 'bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-400 border-cyan-500/30 shadow-[0_0_10px_rgba(34,211,238,0.1)]'}`}>
+                        <Play className="w-3 h-3" /> {dryRunLabel}
                     </button>
                 </div>
             </div>

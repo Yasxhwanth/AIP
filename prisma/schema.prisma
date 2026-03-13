@@ -255,6 +255,28 @@ model DomainEvent {
   @@index([occurredAt])
 }
 
+// Outbox pattern for reliable write-back to external systems
+model OutboxEvent {
+  id            String   @id @default(uuid())
+  projectId     String
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  targetSystem  String
+  payload       Json
+  status        String   @default("PENDING") // PENDING, SENT, FAILED, DEAD_LETTER
+  retryCount    Int      @default(0)
+  lastError     String?
+  domainEventId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  domainEvent DomainEvent? @relation(fields: [domainEventId], references: [id])
+
+  @@index([projectId, status, createdAt(sort: Desc)])
+}
+
 model PolicyDefinition {
   id           String   @id @default(uuid())
   name         String   @unique
@@ -379,6 +401,7 @@ model DataSource {
   name             String   @unique
   type             String // REST_API, JSON_UPLOAD, CSV_UPLOAD
   connectionConfig Json // { url, headers, auth, ... }
+  schemaDefinition Json? // Optional expected schema/constraints for validation
   enabled          Boolean  @default(true)
   createdAt        DateTime @default(now())
 
@@ -388,6 +411,23 @@ model DataSource {
   integrationJobs IntegrationJob[]
 
   @@index([projectId])
+}
+
+// Records that failed validation at ingestion time and were quarantined
+model RejectedRecord {
+  id           String   @id @default(uuid())
+  projectId    String
+  dataSourceId String?
+  jobId        String?  // IntegrationJob id or external job identifier
+  rawRecord    Json
+  errors       Json     // Validation errors / schema drift details
+  createdAt    DateTime @default(now())
+
+  project   Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dataSource DataSource? @relation(fields: [dataSourceId], references: [id])
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([dataSourceId, createdAt(sort: Desc)])
 }
 
 model Pipeline {
@@ -1288,5 +1328,3 @@ model CryptoProvenanceSeal {
   @@index([entityId, sealedAt(sort: Desc)])
   @@unique([entityId, sealedAt])
 }
-
-

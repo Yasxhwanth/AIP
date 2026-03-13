@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '@/lib/apiClient';
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
-export type VisualMode = 'normal' | 'nightvision' | 'flir' | 'crt';
+export type VisualMode = 'normal' | 'nightvision' | 'flir' | 'crt' | 'ctos';
 
 export const LANDMARKS = [
     { label: 'New York', lat: 40.7128, lng: -74.0060, alt: 500000 },
@@ -46,25 +46,27 @@ const FILTER_MAP: Record<VisualMode, string> = {
     nightvision: 'brightness(0.9) hue-rotate(90deg) saturate(4) contrast(1.4) sepia(0.6)',
     flir: 'brightness(0.7) sepia(1) hue-rotate(180deg) saturate(6) contrast(1.8)',
     crt: 'contrast(1.2) brightness(0.85) saturate(1.3)',
+    ctos: 'brightness(0.8) contrast(2.2) grayscale(1) invert(0.02) opacity(0.9)',
 };
 
 // ─── Canvas Icon Builders ─────────────────────────────────────────────────────
-let _planeIconUrl: string | null = null;
-function getPlaneIconUrl(): string {
-    if (_planeIconUrl) return _planeIconUrl;
+function getPlaneIconUrl(color: string = '#22d3ee'): string {
+    const key = `plane-${color}`;
+    if ((window as any)[key]) return (window as any)[key];
     const c = document.createElement('canvas');
-    c.width = 48; c.height = 48;
+    c.width = 64; c.height = 64;
     const ctx = c.getContext('2d')!;
-    ctx.clearRect(0, 0, 48, 48);
-    ctx.shadowColor = '#22d3ee';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = '#22d3ee';
-    ctx.font = 'bold 30px Arial';
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = color;
+    ctx.font = 'bold 40px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('✈', 24, 26);
-    _planeIconUrl = c.toDataURL();
-    return _planeIconUrl;
+    ctx.fillText('✈', 32, 34);
+    const url = c.toDataURL();
+    (window as any)[key] = url;
+    return url;
 }
 
 // ─── TLE Parsing ──────────────────────────────────────────────────────────────
@@ -391,6 +393,7 @@ export const BattlefieldOverview: React.FC<Props> = ({
         let unitPos: { lat: number, lng: number } | null = null;
 
         if (layers['aip'] && aipRaw) {
+            const isCtos = visualMode === 'ctos';
             for (const ent of (aipRaw as any[])) {
                 const { latitude, longitude, location, type, model, callsign, vehicle } = ent.data ?? {};
                 const lat = location?.lat ?? latitude;
@@ -417,8 +420,23 @@ export const BattlefieldOverview: React.FC<Props> = ({
                 entitiesToAdd.push({
                     id: `aip-${ent.logicalId}`,
                     position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
-                    point: { pixelSize: 12, color, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-                    label: { text: displayName, font: '12px monospace', fillColor: Cesium.Color.WHITE, showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#0f172a99'), pixelOffset: new Cesium.Cartesian2(0, -25), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                    point: isCtos ? {
+                        pixelSize: 8,
+                        color: Cesium.Color.WHITE,
+                        outlineColor: color.withAlpha(0.6),
+                        outlineWidth: 2,
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    } : { pixelSize: 12, color, outlineColor: Cesium.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                    label: {
+                        text: isCtos ? `${displayName.toUpperCase()}\nNODE ${ent.logicalId.substring(0, 6)} [${(Math.random() * 999).toFixed(2)}]` : displayName,
+                        font: isCtos ? '900 10px monospace' : '12px monospace',
+                        fillColor: isCtos ? Cesium.Color.WHITE : Cesium.Color.WHITE,
+                        showBackground: true,
+                        backgroundColor: Cesium.Color.fromCssColorString(isCtos ? '#000000cc' : '#0f172a99'),
+                        backgroundPadding: new Cesium.Cartesian2(4, 2),
+                        pixelOffset: new Cesium.Cartesian2(0, -25),
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    },
                 });
 
                 // Add radii
@@ -475,6 +493,27 @@ export const BattlefieldOverview: React.FC<Props> = ({
                     }
                 });
             }
+
+            // ── Network Web (ctOS Special) ──────────────────────────────────
+            if (isCtos) {
+                const nodes = (aipRaw as any[]).map(ent => {
+                    const { latitude, longitude, location } = ent.data ?? {};
+                    return { lat: location?.lat ?? latitude, lng: location?.lng ?? longitude };
+                }).filter(n => n.lat && n.lng);
+
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i + 1; j < Math.min(i + 5, nodes.length); j++) { // Connect to next few nodes
+                        entitiesToAdd.push({
+                            id: `net-web-${i}-${j}`,
+                            polyline: {
+                                positions: Cesium.Cartesian3.fromDegreesArray([nodes[i].lng, nodes[i].lat, nodes[j].lng, nodes[j].lat]),
+                                width: 1,
+                                material: Cesium.Color.CYAN.withAlpha(0.15)
+                            }
+                        });
+                    }
+                }
+            }
         }
 
         // ── Trails Processing ──────────────────────────────────────────────────
@@ -505,15 +544,44 @@ export const BattlefieldOverview: React.FC<Props> = ({
                 if (!lat || !lng) continue;
                 flights.push({ id: icao, callsign: (cs ?? icao ?? '').trim() || icao, lat, lng, alt: Math.max(altBaro ?? 8000, 200), heading: trueTrack ?? 0, kts: Math.round((velocity ?? 0) * 1.944), fl: Math.round((altBaro ?? 8000) / 30.48) });
             }
-            const planeUrl = getPlaneIconUrl();
+            const isCtos = visualMode === 'ctos';
+            const planeUrl = getPlaneIconUrl(isCtos ? '#ff3e3e' : '#22d3ee');
             const sorted = sortByProximity(flights, camLat, camLng).slice(0, 6000);
             for (const f of sorted) {
                 entitiesToAdd.push({
                     id: `fl-${f.id}`,
                     position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, f.alt),
-                    billboard: { image: planeUrl, width: 24, height: 24, rotation: -Cesium.Math.toRadians(f.heading), alignedAxis: Cesium.Cartesian3.ZERO, disableDepthTestDistance: Number.POSITIVE_INFINITY, sizeInMeters: false },
-                    label: { text: `${f.callsign} · FL${f.fl} · ${f.kts} kts`, font: '10px monospace', fillColor: Cesium.Color.fromCssColorString('#22d3ee'), showBackground: true, backgroundColor: Cesium.Color.fromCssColorString('#00000099'), backgroundPadding: new Cesium.Cartesian2(4, 2), pixelOffset: new Cesium.Cartesian2(0, -28), distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000000), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                    billboard: { image: planeUrl, width: isCtos ? 32 : 24, height: isCtos ? 32 : 24, rotation: -Cesium.Math.toRadians(f.heading), alignedAxis: Cesium.Cartesian3.ZERO, disableDepthTestDistance: Number.POSITIVE_INFINITY, sizeInMeters: false },
+                    label: {
+                        text: isCtos ? `${f.callsign}\nVEC ${f.kts} ALT ${f.fl}00` : `${f.callsign} · FL${f.fl} · ${f.kts} kts`,
+                        font: '10px monospace',
+                        fillColor: Cesium.Color.fromCssColorString(isCtos ? '#ff3e3e' : '#22d3ee'),
+                        showBackground: true,
+                        backgroundColor: Cesium.Color.fromCssColorString('#000000cc'),
+                        backgroundPadding: new Cesium.Cartesian2(4, 2),
+                        pixelOffset: new Cesium.Cartesian2(0, isCtos ? -32 : -28),
+                        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000000),
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    },
                 });
+
+                if (isCtos) {
+                    // Add dashed path for ctOS flights
+                    entitiesToAdd.push({
+                        id: `fl-path-${f.id}`,
+                        polyline: {
+                            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+                                f.lng - Math.sin(Cesium.Math.toRadians(f.heading)) * 0.5, f.lat - Math.cos(Cesium.Math.toRadians(f.heading)) * 0.5, f.alt,
+                                f.lng, f.lat, f.alt
+                            ]),
+                            width: 2,
+                            material: new Cesium.PolylineDashMaterialProperty({
+                                color: Cesium.Color.fromCssColorString('#ff3e3e').withAlpha(0.6),
+                                dashLength: 12
+                            })
+                        }
+                    });
+                }
             }
         }
 
@@ -590,18 +658,245 @@ export const BattlefieldOverview: React.FC<Props> = ({
             }, 30000);
         }
 
-        viewer.scene.requestRender();
-    }, [layers, onLayerCountChange]);
+        // ── ctOS 2.0 Full Overlay System ────────────────────────────────────
+        if (visualMode === 'ctos') {
 
+            // 1. LARGE REGIONAL LABELS (perspective-aligned, fades with altitude)
+            const regions = [
+                { name: 'GREATER SAN FRANCISCO\nBAY AREA', lat: 37.7749, lng: -122.4194 },
+                { name: 'SILICON VALLEY HUB', lat: 37.3382, lng: -121.8863 },
+                { name: 'OAKLAND\nINDUSTRIAL SECTOR', lat: 37.8044, lng: -122.2712 },
+                { name: 'NEW YORK\nMETRO GRID', lat: 40.7128, lng: -74.0060 },
+                { name: 'LONDON\nCENTRAL NODE', lat: 51.5074, lng: -0.1278 },
+                { name: 'TOKYO\nKANTO DATA-STREAM', lat: 35.6762, lng: 139.6503 },
+                { name: 'DUBAI\nFINANCIAL NEXUS', lat: 25.2048, lng: 55.2708 },
+                { name: 'MOSCOW\nCOMMAND GRID', lat: 55.7558, lng: 37.6173 },
+            ];
+            for (const reg of regions) {
+                entitiesToAdd.push({
+                    id: `reg-${reg.name}`,
+                    position: Cesium.Cartesian3.fromDegrees(reg.lng, reg.lat, 0),
+                    label: {
+                        text: reg.name,
+                        font: '900 64px "Arial Narrow", Arial, sans-serif',
+                        fillColor: Cesium.Color.WHITE.withAlpha(0.75),
+                        outlineColor: Cesium.Color.BLACK.withAlpha(0.8),
+                        outlineWidth: 6,
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2_500_000),
+                        translucencyByDistance: new Cesium.NearFarScalar(300_000, 1.0, 2_500_000, 0.0),
+                    }
+                });
+            }
+
+            // 2. DENSE CITY-WIDE DATA NODE GRID + □ NUMERIC LABELS
+            // Generate a grid of nodes around the camera based on current zoom
+            const cameraAlt = viewer.camera.positionCartographic?.height ?? 1_000_000;
+            const gridDensity = cameraAlt < 200_000 ? 0.05 : cameraAlt < 800_000 ? 0.2 : 0.8;
+            const gridExtent = cameraAlt < 200_000 ? 0.8 : cameraAlt < 800_000 ? 3 : 10;
+
+            // Use a seeded RNG for stable random values that don't change on re-render
+            const seed = (lat: number, lng: number) => {
+                const x = Math.sin(lat * 127.1 + lng * 311.7) * 43758.5453;
+                return x - Math.floor(x);
+            };
+
+            let nodeCount = 0;
+            for (let dLat = -gridExtent; dLat <= gridExtent; dLat += gridDensity) {
+                for (let dLng = -gridExtent; dLng <= gridExtent; dLng += gridDensity) {
+                    const nLat = camLat + dLat;
+                    const nLng = camLng + dLng;
+                    const r = seed(nLat, nLng);
+                    if (r < 0.6) continue; // sparse — only ~40% of grid points
+                    const dataVal = (seed(nLat + 1, nLng + 1) * 999).toFixed(2);
+                    const nodeId = `ctos-node-${nLat.toFixed(3)}-${nLng.toFixed(3)}`;
+                    nodeCount++;
+                    entitiesToAdd.push({
+                        id: nodeId,
+                        position: Cesium.Cartesian3.fromDegrees(nLng, nLat, 0),
+                        point: {
+                            pixelSize: 4,
+                            color: Cesium.Color.CYAN.withAlpha(0.8),
+                            outlineColor: Cesium.Color.WHITE.withAlpha(0.3),
+                            outlineWidth: 1,
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, cameraAlt * 2),
+                        },
+                        label: {
+                            text: `\u25a1 ${dataVal}`,
+                            font: '700 10px monospace',
+                            fillColor: Cesium.Color.WHITE.withAlpha(0.85),
+                            showBackground: true,
+                            backgroundColor: Cesium.Color.fromCssColorString('#000000bb'),
+                            backgroundPadding: new Cesium.Cartesian2(3, 2),
+                            pixelOffset: new Cesium.Cartesian2(10, -8),
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, cameraAlt * 1.5),
+                        }
+                    });
+                }
+            }
+
+            // 3. CYAN NETWORK WEB — connect nearby nodes
+            const allNodePositions: Array<{ lat: number; lng: number }> = [];
+            for (let dLat = -gridExtent; dLat <= gridExtent; dLat += gridDensity) {
+                for (let dLng = -gridExtent; dLng <= gridExtent; dLng += gridDensity) {
+                    const nLat = camLat + dLat;
+                    const nLng = camLng + dLng;
+                    if (seed(nLat, nLng) >= 0.6) allNodePositions.push({ lat: nLat, lng: nLng });
+                }
+            }
+            // Connect each node to neighbors (limit to nearest 2-3 to avoid overload)
+            let webCount = 0;
+            for (let i = 0; i < allNodePositions.length && webCount < 400; i++) {
+                const a = allNodePositions[i];
+                for (let j = i + 1; j < Math.min(i + 4, allNodePositions.length) && webCount < 400; j++) {
+                    const b = allNodePositions[j];
+                    const dist = Math.hypot(a.lat - b.lat, a.lng - b.lng);
+                    if (dist > gridDensity * 2.5) continue;
+                    webCount++;
+                    entitiesToAdd.push({
+                        id: `ctos-web-${i}-${j}`,
+                        polyline: {
+                            positions: Cesium.Cartesian3.fromDegreesArray([a.lng, a.lat, b.lng, b.lat]),
+                            width: 1,
+                            material: Cesium.Color.CYAN.withAlpha(0.25),
+                        }
+                    });
+                }
+            }
+
+            // 4. ZONE PERIMETERS — red dashed polygons around key city zones
+            const zones = [
+                {
+                    id: 'zone-sf',
+                    points: [
+                        [-122.52, 37.83], [-122.35, 37.83], [-122.35, 37.72],
+                        [-122.52, 37.72], [-122.52, 37.83]
+                    ]
+                },
+                {
+                    id: 'zone-oak',
+                    points: [
+                        [-122.35, 37.86], [-122.19, 37.86], [-122.19, 37.75],
+                        [-122.35, 37.75], [-122.35, 37.86]
+                    ]
+                },
+                {
+                    id: 'zone-ny',
+                    points: [
+                        [-74.06, 40.78], [-73.92, 40.78], [-73.92, 40.68],
+                        [-74.06, 40.68], [-74.06, 40.78]
+                    ]
+                },
+                {
+                    id: 'zone-ldn',
+                    points: [
+                        [-0.22, 51.56], [0.00, 51.56], [0.00, 51.46],
+                        [-0.22, 51.46], [-0.22, 51.56]
+                    ]
+                },
+            ];
+            for (const zone of zones) {
+                const coords: number[] = [];
+                for (const [lng, lat] of zone.points) { coords.push(lng, lat); }
+                entitiesToAdd.push({
+                    id: `ctos-zone-${zone.id}`,
+                    polyline: {
+                        positions: Cesium.Cartesian3.fromDegreesArray(coords),
+                        width: 2,
+                        material: new Cesium.PolylineDashMaterialProperty({
+                            color: Cesium.Color.fromCssColorString('#ff3e3e').withAlpha(0.85),
+                            dashLength: 16,
+                            dashPattern: 255,
+                        }),
+                        clampToGround: true,
+                        arcType: Cesium.ArcType.GEODESIC,
+                    }
+                });
+            }
+
+            // 5. RADAR SCAN LINES — red diagonal lines emanating from zone centers
+            const scanCenters = [
+                { lat: 37.7749, lng: -122.4194, id: 'sf' },
+                { lat: 40.7128, lng: -74.0060, id: 'ny' },
+                { lat: 51.5074, lng: -0.1278, id: 'ldn' },
+            ];
+            const scanAngles = [35, 120, 210, 290]; // degrees
+            const scanLen = 2.5; // degrees
+            for (const center of scanCenters) {
+                for (const angle of scanAngles) {
+                    const rad = (angle * Math.PI) / 180;
+                    const endLat = center.lat + Math.cos(rad) * scanLen;
+                    const endLng = center.lng + Math.sin(rad) * scanLen;
+                    entitiesToAdd.push({
+                        id: `ctos-scan-${center.id}-${angle}`,
+                        polyline: {
+                            positions: Cesium.Cartesian3.fromDegreesArray([
+                                center.lng, center.lat,
+                                endLng, endLat,
+                            ]),
+                            width: 1.5,
+                            material: new Cesium.PolylineDashMaterialProperty({
+                                color: Cesium.Color.fromCssColorString('#ff3e3e').withAlpha(0.6),
+                                dashLength: 20,
+                            }),
+                        }
+                    });
+                }
+            }
+
+        } else {
+            // Non-ctos regional labels were already handled inline in the AIP section
+        }
+
+        viewer.scene.requestRender();
+    }, [layers, onLayerCountChange, visualMode]);
+
+    // Real-time refresh: flights every 30s, full render every 60s
     useEffect(() => {
         const t = setTimeout(renderLayers, 800);
         return () => clearTimeout(t);
     }, [renderLayers]);
 
     useEffect(() => {
-        const id = setInterval(renderLayers, 90_000);
+        const id = setInterval(renderLayers, 60_000); // full refresh every 60s
         return () => clearInterval(id);
     }, [renderLayers]);
+
+    // Fast flight position updater — re-fetch flights every 30s independently
+    useEffect(() => {
+        if (!layers['flights']) return;
+        const id = setInterval(async () => {
+            if (!_viewer || _viewer.isDestroyed()) return;
+            try {
+                const Cesium = await import('cesium');
+                const res = await fetch('https://opensky-network.org/api/states/all');
+                if (!res.ok) return;
+                const data = await res.json();
+                const isCtos = visualMode === 'ctos';
+                for (const s of (data.states ?? [])) {
+                    const [icao, , , , , lng, lat, altBaro, , , , , , trueTrack] = s;
+                    if (!lat || !lng) continue;
+                    const ent = _viewer.entities.getById(`fl-${icao}`);
+                    if (ent) {
+                        ent.position = new Cesium.ConstantPositionProperty(
+                            Cesium.Cartesian3.fromDegrees(lng, lat, Math.max(altBaro ?? 8000, 200))
+                        ) as any;
+                        if (ent.billboard) {
+                            (ent.billboard as any).rotation = new Cesium.ConstantProperty(-Cesium.Math.toRadians(trueTrack ?? 0));
+                        }
+                    }
+                }
+                _viewer.scene.requestRender();
+            } catch { /* silently ignore network errors */ }
+        }, 30_000);
+        return () => clearInterval(id);
+    }, [layers, visualMode]);
+
 
     return <></>;
 };

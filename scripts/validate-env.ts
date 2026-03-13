@@ -6,6 +6,16 @@ async function validateEnv() {
     console.log('--- AIP Environment Validation ---');
 
     const requiredVars = ['DATABASE_URL'];
+    const isNonDev = process.env.NODE_ENV !== 'development';
+
+    if (isNonDev) {
+        requiredVars.push('JWT_SECRET');
+        if (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === '*') {
+            console.error('\n❌ CRITICAL: CORS_ORIGIN must be set to an explicit allowlist in non-development environments.');
+            process.exit(1);
+        }
+    }
+
     const missing = requiredVars.filter(v => !process.env[v]);
 
     if (missing.length > 0) {
