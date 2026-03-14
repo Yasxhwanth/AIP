@@ -22,6 +22,11 @@ export interface RecordDomainEventArgs {
   eventType: CanonicalEventType | string;
   payload: EntityStatePayload;
   idempotencyKey?: string | null;
+  outbox?: {
+    projectId: string;
+    aggregateType: string;
+    targetSystem: string;
+  };
 }
 
 /**
@@ -32,7 +37,7 @@ export interface RecordDomainEventArgs {
 export async function recordDomainEvent(args: RecordDomainEventArgs, tx?: Prisma.TransactionClient) {
   const client: PrismaClient | Prisma.TransactionClient = tx ?? args.prisma;
 
-  await (client as any).domainEvent.create({
+  const domainEvent = await (client as any).domainEvent.create({
     data: {
       idempotencyKey: args.idempotencyKey ?? null,
       eventType: args.eventType,
@@ -46,5 +51,21 @@ export async function recordDomainEvent(args: RecordDomainEventArgs, tx?: Prisma
       },
     },
   });
+
+  if (args.outbox) {
+    await (client as any).outboxEvent.create({
+      data: {
+        projectId: args.outbox.projectId,
+        aggregateType: args.outbox.aggregateType,
+        aggregateId: args.logicalId,
+        eventType: args.eventType,
+        targetSystem: args.outbox.targetSystem,
+        payload: args.payload.newState,
+        domainEventId: domainEvent.id
+      }
+    });
+  }
+
+  return domainEvent;
 }
 

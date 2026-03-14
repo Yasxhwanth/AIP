@@ -1035,14 +1035,119 @@ function getProjectId(req: express.Request): string | null {
   return id ?? null;
 }
 
-// ── GET /api/ontology/entity-types — list all with live object counts ─────────
-app.get('/api/ontology/entity-types', async (req, res) => {
+// ── GET /api/ontology/branches — list distinct branches in project ────────────
+app.get('/api/ontology/branches', async (req, res) => {
   try {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
-    const types = await prisma.entityType.findMany({
+    const entityTypes = await prisma.entityType.findMany({
       where: { projectId },
+      select: { branchName: true },
+      distinct: ['branchName']
+    });
+
+    const branches = entityTypes.map(e => e.branchName);
+    if (!branches.includes('main')) branches.unshift('main');
+
+    return res.json(branches);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/branches — create branch by cloning ──────
+app.post('/api/ontology/branches', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    const { name, sourceBranch = 'main' } = req.body;
+    if (!projectId || !name) return res.status(400).json({ error: 'Project ID and Branch name required' });
+
+    // 1. Fetch source ontology
+    const [sourceEntityTypes, sourceRelations] = await Promise.all([
+      prisma.entityType.findMany({
+        where: { projectId, branchName: sourceBranch },
+        include: { attributes: true }
+      }),
+      prisma.relationshipDefinition.findMany({
+        where: { branchName: sourceBranch, sourceEntityType: { projectId } }
+      })
+    ]);
+
+    // 2. Clone in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Map of old entity ID -> new entity object (to associate attributes/relations correctly)
+      const oldToNewIdMap: Record<string, string> = {};
+
+      for (const et of sourceEntityTypes) {
+        const newEt = await tx.entityType.create({
+          data: {
+            name: et.name,
+            version: et.version,
+            branchName: name,
+            projectId,
+            attributes: {
+              create: et.attributes.map(a => ({
+                name: a.name,
+                dataType: a.dataType,
+                required: a.required,
+                temporal: a.temporal,
+                branchName: name
+              }))
+            }
+          }
+        });
+        oldToNewIdMap[et.id] = newEt.id;
+      }
+
+      // Clone relations
+      for (const rel of sourceRelations) {
+        await tx.relationshipDefinition.create({
+          data: {
+            name: rel.name,
+            branchName: name,
+            sourceEntityTypeId: oldToNewIdMap[rel.sourceEntityTypeId]!,
+            targetEntityTypeId: oldToNewIdMap[rel.targetEntityTypeId]!
+          }
+        });
+      }
+    });
+
+    return res.status(201).json({ status: 'success', branch: name });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── DELETE /api/ontology/branches/:branchName — drop a sandbox branch ──
+app.delete('/api/ontology/branches/:branchName', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    const { branchName } = req.params;
+    if (branchName === 'main') return res.status(400).json({ error: 'Cannot delete main branch' });
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    await prisma.$transaction([
+      prisma.attributeDefinition.deleteMany({ where: { branchName, entityType: { projectId } } }),
+      prisma.relationshipDefinition.deleteMany({ where: { branchName, sourceEntityType: { projectId } } }),
+      prisma.entityType.deleteMany({ where: { projectId, branchName } })
+    ]);
+
+    return res.json({ status: 'success' });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/entity-types — list all with live object counts ─────────
+app.get('/api/ontology/entity-types', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    const branchName = (req.query.branch as string) || 'main';
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const types = await prisma.entityType.findMany({
+      where: { projectId, branchName },
       include: {
         attributes: true,
         outgoingRelationships: { include: { targetEntityType: { select: { id: true, name: true } } } },
@@ -1093,14 +1198,15 @@ app.post('/api/ontology/entity-types', async (req, res) => {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
-    const { name, attributes = [], strictGovernance = false } = req.body;
+    const { name, attributes = [], strictGovernance = false, branchName = 'main' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
-    if (strictGovernance) {
+    if (strictGovernance && branchName === 'main') {
       const changeRequest = await prisma.changeRequest.create({
         data: {
           resourceType: 'EntityType',
           proposedChanges: { name, attributes },
+          branchName,
           status: 'DRAFT',
           createdBy: req.auth?.apiKeyName || 'system',
           projectId
@@ -1114,7 +1220,8 @@ app.post('/api/ontology/entity-types', async (req, res) => {
         projectId,
         name,
         version: 1,
-        attributes: { create: attributes.map((a: any) => ({ name: a.name, dataType: a.dataType ?? 'STRING', required: a.required ?? false })) },
+        branchName,
+        attributes: { create: attributes.map((a: any) => ({ name: a.name, dataType: a.dataType ?? 'STRING', required: a.required ?? false, branchName })) },
       },
       include: { attributes: true },
     });
@@ -1124,7 +1231,7 @@ app.post('/api/ontology/entity-types', async (req, res) => {
 
     return res.status(201).json({ ...created, objectCount: 0 });
   } catch (err: any) {
-    if (err?.code === 'P2002') return res.status(409).json({ error: 'Entity type name already exists' });
+    if (err?.code === 'P2002') return res.status(409).json({ error: 'Entity type name already exists in this branch' });
     return res.status(500).json({ error: String(err) });
   }
 });
@@ -1197,12 +1304,13 @@ app.patch('/api/ontology/entity-types/:id', async (req, res) => {
       }
     }
 
-    if (strictGovernance) {
+    if (strictGovernance && et.branchName === 'main') {
       const changeRequest = await prisma.changeRequest.create({
         data: {
           resourceType: 'EntityType',
           resourceId: et.id,
           proposedChanges: { name },
+          branchName: et.branchName,
           status: 'DRAFT',
           createdBy: req.auth?.apiKeyName || 'system',
           projectId: et.projectId
@@ -1211,8 +1319,7 @@ app.patch('/api/ontology/entity-types/:id', async (req, res) => {
       return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
     }
 
-    // Create a new version with updated name by updating in-place (name field is mutable metadata)
-    // For just a rename we update name directly as it is not a schema-breaking change
+    // Update name directly as it is not a schema-breaking change within its branch
     const updated = await prisma.entityType.update({
       where: { id: req.params.id },
       data: { name },
@@ -1259,8 +1366,17 @@ app.post('/api/ontology/entity-types/:id/attributes', async (req, res) => {
     const { name, dataType = 'STRING', required = false } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
+    const et = await prisma.entityType.findUnique({ where: { id: req.params.id } });
+    if (!et) return res.status(404).json({ error: 'EntityType not found' });
+
     const attr = await prisma.attributeDefinition.create({
-      data: { entityTypeId: req.params.id, name, dataType, required },
+      data: {
+        entityTypeId: req.params.id,
+        name,
+        dataType,
+        required,
+        branchName: et.branchName
+      },
     });
     return res.status(201).json(attr);
   } catch (err) {
@@ -1294,10 +1410,14 @@ app.delete('/api/ontology/entity-types/:id/attributes/:attrId', async (req, res)
 app.get('/api/ontology/relationships', async (req, res) => {
   try {
     const projectId = getProjectId(req);
+    const branchName = (req.query.branch as string) || 'main';
     if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
     const rels = await prisma.relationshipDefinition.findMany({
-      where: { sourceEntityType: { projectId } },
+      where: {
+        branchName,
+        sourceEntityType: { projectId }
+      },
       include: {
         sourceEntityType: { select: { id: true, name: true } },
         targetEntityType: { select: { id: true, name: true } },
@@ -1312,12 +1432,39 @@ app.get('/api/ontology/relationships', async (req, res) => {
 // ── POST /api/ontology/relationships — create a link type between two entity types ──
 app.post('/api/ontology/relationships', async (req, res) => {
   try {
-    const { name, sourceEntityTypeId, targetEntityTypeId } = req.body;
+    const { name, sourceEntityTypeId, targetEntityTypeId, strictGovernance = false } = req.body;
     if (!name || !sourceEntityTypeId || !targetEntityTypeId) {
       return res.status(400).json({ error: 'name, sourceEntityTypeId, targetEntityTypeId required' });
     }
+
+    const [sourceEt, targetEt] = await Promise.all([
+      prisma.entityType.findUnique({ where: { id: sourceEntityTypeId } }),
+      prisma.entityType.findUnique({ where: { id: targetEntityTypeId } })
+    ]);
+
+    if (!sourceEt || !targetEt) return res.status(404).json({ error: 'Source or Target EntityType not found' });
+    if (sourceEt.branchName !== targetEt.branchName) {
+      return res.status(400).json({ error: 'Cannot link entities across different branches' });
+    }
+
+    const branchName = sourceEt.branchName;
+
+    if (strictGovernance && branchName === 'main') {
+      const changeRequest = await prisma.changeRequest.create({
+        data: {
+          resourceType: 'RelationshipDefinition',
+          proposedChanges: { name, sourceEntityTypeId, targetEntityTypeId },
+          branchName,
+          status: 'DRAFT',
+          createdBy: req.auth?.apiKeyName || 'system',
+          projectId: sourceEt.projectId
+        }
+      });
+      return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
+    }
+
     const rel = await prisma.relationshipDefinition.create({
-      data: { name, sourceEntityTypeId, targetEntityTypeId },
+      data: { name, sourceEntityTypeId, targetEntityTypeId, branchName },
       include: {
         sourceEntityType: { select: { id: true, name: true } },
         targetEntityType: { select: { id: true, name: true } },
@@ -1339,14 +1486,142 @@ app.delete('/api/ontology/relationships/:id', async (req, res) => {
   }
 });
 
+// ── GET /api/ontology/change-requests — list pending changes ──────────────────
+app.get('/api/ontology/change-requests', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    const status = (req.query.status as string) || 'DRAFT';
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const crs = await prisma.changeRequest.findMany({
+      where: { projectId, status },
+      orderBy: { createdAt: 'desc' }
+    });
+    return res.json(crs);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/change-requests — submit a branch for merge review ─────
+app.post('/api/ontology/change-requests', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    const { branchName, description } = req.body;
+    if (!projectId || !branchName) return res.status(400).json({ error: 'Project ID and Branch name required' });
+
+    // Determine diff (very simple version for now)
+    const branchTypes = await prisma.entityType.findMany({ where: { projectId, branchName }, include: { attributes: true } });
+    const mainTypes = await prisma.entityType.findMany({ where: { projectId, branchName: 'main' }, include: { attributes: true } });
+
+    const cr = await prisma.changeRequest.create({
+      data: {
+        projectId,
+        resourceType: 'Branch',
+        branchName,
+        proposedChanges: { description, entitiesCount: branchTypes.length },
+        diff: {
+          added: branchTypes.filter(bt => !mainTypes.find(mt => mt.name === bt.name)).map(t => t.name),
+          modified: branchTypes.filter(bt => mainTypes.find(mt => mt.name === bt.name)).map(t => t.name)
+        },
+        status: 'IN_REVIEW',
+        createdBy: req.auth?.apiKeyName || 'system'
+      }
+    });
+
+    return res.status(201).json(cr);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/change-requests/:id/approve ────────────────────────────
+app.post('/api/ontology/change-requests/:id/approve', async (req, res) => {
+  try {
+    const cr = await prisma.changeRequest.findUnique({ where: { id: req.params.id } });
+    if (!cr || cr.status !== 'IN_REVIEW') return res.status(404).json({ error: 'Reviewable ChangeRequest not found' });
+
+    if (cr.resourceType === 'Branch') {
+      // Execute Merge: Copy everything from branch to main
+      await prisma.$transaction(async (tx) => {
+        const branchTypes = await tx.entityType.findMany({
+          where: { projectId: cr.projectId, branchName: cr.branchName },
+          include: { attributes: true }
+        });
+
+        const branchRels = await tx.relationshipDefinition.findMany({
+          where: { branchName: cr.branchName, sourceEntityType: { projectId: cr.projectId } }
+        });
+
+        // 1. Wipe existing main ontology for this project (or do partial update, but replace is safer for v1)
+        await tx.attributeDefinition.deleteMany({ where: { branchName: 'main', entityType: { projectId: cr.projectId } } });
+        await tx.relationshipDefinition.deleteMany({ where: { branchName: 'main', sourceEntityType: { projectId: cr.projectId } } });
+        await tx.entityType.deleteMany({ where: { projectId: cr.projectId, branchName: 'main' } });
+
+        // 2. Clone branch to main
+        const oldToNewIdMap: Record<string, string> = {};
+        for (const et of branchTypes) {
+          const newEt = await tx.entityType.create({
+            data: {
+              name: et.name,
+              version: et.version + 1, // increment version on merge
+              branchName: 'main',
+              projectId: cr.projectId,
+              attributes: {
+                create: et.attributes.map(a => ({
+                  name: a.name,
+                  dataType: a.dataType,
+                  required: a.required,
+                  temporal: a.temporal,
+                  branchName: 'main'
+                }))
+              }
+            }
+          });
+          oldToNewIdMap[et.id] = newEt.id;
+        }
+
+        for (const rel of branchRels) {
+          await tx.relationshipDefinition.create({
+            data: {
+              name: rel.name,
+              branchName: 'main',
+              sourceEntityTypeId: oldToNewIdMap[rel.sourceEntityTypeId]!,
+              targetEntityTypeId: oldToNewIdMap[rel.targetEntityTypeId]!
+            }
+          });
+        }
+
+        // 3. Mark approved
+        await tx.changeRequest.update({
+          where: { id: cr.id },
+          data: { status: 'APPROVED', reviewedBy: req.auth?.apiKeyName || 'system', reviewedAt: new Date() }
+        });
+      });
+    } else {
+      // Individual EntityType change - simpler logic
+      // ... handled per-type for now ...
+      await prisma.changeRequest.update({
+        where: { id: cr.id },
+        data: { status: 'APPROVED', reviewedBy: req.auth?.apiKeyName || 'system', reviewedAt: new Date() }
+      });
+    }
+
+    return res.json({ status: 'merged' });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── GET /api/ontology/graph — full ontology graph for ReactFlow ───────────────
 app.get('/api/ontology/graph', async (req, res) => {
   try {
     const projectId = getProjectId(req);
+    const branchName = (req.query.branch as string) || 'main';
     if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
     const entityTypes = await prisma.entityType.findMany({
-      where: { projectId },
+      where: { projectId, branchName },
       include: { attributes: true },
     });
     // De-dup by name
@@ -1400,7 +1675,7 @@ app.get('/api/ontology/graph', async (req, res) => {
 });
 
 // ── GET /api/ontology/entity-types/:id/instances — live data preview ──────────
-  app.get('/api/ontology/entity-types/:id/instances', async (req, res) => {
+app.get('/api/ontology/entity-types/:id/instances', async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
@@ -1431,60 +1706,60 @@ app.get('/api/ontology/graph', async (req, res) => {
       await redisClient.setEx(cacheKey, 60, JSON.stringify(result));
     }
 
-      return res.json(result);
-    } catch (err) {
-      return res.status(500).json({ error: String(err) });
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/entity-types/:id/instances/:logicalId/history — DomainEvent history for one entity ──────────
+app.get('/api/ontology/entity-types/:id/instances/:logicalId/history', async (req, res) => {
+  try {
+    const { id, logicalId } = req.params;
+    const events = await prisma.domainEvent.findMany({
+      where: { entityTypeId: id, logicalId },
+      orderBy: { occurredAt: 'asc' },
+    });
+    return res.json(events);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /api/ontology/entity-types/:id/instances/:logicalId/as-of — state as of timestamp ──────────
+app.get('/api/ontology/entity-types/:id/instances/:logicalId/as-of', async (req, res) => {
+  try {
+    const { id, logicalId } = req.params;
+    const tsParam = (req.query.timestamp as string) || (req.query.at as string);
+    const asOf = tsParam ? new Date(tsParam) : new Date();
+    if (Number.isNaN(asOf.getTime())) {
+      return res.status(400).json({ error: 'Invalid timestamp' });
     }
-  });
 
-  // ── GET /api/ontology/entity-types/:id/instances/:logicalId/history — DomainEvent history for one entity ──────────
-  app.get('/api/ontology/entity-types/:id/instances/:logicalId/history', async (req, res) => {
-    try {
-      const { id, logicalId } = req.params;
-      const events = await prisma.domainEvent.findMany({
-        where: { entityTypeId: id, logicalId },
-        orderBy: { occurredAt: 'asc' },
-      });
-      return res.json(events);
-    } catch (err) {
-      return res.status(500).json({ error: String(err) });
+    const event = await prisma.domainEvent.findFirst({
+      where: { entityTypeId: id, logicalId, occurredAt: { lte: asOf } },
+      orderBy: { occurredAt: 'desc' },
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: 'No events found for entity at or before timestamp' });
     }
-  });
 
-  // ── GET /api/ontology/entity-types/:id/instances/:logicalId/as-of — state as of timestamp ──────────
-  app.get('/api/ontology/entity-types/:id/instances/:logicalId/as-of', async (req, res) => {
-    try {
-      const { id, logicalId } = req.params;
-      const tsParam = (req.query.timestamp as string) || (req.query.at as string);
-      const asOf = tsParam ? new Date(tsParam) : new Date();
-      if (Number.isNaN(asOf.getTime())) {
-        return res.status(400).json({ error: 'Invalid timestamp' });
-      }
+    const payload: any = event.payload as any;
+    const state = payload?.newState ?? payload;
 
-      const event = await prisma.domainEvent.findFirst({
-        where: { entityTypeId: id, logicalId, occurredAt: { lte: asOf } },
-        orderBy: { occurredAt: 'desc' },
-      });
-
-      if (!event) {
-        return res.status(404).json({ error: 'No events found for entity at or before timestamp' });
-      }
-
-      const payload: any = event.payload as any;
-      const state = payload?.newState ?? payload;
-
-      return res.json({
-        entityTypeId: id,
-        logicalId,
-        entityVersion: event.entityVersion,
-        asOf: asOf.toISOString(),
-        occurredAt: event.occurredAt,
-        state,
-      });
-    } catch (err) {
-      return res.status(500).json({ error: String(err) });
-    }
-  });
+    return res.json({
+      entityTypeId: id,
+      logicalId,
+      entityVersion: event.entityVersion,
+      asOf: asOf.toISOString(),
+      occurredAt: event.occurredAt,
+      state,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
 // ── GET /api/ontology/rules — list OntologyRules ─────────────────────────────
 app.get('/api/ontology/rules', async (req, res) => {
@@ -2834,7 +3109,7 @@ app.post('/integration-jobs/:id/execute', enforceIdempotency(prisma), async (req
   try {
     const { data } = req.body ?? {};
 
-    const result = await executeJob(req.params.id, prisma, undefined, data);
+    const result = await executeJob(req.params.id as string, prisma, undefined, data);
     const statusCode = result.status === 'COMPLETED' ? 200 : 500;
 
     return res.status(statusCode).json(result);
@@ -4462,104 +4737,104 @@ app.post('/api/data/sources/test', async (req, res) => {
   }
 });
 
-  app.post('/api/data/sources', async (req, res) => {
-    try {
-      const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
-      const { name, type, connectionConfig } = req.body;
-      if (!name || !type) return res.status(400).json({ error: 'Name and Type are required' });
-      const source = await prisma.dataSource.create({
-        data: { projectId, name, type, connectionConfig }
-      });
-      return res.json(source);
-    } catch (err: any) {
-      return res.status(500).json({ error: String(err) });
+app.post('/api/data/sources', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    const { name, type, connectionConfig } = req.body;
+    if (!name || !type) return res.status(400).json({ error: 'Name and Type are required' });
+    const source = await prisma.dataSource.create({
+      data: { projectId, name, type, connectionConfig }
+    });
+    return res.json(source);
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// Data Quality: summary of rejected records per data source
+app.get('/api/data/quality/summary', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
+    const lookbackDays = parseInt((req.query.days as string) || '7', 10);
+    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+
+    const sources = await prisma.dataSource.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (sources.length === 0) {
+      return res.json([]);
     }
-  });
 
-  // Data Quality: summary of rejected records per data source
-  app.get('/api/data/quality/summary', async (req, res) => {
-    try {
-      const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
-      if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
-
-      const lookbackDays = parseInt((req.query.days as string) || '7', 10);
-      const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
-
-      const sources = await prisma.dataSource.findMany({
-        where: { projectId },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      if (sources.length === 0) {
-        return res.json([]);
-      }
-
-      const rejectedCounts = await prisma.rejectedRecord.groupBy({
-        by: ['dataSourceId'],
-        where: {
-          projectId,
-          createdAt: { gte: since }
-        },
-        _count: { _all: true }
-      });
-
-      const rejectedBySource: Record<string, number> = {};
-      for (const row of rejectedCounts) {
-        if (row.dataSourceId) {
-          rejectedBySource[row.dataSourceId] = row._count._all;
-        }
-      }
-
-      const payload = sources.map((s) => ({
-        id: s.id,
-        name: s.name,
-        type: s.type,
-        createdAt: s.createdAt,
-        rejectedRecords: rejectedBySource[s.id] ?? 0,
-      }));
-
-      return res.json(payload);
-    } catch (err: any) {
-      return res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Data Quality: paginated rejected record details (optionally filtered by dataSourceId)
-  app.get('/api/data/quality/rejected-records', async (req, res) => {
-    try {
-      const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
-      if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
-
-      const dataSourceId = req.query.dataSourceId as string | undefined;
-      const page = parseInt((req.query.page as string) || '1', 10);
-      const pageSize = Math.min(parseInt((req.query.pageSize as string) || '25', 10), 100);
-      const skip = (page - 1) * pageSize;
-
-      const where: Prisma.RejectedRecordWhereInput = {
+    const rejectedCounts = await prisma.rejectedRecord.groupBy({
+      by: ['dataSourceId'],
+      where: {
         projectId,
-        ...(dataSourceId ? { dataSourceId } : {}),
-      };
+        createdAt: { gte: since }
+      },
+      _count: { _all: true }
+    });
 
-      const [total, records] = await Promise.all([
-        prisma.rejectedRecord.count({ where }),
-        prisma.rejectedRecord.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: pageSize,
-        }),
-      ]);
-
-      return res.json({
-        total,
-        page,
-        pageSize,
-        records,
-      });
-    } catch (err: any) {
-      return res.status(500).json({ error: String(err) });
+    const rejectedBySource: Record<string, number> = {};
+    for (const row of rejectedCounts) {
+      if (row.dataSourceId) {
+        rejectedBySource[row.dataSourceId] = row._count._all;
+      }
     }
-  });
+
+    const payload = sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      type: s.type,
+      createdAt: s.createdAt,
+      rejectedRecords: rejectedBySource[s.id] ?? 0,
+    }));
+
+    return res.json(payload);
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// Data Quality: paginated rejected record details (optionally filtered by dataSourceId)
+app.get('/api/data/quality/rejected-records', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
+    const dataSourceId = req.query.dataSourceId as string | undefined;
+    const page = parseInt((req.query.page as string) || '1', 10);
+    const pageSize = Math.min(parseInt((req.query.pageSize as string) || '25', 10), 100);
+    const skip = (page - 1) * pageSize;
+
+    const where: Prisma.RejectedRecordWhereInput = {
+      projectId,
+      ...(dataSourceId ? { dataSourceId } : {}),
+    };
+
+    const [total, records] = await Promise.all([
+      prisma.rejectedRecord.count({ where }),
+      prisma.rejectedRecord.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ]);
+
+    return res.json({
+      total,
+      page,
+      pageSize,
+      records,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
 app.get('/api/data/pipelines', async (req, res) => {
   try {
@@ -6014,7 +6289,7 @@ app.delete('/api/automate/:id', async (req, res) => {
 // POST /api/automate/:id/run — manually trigger an automation
 app.post('/api/automate/:id/run', enforceIdempotency(prisma), async (req, res) => {
   try {
-    const result = await runAutomation(req.params.id, 'manual', req.body?.input);
+    const result = await runAutomation(req.params.id as string, 'manual', req.body?.input);
     return res.json(result);
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
@@ -7066,6 +7341,132 @@ app.get('/api/provenance/chain/:entityId', async (req, res) => {
     return res.json(chains);
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1: Data Quality & Replay Primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/api/data/quality/summary', async (req, res) => {
+  try {
+    const rawProjectId = getProjectId(req);
+    const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const summary = await prisma.rejectedRecord.groupBy({
+      by: ['dataSourceId'],
+      where: { projectId },
+      _count: { id: true },
+    });
+
+    const enriched = await Promise.all(summary.map(async (s) => {
+      const ds = s.dataSourceId ? await prisma.dataSource.findUnique({ where: { id: s.dataSourceId } }) : null;
+      const recent = await prisma.rejectedRecord.findMany({
+        where: { projectId, dataSourceId: s.dataSourceId },
+        orderBy: { createdAt: 'desc' },
+        take: 100
+      });
+      const errorCounts: Record<string, number> = {};
+      for (const r of recent) {
+        const errs = r.errors as any;
+        const key = errs?.required ? 'Missing Data Contract Fields' : (errs?.types ? 'Type Mismatch' : 'Unknown');
+        errorCounts[key] = (errorCounts[key] || 0) + 1;
+      }
+      const topReasons = Object.entries(errorCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([reason, count]) => ({ reason, count }));
+      return {
+        id: s.dataSourceId || 'unknown',
+        name: ds?.name || 'Unknown',
+        type: ds?.type || 'Unknown',
+        rejectedRecords: s._count.id,
+        topReasons
+      };
+    }));
+
+    return res.json(enriched);
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get('/api/data/quality/rejected-records', async (req, res) => {
+  try {
+    const rawProjectId = getProjectId(req);
+    const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const { dataSourceId, take = 50, skip = 0 } = req.query;
+    const where: any = { projectId };
+    if (dataSourceId) where.dataSourceId = String(dataSourceId);
+
+    const records = await prisma.rejectedRecord.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: Number(take),
+      skip: Number(skip),
+    });
+
+    return res.json(records);
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.post('/api/data/replay', async (req, res) => {
+  try {
+    const { entityTypeId } = req.body;
+    if (!entityTypeId) return res.status(400).json({ error: 'entityTypeId required' });
+
+    const events = await prisma.domainEvent.findMany({
+      where: { entityTypeId },
+      orderBy: { occurredAt: 'asc' }
+    });
+
+    let rebuiltCount = 0;
+    // VERY simplified atomic swap/rebuild: clear projection and run sequentially
+    await prisma.$transaction(async (tx) => {
+      await tx.currentEntityState.deleteMany({ where: { entityTypeId } });
+      const stateMap = new Map<string, any>();
+      for (const ev of events) {
+        if (ev.eventType === 'EntityStateChanged') {
+          const payload = ev.payload as any;
+          if (payload.newState) {
+            stateMap.set(ev.logicalId, {
+              data: payload.newState,
+              updatedAt: ev.occurredAt
+            });
+          }
+        }
+      }
+      for (const [logicalId, state] of stateMap.entries()) {
+        await tx.currentEntityState.create({
+          data: {
+            logicalId,
+            entityTypeId,
+            data: state.data,
+            updatedAt: state.updatedAt
+          }
+        });
+        rebuiltCount++;
+      }
+    });
+
+    return res.json({ status: 'ok', rebuiltCount });
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get('/api/ontology/entities/:logicalId/history', async (req, res) => {
+  try {
+    const events = await prisma.domainEvent.findMany({
+      where: { logicalId: req.params.logicalId },
+      orderBy: { occurredAt: 'desc' }
+    });
+    return res.json(events);
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
 
 // ── Error Handler (must be last middleware) ──────────────────────
 app.use(errorHandler());

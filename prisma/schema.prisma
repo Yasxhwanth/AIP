@@ -39,12 +39,15 @@ model Project {
   automations         AIPAutomate[]
   aiWorkflows         AIWorkflow[]
   changeRequests      ChangeRequest[]
+  outboxEvents        OutboxEvent[]
+  rejectedRecords     RejectedRecord[]
 }
 
 model EntityType {
   id        String   @id @default(uuid())
   name      String
   version   Int
+  branchName String  @default("main")
   createdAt DateTime @default(now())
 
   attributes            AttributeDefinition[]
@@ -60,8 +63,8 @@ model EntityType {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([projectId, name, version])
-  @@index([projectId])
+  @@unique([projectId, name, version, branchName])
+  @@index([projectId, branchName])
 }
 
 model AttributeDefinition {
@@ -70,6 +73,7 @@ model AttributeDefinition {
   dataType String
   required Boolean
   temporal Boolean @default(false)
+  branchName String @default("main")
 
   entityTypeId String
   entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
@@ -78,6 +82,7 @@ model AttributeDefinition {
 model RelationshipDefinition {
   id        String   @id @default(uuid())
   name      String
+  branchName String  @default("main")
   createdAt DateTime @default(now())
 
   sourceEntityTypeId String
@@ -90,6 +95,7 @@ model RelationshipDefinition {
 
   @@index([sourceEntityTypeId])
   @@index([targetEntityTypeId])
+  @@index([branchName])
 }
 
 model RelationshipInstance {
@@ -250,6 +256,8 @@ model DomainEvent {
   payload        Json
   occurredAt     DateTime @default(now())
 
+  outboxEvents   OutboxEvent[]
+
   @@index([entityTypeId, logicalId])
   @@index([eventType])
   @@index([occurredAt])
@@ -314,6 +322,8 @@ model ChangeRequest {
   resourceType    String   // "EntityType", "Pipeline", "DecisionRule", etc.
   resourceId      String?  // Can be null if it's a creation request
   proposedChanges Json     // The desired delta
+  diff            Json?    // Visualizable diff of changes
+  branchName      String   @default("main")
   status          String   @default("DRAFT") // DRAFT, IN_REVIEW, APPROVED, REJECTED
   createdBy       String   // apiKeyName
   reviewedBy      String?  // apiKeyName
@@ -326,6 +336,7 @@ model ChangeRequest {
 
   @@index([projectId, status])
   @@index([resourceType, resourceId])
+  @@index([branchName])
 }
 
 model Alert {
@@ -409,6 +420,7 @@ model DataSource {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   integrationJobs IntegrationJob[]
+  rejectedRecords RejectedRecord[]
 
   @@index([projectId])
 }
@@ -423,7 +435,7 @@ model RejectedRecord {
   errors       Json     // Validation errors / schema drift details
   createdAt    DateTime @default(now())
 
-  project   Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   dataSource DataSource? @relation(fields: [dataSourceId], references: [id])
 
   @@index([projectId, createdAt(sort: Desc)])

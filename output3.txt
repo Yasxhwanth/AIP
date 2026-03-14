@@ -1,0 +1,39 @@
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma\schema.prisma.
+
+Error: Prisma schema validation - (validate wasm)
+Error code: P1012
+[1;91merror[0m: [1mError validating field `project` in model `OutboxEvent`: The relation field `project` on model `OutboxEvent` is missing an opposite relation field on the model `Project`. Either run `prisma format` or add it manually.[0m
+  [1;94m-->[0m  [4mprisma\schema.prisma:274[0m
+[1;94m   | [0m
+[1;94m273 | [0m
+[1;94m274 | [0m  [1;91mproject     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)[0m
+[1;94m275 | [0m  domainEvent DomainEvent? @relation(fields: [domainEventId], references: [id])
+[1;94m   | [0m
+[1;91merror[0m: [1mError validating field `domainEvent` in model `OutboxEvent`: The relation field `domainEvent` on model `OutboxEvent` is missing an opposite relation field on the model `DomainEvent`. Either run `prisma format` or add it manually.[0m
+  [1;94m-->[0m  [4mprisma\schema.prisma:275[0m
+[1;94m   | [0m
+[1;94m274 | [0m  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+[1;94m275 | [0m  [1;91mdomainEvent DomainEvent? @relation(fields: [domainEventId], references: [id])[0m
+[1;94m276 | [0m
+[1;94m   | [0m
+[1;91merror[0m: [1mError validating field `project` in model `RejectedRecord`: The relation field `project` on model `RejectedRecord` is missing an opposite relation field on the model `Project`. Either run `prisma format` or add it manually.[0m
+  [1;94m-->[0m  [4mprisma\schema.prisma:426[0m
+[1;94m   | [0m
+[1;94m425 | [0m
+[1;94m426 | [0m  [1;91mproject    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)[0m
+[1;94m427 | [0m  dataSource DataSource? @relation(fields: [dataSourceId], references: [id])
+[1;94m   | [0m
+[1;91merror[0m: [1mError validating field `dataSource` in model `RejectedRecord`: The relation field `dataSource` on model `RejectedRecord` is missing an opposite relation field on the model `DataSource`. Either run `prisma format` or add it manually.[0m
+  [1;94m-->[0m  [4mprisma\schema.prisma:427[0m
+[1;94m   | [0m
+[1;94m426 | [0m  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+[1;94m427 | [0m  [1;91mdataSource DataSource? @relation(fields: [dataSourceId], references: [id])[0m
+[1;94m428 | [0m
+[1;94m   | [0m
+
+Validation Error Count: 4
+[Context: validate]
+
+Prisma CLI Version : 7.4.1

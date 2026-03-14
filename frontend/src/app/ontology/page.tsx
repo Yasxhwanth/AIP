@@ -7,13 +7,14 @@ import ReactFlow, {
     BaseEdge, getSmoothStepPath
 } from "reactflow";
 import "reactflow/dist/style.css";
+import Link from "next/link";
 import {
     MousePointer2, LayoutGrid, Undo2, Eraser, Maximize2,
     Palette, Search, Trash2, AlignCenter, Eye, ChevronRight,
     ChevronLeft, Layers, History, Code2, Activity, AlertCircle,
     ArrowRightLeft, Plus, X, Filter, BookOpen, Settings, Link2,
     Database, GitBranch, RefreshCw, Zap, Monitor, Key, Hash,
-    Loader2
+    Loader2, GitPullRequest
 } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -103,6 +104,8 @@ export default function OntologyPage() {
     // Live Data State
     const [entityTypes, setEntityTypes] = useState<any[]>([]);
     const [graphData, setGraphData] = useState<{ nodes: any[], edges: any[] }>({ nodes: [], edges: [] });
+    const [branches, setBranches] = useState<string[]>(["main"]);
+    const [selectedBranch, setSelectedBranch] = useState("main");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -110,10 +113,6 @@ export default function OntologyPage() {
     const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
     const [previewData, setPreviewData] = useState<any[]>([]);
     const [previewLoading, setPreviewLoading] = useState(false);
-    const [selectedLogicalId, setSelectedLogicalId] = useState<string | null>(null);
-    const [historyEvents, setHistoryEvents] = useState<any[]>([]);
-    const [historyLoading, setHistoryLoading] = useState(false);
-    const [historyError, setHistoryError] = useState<string | null>(null);
     const [selectedLogicalId, setSelectedLogicalId] = useState<string | null>(null);
     const [historyEvents, setHistoryEvents] = useState<any[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
@@ -127,11 +126,13 @@ export default function OntologyPage() {
     const loadOntology = useCallback(async () => {
         setLoading(true); setError(null);
         try {
-            // Fetch both entity types (for list) and full graph (for lineage)
-            const [etRes, graphRes] = await Promise.all([
-                apiFetch("/api/ontology/entity-types"),
-                apiFetch("/api/ontology/graph")
+            // Fetch branches, entity types, and graph
+            const [branchesRes, etRes, graphRes] = await Promise.all([
+                apiFetch("/api/ontology/branches"),
+                apiFetch(`/api/ontology/entity-types?branch=${selectedBranch}`),
+                apiFetch(`/api/ontology/graph?branch=${selectedBranch}`)
             ]);
+            setBranches(branchesRes);
             setEntityTypes(etRes);
             setGraphData(graphRes);
 
@@ -152,15 +153,21 @@ export default function OntologyPage() {
 
             setRfNodes(nodes);
             setRfEdges(edges);
-            if (etRes.length > 0 && !selectedEntityId) setSelectedEntityId(etRes[0].id);
+
+            // If the selected entity is no longer in the list (branch switch), clear it or pick first
+            if (selectedEntityId && !etRes.find((t: any) => t.id === selectedEntityId)) {
+                setSelectedEntityId(etRes.length > 0 ? etRes[0].id : null);
+            } else if (etRes.length > 0 && !selectedEntityId) {
+                setSelectedEntityId(etRes[0].id);
+            }
         } catch (e: any) {
             setError(e.message);
         } finally {
             setLoading(false);
         }
-    }, [selectedEntityId]);
+    }, [selectedBranch, selectedEntityId]);
 
-    useEffect(() => { loadOntology(); }, []);
+    useEffect(() => { loadOntology(); }, [loadOntology]);
 
     // ── LOAD PREVIEW DATA ──
     useEffect(() => {
@@ -235,9 +242,26 @@ export default function OntologyPage() {
                             <button onClick={() => setViewMode("list")} className={`px-3 py-1 text-[11px] font-bold rounded transition-colors ${viewMode === "list" ? "bg-white shadow text-[#182026]" : "text-[#5C7080] hover:text-[#182026]"}`}>Object Types</button>
                             <button onClick={() => setViewMode("graph")} className={`px-3 py-1 text-[11px] font-bold rounded transition-colors ${viewMode === "graph" ? "bg-white shadow text-[#182026]" : "text-[#5C7080] hover:text-[#182026]"}`}>Full Lineage</button>
                         </div>
+                        <div className="h-4 w-px bg-[#CED9E0]" />
+                        <div className="flex items-center gap-1.5 px-2 py-1 hover:bg-[#EBF1F5] rounded cursor-pointer group transition-colors">
+                            <GitBranch className="w-3.5 h-3.5 text-[#5C7080] group-hover:text-[#137CBD]" />
+                            <select
+                                value={selectedBranch}
+                                onChange={(e) => setSelectedBranch(e.target.value)}
+                                className="bg-transparent text-[11px] font-bold text-[#182026] outline-none border-none cursor-pointer p-0"
+                            >
+                                {branches.map(b => (
+                                    <option key={b} value={b}>{b}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                     <div className="flex items-center gap-3">
                         {loading && <Loader2 className="w-4 h-4 text-[#5C7080] animate-spin" />}
+                        <Link href="/ontology/change-requests" className="flex items-center gap-1.5 px-3 h-7 border border-[#CED9E0] hover:bg-[#EBF1F5] text-[#5C7080] text-[11px] font-bold rounded transition-colors shadow-sm">
+                            <GitPullRequest className="w-3.5 h-3.5" />
+                            CRs
+                        </Link>
                         <button onClick={loadOntology} className="p-1.5 hover:bg-[#EBF1F5] rounded text-[#5C7080]"><RefreshCw className="w-4 h-4" /></button>
                         <button className="h-7 px-3 bg-[#137CBD] hover:bg-[#0E6694] text-white text-[11px] font-bold rounded transition-colors shadow-sm">Save Changes</button>
                     </div>
@@ -320,6 +344,7 @@ export default function OntologyPage() {
                                 </div>
                                 <div className="flex border-b border-[#CED9E0] bg-[#F5F8FA] text-[11px] font-bold">
                                     <button onClick={() => setSidebarTab("preview")} className={`flex-1 py-2 border-b-2 text-center ${sidebarTab === "preview" ? "border-[#137CBD] text-[#137CBD]" : "border-transparent text-[#5C7080] hover:text-[#182026]"}`}>Live Preview</button>
+                                    <button onClick={() => setSidebarTab("history")} className={`flex-1 py-2 border-b-2 text-center ${sidebarTab === "history" ? "border-[#137CBD] text-[#137CBD]" : "border-transparent text-[#5C7080] hover:text-[#182026]"}`}>History</button>
                                     <button onClick={() => setSidebarTab("properties")} className={`flex-1 py-2 border-b-2 text-center ${sidebarTab === "properties" ? "border-[#137CBD] text-[#137CBD]" : "border-transparent text-[#5C7080] hover:text-[#182026]"}`}>Properties</button>
                                     <button onClick={() => setSidebarTab("lineage")} className={`flex-1 py-2 border-b-2 text-center ${sidebarTab === "lineage" ? "border-[#137CBD] text-[#137CBD]" : "border-transparent text-[#5C7080] hover:text-[#182026]"}`}>Relations</button>
                                 </div>
@@ -343,7 +368,7 @@ export default function OntologyPage() {
                                                     </thead>
                                                     <tbody>
                                                         {previewData.map((row, i) => (
-                                                            <tr key={i} className="border-b border-[#CED9E0]/40 hover:bg-[#F5F8FA]">
+                                                            <tr key={i} className="border-b border-[#CED9E0]/40 hover:bg-[#F5F8FA] cursor-pointer" onClick={() => { setSelectedLogicalId(row.logicalId); setSidebarTab("history"); }}>
                                                                 <td className="px-3 py-1.5 font-mono text-[#5C7080]">{row.logicalId}</td>
                                                                 {Object.keys(previewData[0]?.data || {}).map(k => (
                                                                     <td key={k} className="px-3 py-1.5 font-mono">{String(row.data?.[k] ?? "—")}</td>
@@ -352,6 +377,47 @@ export default function OntologyPage() {
                                                         ))}
                                                     </tbody>
                                                 </table>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {sidebarTab === "history" && (
+                                        <div className="p-0 h-full flex flex-col pt-2">
+                                            {!selectedLogicalId ? (
+                                                <div className="p-8 text-center text-[#5C7080] text-[12px]">
+                                                    <History className="w-8 h-8 mx-auto mb-3 opacity-20" />
+                                                    Select a row in Live Preview to view its history timeline.
+                                                </div>
+                                            ) : historyLoading ? (
+                                                <div className="p-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-[#5C7080]" /></div>
+                                            ) : historyError ? (
+                                                <div className="p-4 text-center text-[#DB3737] text-[12px]">{historyError}</div>
+                                            ) : historyEvents.length === 0 ? (
+                                                <div className="p-8 text-center text-[#5C7080] text-[12px]">No history found.</div>
+                                            ) : (
+                                                <div className="flex-1 overflow-auto p-4 space-y-4">
+                                                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#CED9E0]">
+                                                        <span className="font-bold text-[12px]">Timeline for</span>
+                                                        <span className="bg-[#EBF1F5] text-[#5C7080] px-1.5 py-0.5 rounded font-mono text-[10px]">{selectedLogicalId}</span>
+                                                    </div>
+                                                    <div className="relative border-l border-[#CED9E0] ml-2 space-y-6">
+                                                        {historyEvents.map((ev, i) => (
+                                                            <div key={i} className="relative pl-4">
+                                                                <div className="absolute w-2 h-2 bg-[#137CBD] rounded-full -left-[4.5px] top-1.5 ring-2 ring-white" />
+                                                                <div className="text-[10px] font-mono text-[#5C7080] mb-0.5">{new Date(ev.occurredAt).toLocaleString()}</div>
+                                                                <div className="bg-[#F5F8FA] border border-[#CED9E0] rounded p-2 shadow-sm">
+                                                                    <div className="flex justify-between items-center mb-1">
+                                                                        <span className="font-bold text-[#182026] text-[11px]">{ev.eventType}</span>
+                                                                        <span className="text-[9px] bg-white border border-[#CED9E0] px-1 rounded text-[#5C7080] font-mono">v{ev.version}</span>
+                                                                    </div>
+                                                                    <pre className="text-[9px] font-mono text-[#5C7080] bg-white p-1.5 rounded border border-[#CED9E0] overflow-x-auto">
+                                                                        {JSON.stringify(ev.payload, null, 2)}
+                                                                    </pre>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     )}

@@ -42,7 +42,7 @@ async function main() {
     for (const etData of entityTypesData) {
         let et = await prisma.entityType.findUnique({
             where: {
-                projectId_name_version: { projectId, name: etData.name, version: etData.version }
+                projectId_name_version_branchName: { projectId, name: etData.name, version: etData.version, branchName: 'main' }
             }
         });
 

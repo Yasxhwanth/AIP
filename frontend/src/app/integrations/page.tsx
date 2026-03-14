@@ -11,6 +11,13 @@ import {
 import Papa from 'papaparse';
 import { PipelineEditor } from "@/components/PipelineEditor";
 import { ApiClient } from "@/lib/apiClient";
+import {
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
+} from "@/components/ui/sheet";
 
 interface DataQualitySourceSummary {
     id: string;
@@ -23,7 +30,7 @@ interface DataQualitySourceSummary {
 type IngestStep = 'UPLOAD' | 'MAP' | 'EXECUTE';
 type ViewMode = 'SOURCES' | 'WIZARD' | 'PIPELINES';
 
-// ── Hardcoded Connected Sources ───────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────
 const CONNECTED_SOURCES = [
     {
         id: "src-1",
@@ -79,13 +86,19 @@ const CONNECTED_SOURCES = [
     },
 ];
 
-// ── Pipeline Stages ───────────────────────────────────────────────────────────
 const PIPELINE_STAGES = ["Extract", "Transform", "Validate", "Ontology Map", "Load"];
 
-function SourceCard({ source }: { source: typeof CONNECTED_SOURCES[0] }) {
+// ── Components ─────────────────────────────────────────────────────────────
+
+function SourceCard({ source, summary, onViewErrors }: {
+    source: typeof CONNECTED_SOURCES[0],
+    summary?: DataQualitySourceSummary,
+    onViewErrors: (id: string) => void
+}) {
     const Icon = source.icon;
     const statusColors = { live: "bg-emerald-400", synced: "bg-cyan-400", warning: "bg-amber-400" };
     const statusLabels = { live: "Live", synced: "Synced", warning: "Warning" };
+
     return (
         <div className="bg-[#0E1623] border border-white/8 hover:border-white/20 rounded-xl p-4 transition-all group cursor-pointer">
             <div className="flex items-start justify-between mb-3">
@@ -114,6 +127,19 @@ function SourceCard({ source }: { source: typeof CONNECTED_SOURCES[0] }) {
                     <div className={`h-full rounded-full transition-all ${source.health > 90 ? 'bg-emerald-400' : source.health > 75 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${source.health}%` }} />
                 </div>
             </div>
+
+            {summary && summary.rejectedRecords > 0 && (
+                <div
+                    onClick={(e) => { e.stopPropagation(); onViewErrors(source.id); }}
+                    className="mb-3 flex items-center justify-between px-2 py-1.5 bg-red-500/10 border border-red-500/20 rounded hover:bg-red-500/20 transition-colors"
+                >
+                    <div className="flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                        <span className="text-[10px] text-red-400 font-bold">Data Quality Issues</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-red-300 bg-red-500/20 px-1.5 py-0.5 rounded">{summary.rejectedRecords}</span>
+                </div>
+            )}
 
             {/* Stats */}
             <div className="flex items-center justify-between text-[10px] mb-3">
@@ -177,7 +203,7 @@ function PipelineSimulator({ sourceName }: { sourceName: string }) {
                     return (
                         <div key={stage} className="flex items-center gap-1 flex-1">
                             <div className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-1 rounded-lg transition-all ${isActive ? 'bg-cyan-500/10 border border-cyan-500/30' : isDone ? 'bg-emerald-500/8 border border-emerald-500/20' : 'bg-white/3 border border-white/5'}`}>
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isActive ? 'bg-cyan-500 text-black' : isDone ? 'bg-emerald-500 text-black' : 'bg-white/10 text-slate-600'}`}>
+                                <div className="w-5 h-5 rounded-full flex items-center justify-center bg-white/10 text-slate-600">
                                     {isDone ? <CheckCircle2 className="w-3 h-3" /> : isActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <span className="text-[10px] font-bold">{i + 1}</span>}
                                 </div>
                                 <span className={`text-[9px] font-bold text-center ${isActive ? 'text-cyan-400' : isDone ? 'text-emerald-400' : 'text-slate-600'}`}>{stage}</span>
@@ -206,6 +232,15 @@ export default function IntegrationsPage() {
     const [qualityLoading, setQualityLoading] = useState(false);
     const [qualityError, setQualityError] = useState<string | null>(null);
 
+    // Rejected Records Sheet State
+    const [selectedSourceForErrors, setSelectedSourceForErrors] = useState<string | null>(null);
+    const [rejectedRecords, setRejectedRecords] = useState<any[]>([]);
+    const [loadingRejected, setLoadingRejected] = useState(false);
+
+    const [inferring, setInferring] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Fetch Quality Summary
     useEffect(() => {
         async function loadQuality() {
             try {
@@ -222,8 +257,23 @@ export default function IntegrationsPage() {
         }
         loadQuality();
     }, []);
-    const [inferring, setInferring] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Fetch Rejected Records
+    useEffect(() => {
+        if (!selectedSourceForErrors) return;
+        async function loadRejected() {
+            setLoadingRejected(true);
+            try {
+                const data = await ApiClient.get<{ data: any[] }>(`/api/data/quality/rejected-records?dataSourceId=${selectedSourceForErrors}`);
+                setRejectedRecords(data.data || []);
+            } catch (err) {
+                console.error("Failed to load rejected records", err);
+            } finally {
+                setLoadingRejected(false);
+            }
+        }
+        loadRejected();
+    }, [selectedSourceForErrors]);
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selected = e.target.files?.[0];
@@ -231,8 +281,13 @@ export default function IntegrationsPage() {
         setFile(selected);
         if (selected.name.endsWith('.csv')) {
             Papa.parse(selected, {
-                header: true, preview: 5,
-                complete: (results) => { setColumns(results.meta.fields || []); setPreviewData(results.data); setStep('MAP'); }
+                header: true,
+                preview: 5,
+                complete: (results) => {
+                    setColumns(results.meta.fields || []);
+                    setPreviewData(results.data);
+                    setStep('MAP');
+                }
             });
         } else if (selected.name.endsWith('.json')) {
             const reader = new FileReader();
@@ -240,8 +295,12 @@ export default function IntegrationsPage() {
                 try {
                     const json = JSON.parse(ev.target?.result as string);
                     const arr = Array.isArray(json) ? json : [json];
-                    setColumns(Object.keys(arr[0] || {})); setPreviewData(arr.slice(0, 5)); setStep('MAP');
-                } catch { alert("Invalid JSON"); }
+                    setColumns(Object.keys(arr[0] || {}));
+                    setPreviewData(arr.slice(0, 5));
+                    setStep('MAP');
+                } catch {
+                    alert("Invalid JSON");
+                }
             };
             reader.readAsText(selected);
         }
@@ -249,7 +308,10 @@ export default function IntegrationsPage() {
 
     const executePipeline = () => {
         setStep('EXECUTE');
-        setTimeout(() => { setStep('UPLOAD'); setFile(null); }, 2500);
+        setTimeout(() => {
+            setStep('UPLOAD');
+            setFile(null);
+        }, 2500);
     };
 
     const handleAutoInfer = async () => {
@@ -261,17 +323,22 @@ export default function IntegrationsPage() {
             const suggestResult = await ApiClient.post<{ suggestions: Record<string, string> }>('/api/v1/integration/suggest-mappings', { inferredAttributes: inferResult.attributes, sampleData: previewData, targetEntityType: entityName });
             const newMapping: Record<string, string> = { ...mapping };
             const suggestions = suggestResult.suggestions ?? {};
+
             for (const col of columns) {
                 const key = col.replace(/[^a-zA-Z0-9]/g, '');
                 if (suggestions[key]) newMapping[col] = suggestions[key];
                 else if (suggestions[col]) newMapping[col] = suggestions[col];
             }
+
             for (const attr of inferResult.attributes) {
                 const origCol = columns.find(c => c.replace(/[^a-zA-Z0-9]/g, '') === attr.name || c === attr.name);
                 if (origCol && !newMapping[origCol]) newMapping[origCol] = attr.dataType;
             }
             setMapping(newMapping);
-        } catch { } finally { setInferring(false); }
+        } catch {
+        } finally {
+            setInferring(false);
+        }
     };
 
     return (
@@ -320,7 +387,14 @@ export default function IntegrationsPage() {
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                            {CONNECTED_SOURCES.map(s => <SourceCard key={s.id} source={s} />)}
+                            {CONNECTED_SOURCES.map(s => (
+                                <SourceCard
+                                    key={s.id}
+                                    source={s}
+                                    summary={qualitySummary.find(qs => qs.id === s.id)}
+                                    onViewErrors={setSelectedSourceForErrors}
+                                />
+                            ))}
                         </div>
 
                         {/* Pipeline simulators */}
@@ -462,6 +536,61 @@ export default function IntegrationsPage() {
                 {/* ── PIPELINES VIEW ── */}
                 {viewMode === 'PIPELINES' && <PipelineEditor />}
             </div>
+
+            <Sheet open={!!selectedSourceForErrors} onOpenChange={(val) => !val && setSelectedSourceForErrors(null)}>
+                <SheetContent side="right" className="w-[500px] sm:max-w-[600px] bg-[#0E1623] border-l border-white/10 p-0 flex flex-col">
+                    <SheetHeader className="p-6 border-b border-white/10 shrink-0 text-white">
+                        <SheetTitle className="text-white flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-amber-500" />
+                            Rejected Records
+                        </SheetTitle>
+                        <SheetDescription className="text-slate-400 text-xs">
+                            Rows that failed data contract validation during ingestion.
+                        </SheetDescription>
+                    </SheetHeader>
+
+                    <div className="flex-1 overflow-y-auto p-6">
+                        {loadingRejected ? (
+                            <div className="flex justify-center py-10">
+                                <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+                            </div>
+                        ) : rejectedRecords.length === 0 ? (
+                            <div className="text-center text-slate-500 text-sm py-10">
+                                No rejected records found.
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {rejectedRecords.map((record: any) => (
+                                    <div key={record.id} className="bg-black/20 border border-white/10 rounded-lg p-4">
+                                        <div className="flex justify-between items-start mb-3 border-b border-white/5 pb-3">
+                                            <span className="font-mono text-[10px] text-slate-500">{new Date(record.createdAt).toLocaleString()}</span>
+                                            <span className="text-[10px] font-bold px-2 py-0.5 bg-red-500/10 text-red-400 rounded">Quarantined</span>
+                                        </div>
+
+                                        <div className="mb-3">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Validation Errors</p>
+                                            <div className="bg-red-500/5 border border-red-500/10 rounded overflow-hidden">
+                                                <pre className="text-[10px] text-red-300 p-2 overflow-x-auto font-mono">
+                                                    {JSON.stringify(record.errors, null, 2)}
+                                                </pre>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Raw Payload</p>
+                                            <div className="bg-black/40 border border-white/5 rounded overflow-hidden">
+                                                <pre className="text-[10px] text-slate-300 p-2 overflow-x-auto font-mono">
+                                                    {JSON.stringify(record.rawRecord, null, 2)}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }

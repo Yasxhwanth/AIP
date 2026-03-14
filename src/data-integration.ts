@@ -3,7 +3,8 @@ import { evaluatePolicies } from './policy-engine';
 import { IdentityService } from './identity-service';
 import { ProvenanceService } from './provenance-service';
 import { runReasonerForEntity } from './ontology-reasoner';
-import { recordDomainEvent } from './domain-events';
+import { recordDomainEvent, RecordDomainEventArgs } from './domain-events';
+import crypto from 'crypto';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ export async function upsertEntityInstance(
         sourceSystem: string;
         sourceRecordId: string;
         confidence?: number;
+        generateOutbox?: { targetSystem: string };
     }
 ): Promise<{ success: boolean; instanceId?: string; error?: string }> {
     const now = new Date();
@@ -175,21 +177,34 @@ export async function upsertEntityInstance(
             }
 
             // Emit domain event
-            const idempotencyKey = `EntityStateChanged:${logicalId}:${now.toISOString()}`;
-            const domainEvent = await tx.domainEvent.create({
-                data: {
-                    idempotencyKey,
-                    eventType: 'EntityStateChanged',
-                    entityTypeId: entityType.id,
-                    logicalId,
-                    entityVersion: entityType.version,
-                    payload: {
-                        previousState: current?.data ?? null,
-                        newState: attrData,
-                        validFrom: now.toISOString(),
-                    } as unknown as Prisma.InputJsonValue,
-                },
-            });
+            const hash = crypto.createHash('sha256').update(JSON.stringify(attrData)).digest('hex');
+            const idempotencyKey = options?.sourceRecordId
+                ? `EntityStateChanged:${options.sourceSystem}:${options.sourceRecordId}`
+                : `EntityStateChanged:${logicalId}:${hash}`;
+
+            const domainEventPayload: RecordDomainEventArgs = {
+                prisma: tx as PrismaClient,
+                entityTypeId: entityType.id,
+                logicalId,
+                entityVersion: entityType.version,
+                eventType: 'EntityStateChanged',
+                idempotencyKey,
+                payload: {
+                    previousState: current?.data as Record<string, unknown> ?? null,
+                    newState: attrData,
+                    validFrom: now.toISOString(),
+                }
+            };
+
+            if (options?.generateOutbox) {
+                domainEventPayload.outbox = {
+                    projectId: entityType.projectId,
+                    aggregateType: 'EntityInstance',
+                    targetSystem: options.generateOutbox.targetSystem
+                };
+            }
+
+            const domainEvent = await recordDomainEvent(domainEventPayload);
 
             // CQRS: Upsert read model projection
             await tx.currentEntityState.upsert({
@@ -256,6 +271,7 @@ export async function executeJob(
     prisma: PrismaClient,
     queueId?: string,
     inlineData?: unknown[],
+    options?: { generateOutbox?: boolean }
 ): Promise<{ status: string; recordsProcessed: number; recordsFailed: number; recordsDropped: number; error?: string }> {
     // Load the job with its data source and target entity type
     const job = await prisma.integrationJob.findUnique({
@@ -370,7 +386,8 @@ export async function executeJob(
             const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma, {
                 sourceSystem: job.dataSource.name,
                 sourceRecordId: externalId, // Using externalId as sourceRecordId for simplicity
-                confidence
+                confidence,
+                ...(options?.generateOutbox ? { generateOutbox: { targetSystem: ' downstream' } } : {})
             });
 
             if (result.success) {
