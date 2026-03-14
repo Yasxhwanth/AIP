@@ -11,6 +11,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ── Core Organization ──────────────────────────────────────────────────
@@ -22,6 +23,15 @@ model Project {
   createdAt   DateTime @default(now())
 
   entityTypes         EntityType[]
+  attributeDefinitions AttributeDefinition[]
+  relationshipDefinitions RelationshipDefinition[]
+  relationshipInstances RelationshipInstance[]
+  entityInstances      EntityInstance[]
+  domainEvents        DomainEvent[]
+  auditLogs           AuditLog[]
+  currentEntityStates CurrentEntityState[]
+  jobQueues           JobQueue[]
+  
   dataSources         DataSource[]
   integrationJobs     IntegrationJob[]
   decisionRules       DecisionRule[]
@@ -60,8 +70,8 @@ model EntityType {
   decisionRules         DecisionRule[]
   currentStates         CurrentEntityState[]
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, name, version, branchName])
   @@index([projectId, branchName])
@@ -77,6 +87,11 @@ model AttributeDefinition {
 
   entityTypeId String
   entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 model RelationshipDefinition {
@@ -91,11 +106,15 @@ model RelationshipDefinition {
   sourceEntityType EntityType @relation("RelationshipSource", fields: [sourceEntityTypeId], references: [id], onDelete: Restrict)
   targetEntityType EntityType @relation("RelationshipTarget", fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   instances RelationshipInstance[]
 
   @@index([sourceEntityTypeId])
   @@index([targetEntityTypeId])
   @@index([branchName])
+  @@index([projectId])
 }
 
 model RelationshipInstance {
@@ -111,9 +130,13 @@ model RelationshipInstance {
 
   relationshipDef RelationshipDefinition @relation(fields: [relationshipDefinitionId], references: [id])
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@index([sourceLogicalId, validFrom, validTo])
   @@index([targetLogicalId, validFrom, validTo])
   @@index([relationshipDefinitionId, sourceLogicalId, targetLogicalId])
+  @@index([projectId])
 }
 
 model EntityInstance {
@@ -134,8 +157,12 @@ model EntityInstance {
   entityType        EntityType         @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
   provenanceRecords ProvenanceRecord[]
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@index([entityTypeId, logicalId])
   @@index([validFrom, validTo, transactionTime])
+  @@index([projectId])
 }
 
 model EntityAlias {
@@ -211,9 +238,13 @@ model AuditLog {
   metadata     Json?    // request metadata (IP, correlationId, etc)
   occurredAt   DateTime @default(now())
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
   @@index([actor, occurredAt(sort: Desc)])
   @@index([resourceType, resourceId, occurredAt(sort: Desc)])
   @@index([action, occurredAt(sort: Desc)])
+  @@index([projectId])
 }
 
 model ProvenanceRecord {
@@ -256,11 +287,15 @@ model DomainEvent {
   payload        Json
   occurredAt     DateTime @default(now())
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   outboxEvents   OutboxEvent[]
 
   @@index([entityTypeId, logicalId])
   @@index([eventType])
   @@index([occurredAt])
+  @@index([projectId])
 }
 
 // Outbox pattern for reliable write-back to external systems
@@ -332,7 +367,7 @@ model ChangeRequest {
   createdAt       DateTime @default(now())
 
   projectId       String
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, status])
   @@index([resourceType, resourceId])
@@ -370,7 +405,11 @@ model CurrentEntityState {
 
   entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Cascade)
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@index([entityTypeId])
+  @@index([projectId])
 }
 
 model CurrentGraph {
@@ -416,8 +455,8 @@ model DataSource {
   enabled          Boolean  @default(true)
   createdAt        DateTime @default(now())
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   integrationJobs IntegrationJob[]
   rejectedRecords RejectedRecord[]
@@ -435,7 +474,7 @@ model RejectedRecord {
   errors       Json     // Validation errors / schema drift details
   createdAt    DateTime @default(now())
 
-  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   dataSource DataSource? @relation(fields: [dataSourceId], references: [id])
 
   @@index([projectId, createdAt(sort: Desc)])
@@ -451,8 +490,8 @@ model Pipeline {
   enabled     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   runs      PipelineRun[]
 
   @@index([projectId])
@@ -500,8 +539,8 @@ model IntegrationJob {
   enabled            Boolean  @default(true)
   createdAt          DateTime @default(now())
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   dataSource       DataSource     @relation(fields: [dataSourceId], references: [id], onDelete: Restrict)
   targetEntityType EntityType     @relation(fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
@@ -564,9 +603,13 @@ model JobQueue {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
   @@index([status, nextAttemptAt])
   @@index([jobType, status])
   @@index([integrationJobId, startedAt(sort: Desc)])
+  @@index([projectId])
 }
 
 // ── Computed Metrics & Transforms ──────────────────────────────────
@@ -613,8 +656,8 @@ model ModelDefinition {
   outputField  String // e.g., "anomalyScore"
   createdAt    DateTime @default(now())
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   entityType EntityType     @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
   versions   ModelVersion[]
@@ -707,8 +750,8 @@ model DecisionRule {
   enabled             Boolean  @default(true)
   createdAt           DateTime @default(now())
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   entityType     EntityType      @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
   executionPlans ExecutionPlan[]
@@ -817,12 +860,12 @@ model ApiKey {
 
 model Dashboard {
   id        String   @id @default(uuid())
-  projectId String
+  projectId String?
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   widgets DashboardWidget[]
 
   @@index([projectId])
@@ -861,7 +904,7 @@ model ProjectRelease {
     createdBy   String
     createdAt   DateTime @default(now())
 
-    project     Project  @relation(fields: [projectId], references: [id])
+    project Project?  @relation(fields: [projectId], references: [id])
 }
 
 // ── Ontology Semantic Reasoner Rules ──────────────────────────────
@@ -884,7 +927,7 @@ model OntologyRule {
   updatedAt   DateTime @updatedAt
 
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, name])
   @@index([projectId, enabled])
@@ -904,7 +947,7 @@ model AIPAgent {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   @@index([projectId])
 }
 
@@ -920,7 +963,7 @@ model AIPFunction {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 // ── Phase 8: AIP Actions (Foundry-style write-back Operations) ─────────────
@@ -951,7 +994,7 @@ model AIPAction {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   executions  AIPActionExecution[]
 
   @@index([projectId])
@@ -1000,7 +1043,7 @@ model AIPMetric {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([objectType])
@@ -1025,7 +1068,7 @@ model WorkshopApp {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([status])
@@ -1063,7 +1106,7 @@ model AIPAutomate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project     Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project?              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   runs        AIPAutomateRun[]
 
   @@index([projectId])
@@ -1106,7 +1149,7 @@ model AIWorkflow {
   updatedAt   DateTime @updatedAt
 
   projectId   String
-  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   runs        AIWorkflowRun[]
 
   @@index([projectId])
@@ -1340,3 +1383,4 @@ model CryptoProvenanceSeal {
   @@index([entityId, sealedAt(sort: Desc)])
   @@unique([entityId, sealedAt])
 }
+

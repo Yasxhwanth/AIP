@@ -12,7 +12,9 @@
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "worker": "node dist/worker.js",
+    "worker:dev": "ts-node-dev --respawn --transpile-only src/worker.ts"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +25,7 @@
     "@prisma/client": "^7.4.1",
     "@types/ws": "^8.18.1",
     "amqplib": "^0.10.9",
+    "axios": "^1.13.6",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",

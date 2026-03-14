@@ -19,6 +19,11 @@ import { SparkService } from './spark-service';
 import { IdentityService } from './identity-service';
 import { LineageService } from './lineage-service';
 import { AbacEngine } from './abac-engine';
+// import { createPipelineRouter } from './routers/pipeline-router';
+import { createAipRouter } from './routers/aip-router';
+import { createHealthRouter } from './routers/health-router';
+// import { pool } from './db';
+import { OutboxService } from './outbox-service';
 import helmet from 'helmet';
 import cors from 'cors';
 import logger from './logger';
@@ -34,7 +39,10 @@ import {
   generateJwt,
   requireRole,
   enforceIdempotency,
+  tenantContext,
+  auditMiddleware,
 } from './middleware';
+import { getTenantPrisma } from './tenant-context';
 import { randomUUID } from 'crypto';
 import amqp from 'amqplib';
 
@@ -80,17 +88,28 @@ if (redisClient) {
 // ── Prisma Setup ────────────────────────────────────────────────────────────
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({
+const prismaRaw = new PrismaClient({
   adapter,
   log: ['warn', 'error']
 });
 
+// Enhanced Prisma with RLS Awareness
+const prisma = getTenantPrisma(prismaRaw) as any;
+
 // Initialize services
 const apolloService = new ApolloService(prisma);
 const sparkService = new SparkService(prisma);
+const orchestrator = new Orchestrator(prisma);
 
 // Global maps for WebSockets and Jobs
 const lineageSvc = new LineageService(prisma);
+app.use('/api/v1/health', createHealthRouter(prismaRaw));
+app.use('/api/v1/aip', createAipRouter(prismaRaw));
+
+// ── Outbox Setup ────────────────────────────────────────────────────────────
+// ── Error Handling ──────────────────────────────────────────────
+const outboxService = new OutboxService(prismaRaw);
+outboxService.start();
 
 // ── Enterprise Middleware ─────────────────────────────────────────
 app.use(helmet());
@@ -108,8 +127,8 @@ if (!corsOrigin) {
 app.use(cors({ origin: corsOrigin ?? '*' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(correlationId());
-app.use(requestLogger());
 app.use(apiKeyAuth(prisma));
+app.use(auditMiddleware(prisma));
 app.use(createRateLimiter());
 
 
@@ -173,8 +192,46 @@ app.get('/dashboards', async (req, res) => {
 
 // ── Health Checks (no auth) ──────────────────────────────────────
 
-app.get('/api/v1/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
+app.get('/api/v1/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date(), correlationId: req.correlationId });
+});
+
+app.use(apiKeyAuth(prismaRaw as any));
+app.use(tenantContext());
+
+// ── Role Guard Verification ──────────────────────────────────────
+app.get('/api/v1/admin/verify', requireRole('ADMIN'), (req, res) => {
+  res.json({ message: 'Welcome, Admin', actor: req.auth?.apiKeyName });
+});
+
+app.get('/api/v1/telemetry/jobs', async (req, res) => {
+  try {
+    const [counts, recentJobs, workers] = await Promise.all([
+      prisma.jobQueue.groupBy({
+        by: ['status'],
+        _count: true
+      }),
+      prisma.jobQueue.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: { integrationJob: true }
+      }),
+      prisma.jobWorker.findMany({
+        where: { lastHeartbeat: { gte: new Date(Date.now() - 60000) } }
+      })
+    ]);
+
+    return res.json({
+      summary: counts.reduce((acc: any, curr) => {
+        acc[curr.status] = curr._count;
+        return acc;
+      }, {}),
+      activeWorkers: workers.length,
+      recentJobs
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
 });
 
 app.get('/api/v1/health/deep', async (_req, res) => {
@@ -3108,13 +3165,21 @@ app.delete('/integration-jobs/:id', async (req, res) => {
 app.post('/integration-jobs/:id/execute', enforceIdempotency(prisma), async (req, res) => {
   try {
     const { data } = req.body ?? {};
+    const idempotencyKey = req.header('x-idempotency-key') || `manual-sync-${req.params.id}-${Date.now()}`;
 
-    const result = await executeJob(req.params.id as string, prisma, undefined, data);
-    const statusCode = result.status === 'COMPLETED' ? 200 : 500;
+    const job = await orchestrator.enqueue('INTEGRATION_SYNC', { data }, {
+      idempotencyKey,
+      integrationJobId: req.params.id as string,
+      priority: 10 // high priority for manual runs
+    });
 
-    return res.status(statusCode).json(result);
+    return res.status(202).json({
+      message: 'Job enqueued',
+      jobId: job.id,
+      status: job.status
+    });
   } catch (error) {
-    return res.status(500).json({ error: 'failed to execute job', details: String(error) });
+    return res.status(500).json({ error: 'failed to enqueue job', details: String(error) });
   }
 });
 
@@ -7508,7 +7573,7 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
   apolloService.ensureEnvironments().then(() => {
     logger.info("Apollo environments verified.");
     setInterval(() => {
-      apolloService.runHealthHeartbeat().catch(err => logger.error("Apollo heartbeat failed", err));
+      apolloService.runHealthHeartbeat().catch(err => logger.error({ err }, "Apollo heartbeat failed"));
     }, 10000); // 10 second heartbeat for fast demo feedback
   });
 });

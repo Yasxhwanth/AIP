@@ -118,7 +118,7 @@ function transformRecord(
  * Returns { success: true } on success, { success: false, error } on failure.
  */
 export async function upsertEntityInstance(
-    entityType: { id: string; version: number; name: string; projectId: string },
+    entityType: { id: string; version: number; name: string; projectId: string | null },
     logicalId: string,
     attrData: Record<string, unknown>,
     prisma: PrismaClient,
@@ -160,7 +160,8 @@ export async function upsertEntityInstance(
                     validFrom: now,
                     validTo: null,
                     confidenceScore: options?.confidence ?? 1.0,
-                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED' // Low confidence requires review
+                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED', // Low confidence requires review
+                    projectId: entityType.projectId
                 },
             });
 
@@ -190,15 +191,16 @@ export async function upsertEntityInstance(
                 eventType: 'EntityStateChanged',
                 idempotencyKey,
                 payload: {
-                    previousState: current?.data as Record<string, unknown> ?? null,
+                    previousState: (current?.data as Record<string, unknown>) ?? null,
                     newState: attrData,
                     validFrom: now.toISOString(),
-                }
+                },
+                projectId: entityType.projectId ?? 'default'
             };
 
             if (options?.generateOutbox) {
                 domainEventPayload.outbox = {
-                    projectId: entityType.projectId,
+                    projectId: entityType.projectId ?? 'default',
                     aggregateType: 'EntityInstance',
                     targetSystem: options.generateOutbox.targetSystem
                 };
@@ -214,10 +216,12 @@ export async function upsertEntityInstance(
                     entityTypeId: entityType.id,
                     data: attrData as Prisma.InputJsonValue,
                     updatedAt: now,
+                    projectId: entityType.projectId
                 },
                 update: {
                     data: attrData as Prisma.InputJsonValue,
                     updatedAt: now,
+                    projectId: entityType.projectId
                 },
             });
 
@@ -246,7 +250,7 @@ export async function upsertEntityInstance(
         );
 
         // Fire-and-forget: trigger semantic reasoner to derive ontology properties natively 
-        runReasonerForEntity(logicalId, entityType.projectId, prisma).catch(err => {
+        runReasonerForEntity(logicalId, entityType.projectId ?? 'default', prisma).catch(err => {
             console.error(`[Semantic Reasoner Error] Failed to reason for entity ${logicalId}:`, err);
         });
 
@@ -383,11 +387,11 @@ export async function executeJob(
             }
 
             const mapped = transformRecord(raw, fieldMapping);
-            const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma, {
+            const result = await upsertEntityInstance(entityType as any, logicalId, mapped, prisma, {
                 sourceSystem: job.dataSource.name,
                 sourceRecordId: externalId, // Using externalId as sourceRecordId for simplicity
                 confidence,
-                ...(options?.generateOutbox ? { generateOutbox: { targetSystem: ' downstream' } } : {})
+                ...(options?.generateOutbox ? { generateOutbox: { targetSystem: 'WEBHOOK' } } : {})
             });
 
             if (result.success) {
@@ -564,6 +568,7 @@ export function startScheduler(prisma: PrismaClient): void {
                             integrationJobId: job.id,
                             payload: { autoScheduled: true },
                             priority: 5, // normal priority for scheduled runs
+                            projectId: job.projectId
                         }
                     }).catch((err: any) => {
                         console.error(`[Scheduler] Job enqueue failed:`, err);

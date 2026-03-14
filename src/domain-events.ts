@@ -22,6 +22,7 @@ export interface RecordDomainEventArgs {
   eventType: CanonicalEventType | string;
   payload: EntityStatePayload;
   idempotencyKey?: string | null;
+  projectId: string;
   outbox?: {
     projectId: string;
     aggregateType: string;
@@ -49,6 +50,7 @@ export async function recordDomainEvent(args: RecordDomainEventArgs, tx?: Prisma
         newState: args.payload.newState,
         validFrom: args.payload.validFrom ?? new Date().toISOString(),
       },
+      projectId: args.projectId,
     },
   });
 

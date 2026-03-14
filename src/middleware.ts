@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { ZodSchema, ZodError } from 'zod';
 import { PrismaClient } from './generated/prisma';
 import logger from './logger';
+import { tenantStorage } from './tenant-context';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -150,6 +151,19 @@ export function apiKeyAuth(prisma: PrismaClient) {
     };
 }
 
+// ── Tenant Context ───────────────────────────────────────────────
+
+export function tenantContext() {
+    return (req: Request, _res: Response, next: NextFunction): void => {
+        const projectId = req.auth?.projectId;
+        if (projectId) {
+            tenantStorage.run({ projectId }, () => next());
+        } else {
+            next();
+        }
+    };
+}
+
 // ── Role Guard ───────────────────────────────────────────────────
 
 export function requireRole(...roles: string[]) {
@@ -230,9 +244,6 @@ export function enforceIdempotency(prisma: PrismaClient) {
         }
 
         try {
-            // Attempt to claim the idempotency key by creating a marker record.
-            // If it already exists, this throws a unique constraint violation.
-            // (Using DomainEvent since it already has a unique idempotencyKey field).
             await prisma.domainEvent.create({
                 data: {
                     idempotencyKey,
@@ -243,12 +254,9 @@ export function enforceIdempotency(prisma: PrismaClient) {
                     payload: { path: req.path, method: req.method },
                 }
             });
-
-            // Lock acquired, continue to the handler
             next();
         } catch (error: any) {
             if (error?.code === 'P2002') {
-                // Unique constraint failed -> key already used
                 res.status(409).json({
                     error: 'Conflict: This request has already been processed (duplicate X-Idempotency-Key)',
                     idempotencyKey
@@ -257,6 +265,53 @@ export function enforceIdempotency(prisma: PrismaClient) {
                 next(error);
             }
         }
+    };
+}
+
+// ── Audit Middleware ───────────────────────────────────────────────
+
+/**
+ * Automatically logs all mutating API calls (POST, PUT, DELETE, PATCH)
+ * for security and compliance.
+ */
+export function auditMiddleware(prisma: PrismaClient) {
+    return (req: Request, res: Response, next: NextFunction): void => {
+        const mutations = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+        if (!mutations.has(req.method)) {
+            return next();
+        }
+
+        console.log(`[AuditMiddleware] Intercepted ${req.method} ${req.path}`);
+
+        res.on('finish', async () => {
+            console.log(`[AuditMiddleware] Request finished with status ${res.statusCode}`);
+            if (res.statusCode >= 400) return;
+
+            try {
+                const log = await (prisma as any).auditLog.create({
+                    data: {
+                        actor: req.auth?.apiKeyName || 'anonymous',
+                        actorRole: req.auth?.role || 'user',
+                        action: `API_${req.method}_${req.path.split('/').filter(Boolean).join('_').toUpperCase()}`,
+                        resourceType: 'API_ENDPOINT',
+                        resourceId: req.path,
+                        metadata: {
+                            ip: req.ip,
+                            correlationId: req.correlationId,
+                            method: req.method,
+                            body: req.method !== 'GET' ? req.body : undefined
+                        },
+                        projectId: req.auth?.projectId
+                    }
+                });
+                console.log(`[AuditMiddleware] AuditLog created: ${log.id}`);
+            } catch (err: any) {
+                console.error(`[AuditMiddleware] Failed to write audit log: ${err.message}`);
+                logger.error({ err }, 'Failed to write global audit log');
+            }
+        });
+
+        next();
     };
 }
 

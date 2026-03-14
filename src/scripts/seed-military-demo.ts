@@ -3,7 +3,9 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const baseUrl = process.env.DATABASE_URL || '';
+const databaseUrl = baseUrl.replace('aip_app:aip_password', 'aip_user:aip_password');
+const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
@@ -136,21 +138,32 @@ async function main() {
     ];
 
     for (const entity of entitiesToSeed) {
-        await prisma.currentEntityState.upsert({
-            where: { logicalId: entity.logicalId },
-            update: {
-                data: entity.data,
-                updatedAt: entity.updatedAt
-            },
-            create: {
-                logicalId: entity.logicalId,
-                entityTypeId: entity.entityTypeId as string,
-                data: entity.data,
-                updatedAt: entity.updatedAt,
-                legalHold: entity.legalHold
-            }
-        });
-        console.log(`Upserted Entity State: ${entity.logicalId}`);
+        const existing = await prisma.currentEntityState.findUnique({ where: { logicalId: entity.logicalId } });
+        const creationData = {
+            logicalId: entity.logicalId,
+            entityTypeId: entity.entityTypeId as string,
+            data: entity.data as any,
+            updatedAt: entity.updatedAt,
+            legalHold: entity.legalHold,
+            projectId
+        };
+
+        if (!existing) {
+            await prisma.currentEntityState.create({
+                data: creationData
+            });
+            console.log(`Seeded entity state: ${entity.logicalId}`);
+        } else {
+            await prisma.currentEntityState.update({
+                where: { logicalId: entity.logicalId },
+                data: {
+                    data: entity.data as any,
+                    updatedAt: entity.updatedAt,
+                    projectId
+                }
+            });
+            console.log(`Updated entity state: ${entity.logicalId}`);
+        }
     }
 
     console.log('✅ Military Data Seed Complete!');
