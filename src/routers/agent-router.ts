@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { AipAgent } from '../frontend/src/lib/aipTypes';
+import { AipAgent } from '../lib/aip-types';
 
 const router = Router();
 
