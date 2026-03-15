@@ -350,8 +350,8 @@ export default function AIPTerminal() {
         "Show current threat positions on map",
         "Generate COA for Grid 47-N situation",
         "Run JCATS simulation for threat advance",
-        "What data can you access under current policy?",
-        "Show operational metrics dashboard",
+        "Show current access policies",
+        "Display mission readiness metrics",
     ];
 
     useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isTyping]);
@@ -376,74 +376,85 @@ export default function AIPTerminal() {
     };
 
     return (
-        <div className="flex flex-col w-full h-screen bg-[#060D19] text-slate-300 font-sans overflow-hidden">
-
-            {/* Classification Banner */}
-            <div className="shrink-0 text-center py-1 text-[10px] font-black tracking-[0.2em] uppercase bg-red-700 text-white font-mono">
-                ██ SECRET // SESSION ENCRYPTED // ALL ACTIVITY LOGGED ██
-            </div>
-
-            {/* Top bar */}
-            <div className="h-11 border-b border-white/8 flex items-center justify-between px-4 bg-[#0B1220]/80 shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
-                        <Brain className="w-4 h-4 text-blue-400" />
+        <div className="flex flex-col w-full h-full bg-pt-bg text-pt-text overflow-hidden font-sans">
+            {/* ── Sub-Header ── */}
+            <div className="h-11 border-b border-pt-border flex items-center justify-between px-4 bg-pt-bg-panel/40 backdrop-blur-sm shrink-0">
+                <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                        <Terminal size={16} className="text-pt-intent-primary" />
+                        <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-pt-text">Intelligence Terminal</span>
                     </div>
-                    <span className="font-bold text-sm text-white">AIP Copilot</span>
-                    <span className="text-blue-500/40">·</span>
-                    <span className="text-[11px] font-mono text-slate-500">GPT-4-AIP · POLICY ENFORCED</span>
+                    <div className="h-4 w-px bg-pt-border" />
+                    <div className="flex items-center space-x-2 text-[10px] font-mono text-pt-text-muted">
+                        <Cpu size={12} className="opacity-50" />
+                        <span>GPT-4-MAVEN-TACTICAL-V9</span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-emerald-500/25 bg-emerald-500/8">
-                        <Shield className="w-3 h-3 text-emerald-400" />
-                        <span className="text-[10px] font-bold text-emerald-400 font-mono">GUARDRAILS ACTIVE</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-blue-500/25 bg-blue-500/8">
-                        <Activity className="w-3 h-3 text-blue-400" />
-                        <span className="text-[10px] font-bold text-blue-400 font-mono">AUDIT LOG ON</span>
+
+                <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded border border-pt-intent-success/30 bg-pt-intent-success/5 text-pt-intent-success text-[9px] font-black uppercase tracking-widest">
+                        <Shield size={10} />
+                        <span>Enforced</span>
                     </div>
                 </div>
             </div>
 
-            {/* Main layout */}
-            <div className="flex flex-1 min-h-0">
-
-                {/* ── Chat Pane ─────────────────────────────────────────── */}
-                <div className="w-[46%] max-w-[580px] min-w-[360px] flex flex-col border-r border-white/8">
-
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+            <div className="flex-1 flex min-h-0">
+                {/* ── Command Interface (Left) ── */}
+                <section className="w-[450px] flex flex-col border-r border-pt-border bg-pt-bg">
+                    {/* Chat Buffer */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar bg-pt-bg-panel/10">
                         {messages.length === 0 && (
-                            <div className="flex flex-col items-center justify-center h-full gap-5 opacity-70">
-                                <div className="w-12 h-12 rounded-2xl bg-blue-600/15 border border-blue-500/25 flex items-center justify-center">
-                                    <Brain className="w-6 h-6 text-blue-400" />
+                            <div className="h-full flex flex-col items-center justify-center space-y-8 opacity-20 grayscale">
+                                <div className="p-6 border-2 border-dashed border-pt-border rounded-full">
+                                    <Brain size={48} className="text-pt-text-muted" />
                                 </div>
-                                <div className="text-center">
-                                    <p className="text-sm font-bold text-white mb-1">AIP Intelligence Copilot</p>
-                                    <p className="text-[11px] text-slate-500 max-w-xs leading-relaxed">
-                                        Query classified data sources. All responses policy-checked and auto-logged to the secure audit trail.
-                                    </p>
-                                </div>
-                                <div className="flex flex-col gap-1.5 w-full max-w-sm">
-                                    {SUGGESTED.map(s => (
-                                        <button key={s} onClick={() => setInput(s)}
-                                            className="text-[11px] text-left px-3 py-2 rounded-lg border border-white/6 bg-white/2 hover:bg-white/4 hover:border-blue-500/20 text-slate-400 hover:text-slate-200 transition-all font-mono">
-                                            &gt; {s}
-                                        </button>
-                                    ))}
+                                <div className="space-y-4 w-full">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-center">Suggested Directives</p>
+                                    <div className="grid gap-2">
+                                        {SUGGESTED.map(s => (
+                                            <button
+                                                key={s}
+                                                onClick={() => setInput(s)}
+                                                className="text-[10px] text-left px-4 py-3 bg-pt-bg-panel/50 border border-pt-border hover:bg-pt-bg-panel transition-all font-mono text-pt-text-muted hover:text-pt-text"
+                                            >
+                                                &gt; {s}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+                        {messages.map(msg => (
+                            <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} space-y-2`}>
+                                <div className="flex items-center space-x-2 opacity-60">
+                                    <span className="text-[9px] font-mono text-pt-text-muted uppercase font-bold">{msg.role === 'user' ? 'OPERATOR' : 'MAVEN'} · {msg.timestamp}</span>
+                                    {!isUser && msg.classification && <ClassBadge level={msg.classification} />}
+                                </div>
+                                <div className={`max-w-[90%] p-4 text-[12px] leading-relaxed border ${msg.role === 'user'
+                                    ? 'bg-pt-intent-primary/10 border-pt-intent-primary/30 text-pt-text'
+                                    : 'bg-pt-bg-panel border-pt-border text-pt-text-muted'
+                                    }`}>
+                                    {msg.text}
+                                </div>
+
+                                {/* Detailed Signals (Metadata) */}
+                                {!msg.role === 'assistant' && (msg.sources?.length || msg.policyEvents?.length) && (
+                                    <div className="w-[90%] bg-pt-bg-panel/20 border-l-2 border-pt-border p-3 space-y-3">
+                                        {msg.sources && <SourceList sources={msg.sources} />}
+                                        {msg.policyEvents && <PolicyEvents events={msg.policyEvents} />}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
 
                         {isTyping && (
-                            <div className="flex items-center gap-2">
-                                <Brain className="w-3.5 h-3.5 text-blue-400" />
-                                <div className="flex gap-1 px-3 py-2 rounded-xl border border-white/6 bg-[#0D1520]">
-                                    <span className="text-[10px] text-slate-500 font-mono">Traversing data sources</span>
+                            <div className="flex flex-col items-start space-y-2">
+                                <div className="text-[9px] font-mono text-pt-text-muted uppercase font-bold">Processing...</div>
+                                <div className="flex space-x-1.5 p-3 bg-pt-bg-panel border border-pt-border">
                                     {[0, 1, 2].map(i => (
-                                        <div key={i} className="w-1 h-1 rounded-full bg-blue-400 animate-bounce self-center ml-0.5" style={{ animationDelay: `${i * 0.18}s` }} />
+                                        <div key={i} className="w-1.5 h-1.5 bg-pt-intent-primary animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
                                     ))}
                                 </div>
                             </div>
@@ -451,68 +462,85 @@ export default function AIPTerminal() {
                         <div ref={endRef} />
                     </div>
 
-                    {/* Input */}
-                    <div className="p-3 border-t border-white/6 bg-[#090F1A] shrink-0">
-                        <div className="flex gap-2">
+                    {/* Command Console */}
+                    <div className="p-4 bg-pt-bg border-t border-pt-border">
+                        <div className="flex space-x-2">
                             <div className="relative flex-1">
                                 <input
-                                    type="text" value={input}
+                                    type="text"
+                                    value={input}
                                     onChange={e => setInput(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && handleSend()}
-                                    placeholder="Query classified data, request COA, run simulation..."
-                                    className="w-full bg-[#0D1520] border border-white/8 focus:border-blue-500/40 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none transition-all font-mono"
+                                    placeholder="Input tactical directive..."
+                                    className="w-full bg-pt-bg-panel border border-pt-border px-4 py-3 text-[12px] font-mono focus:outline-none focus:border-pt-intent-primary transition-all text-pt-text"
                                 />
                             </div>
-                            <button onClick={handleSend} disabled={!input.trim()}
-                                className="w-10 h-10 shrink-0 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 rounded-xl flex items-center justify-center transition-all">
-                                <Send className="w-4 h-4 text-white" />
+                            <button
+                                onClick={handleSend}
+                                disabled={!input.trim()}
+                                className="h-12 w-12 bg-pt-intent-primary hover:bg-pt-intent-primary-hover disabled:opacity-30 flex items-center justify-center transition-all shadow-lg"
+                            >
+                                <Send size={18} className="text-white" />
                             </button>
                         </div>
-                        <p className="text-[9px] text-slate-700 mt-1.5 font-mono text-center">All queries logged · Policy enforced · Responses cite source data</p>
                     </div>
-                </div>
+                </section>
 
-                {/* ── Canvas Pane ────────────────────────────────────────── */}
-                <div className="flex-1 flex flex-col bg-[#060D19]">
-                    {/* Canvas Switcher */}
-                    <div className="h-10 border-b border-white/6 flex items-center px-3 gap-2 bg-[#0B1220]/60 shrink-0">
-                        {([
-                            { mode: 'map' as const, label: 'GEO MAP', icon: Globe },
-                            { mode: 'metrics' as const, label: 'METRICS', icon: BarChart3 },
-                            { mode: 'coa' as const, label: `COA (${activeCOAs.length})`, icon: Zap },
-                        ] as const).map(tab => (
-                            <button key={tab.mode} onClick={() => setCanvasMode(tab.mode)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold font-mono transition-all ${canvasMode === tab.mode ? 'bg-blue-600/20 border border-blue-500/30 text-blue-300' : 'text-slate-600 hover:text-slate-400'}`}>
-                                <tab.icon className="w-3.5 h-3.5" />{tab.label}
-                            </button>
-                        ))}
-                        <div className="ml-auto flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span className="text-[9px] font-bold text-emerald-500 font-mono uppercase tracking-widest">LIVE</span>
+                {/* ── Operational Visualizer (Right) ── */}
+                <main className="flex-1 flex flex-col bg-pt-bg p-6">
+                    <div className="h-full flex flex-col bg-pt-bg-panel/20 border border-pt-border rounded shadow-2xl overflow-hidden">
+                        {/* Tab Switcher */}
+                        <div className="h-10 border-b border-pt-border flex items-center px-4 justify-between bg-pt-bg-panel/40">
+                            <div className="flex space-x-6">
+                                {[
+                                    { mode: 'map' as const, label: 'Geo Intelligence', icon: Globe },
+                                    { mode: 'metrics' as const, label: 'Systems Health', icon: Activity },
+                                    { mode: 'coa' as const, label: 'Strategic Options', icon: Layers },
+                                ].map(tab => (
+                                    <button
+                                        key={tab.mode}
+                                        onClick={() => setCanvasMode(tab.mode)}
+                                        className={`flex items-center space-x-2 h-10 border-b-2 transition-all ${canvasMode === tab.mode ? 'border-pt-intent-primary text-pt-text' : 'border-transparent text-pt-text-muted hover:text-pt-text'
+                                            }`}
+                                    >
+                                        <tab.icon size={14} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-pt-intent-primary animate-pulse" />
+                                <span className="text-[9px] font-bold text-pt-intent-primary uppercase tracking-[0.2em]">Live Feed Active</span>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Canvas Content */}
-                    <div className="flex-1 relative overflow-hidden">
-                        {canvasMode === 'map' && (
-                            <BattlefieldOverview layers={{ aip: true, military: true, flights: false, satellites: false }} visualMode="normal" />
-                        )}
-                        {canvasMode === 'metrics' && <MetricsDashboard />}
-                        {canvasMode === 'coa' && (
-                            activeCOAs.length > 0
-                                ? <COACanvas coas={activeCOAs} onApprove={(id) => console.log('Approved:', id)} />
-                                : (
-                                    <div className="h-full flex items-center justify-center text-slate-600">
-                                        <div className="text-center">
-                                            <Zap className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                                            <p className="text-sm font-mono">Ask AI to "generate COA" to populate this panel</p>
+                        {/* Visualizer Content */}
+                        <div className="flex-1 relative">
+                            {canvasMode === 'map' && (
+                                <BattlefieldOverview
+                                    layers={{ aip: true, military: true, flights: true, satellites: false }}
+                                    visualMode="normal"
+                                />
+                            )}
+                            {canvasMode === 'metrics' && <MetricsDashboard />}
+                            {canvasMode === 'coa' && (
+                                activeCOAs.length > 0
+                                    ? <COACanvas coas={activeCOAs} onApprove={(id) => console.log('Approved:', id)} />
+                                    : (
+                                        <div className="h-full flex items-center justify-center text-pt-text-muted opacity-30">
+                                            <div className="text-center space-y-4">
+                                                <Layers size={48} className="mx-auto" />
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em]">No Active COA Generated</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                )
-                        )}
+                                    )
+                            )}
+                        </div>
                     </div>
-                </div>
+                </main>
             </div>
         </div>
     );
 }
+
+const isUser = false; // Internal flag for conditional rendering

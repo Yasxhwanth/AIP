@@ -76,132 +76,95 @@ export default function BuildLayout({ children }: { children: React.ReactNode })
         <div className="flex h-screen w-full overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
 
             {/* ── SIDEBAR ── */}
-            <aside style={{
-                width: W, minWidth: W, height: "100%",
-                background: "#0B0F18",
-                borderRight: "1px solid rgba(255,255,255,0.06)",
-                display: "flex", flexDirection: "column",
-                overflow: "hidden", flexShrink: 0, zIndex: 50,
-                transition: "width 0.18s ease, min-width 0.18s ease",
-            }}>
+            <aside className="bg-pt-bg-panel border-r border-pt-border flex flex-col overflow-hidden shrink-0 z-50 transition-all duration-200 ease-in-out"
+                style={{ width: W, minWidth: W }}>
 
-                {/* Logo + title */}
-                <div style={{
-                    height: 48, display: "flex", alignItems: "center",
-                    padding: "0 10px 0 11px", gap: 8, flexShrink: 0,
-                    borderBottom: "1px solid rgba(255,255,255,0.06)"
-                }}>
-                    <PalantirMark />
+                {/* Tactical Header */}
+                <div className="h-14 flex items-center px-4 gap-3 border-b border-pt-border bg-pt-bg-panel/50">
+                    <div className="shrink-0">
+                        <PalantirMark />
+                    </div>
                     {expanded && (
-                        <span style={{
-                            flex: 1, fontSize: 13, fontWeight: 700, color: "#E2E8F0",
-                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                        }}>
-                            AIP Builder
-                        </span>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[11px] font-black uppercase tracking-widest text-pt-text truncate">AIP Builder</span>
+                            <span className="text-[8px] font-mono text-pt-intent-primary uppercase tracking-tighter">Forge-v2.1</span>
+                        </div>
                     )}
-                    <button onClick={() => setExpanded(v => !v)} style={{
-                        flexShrink: 0, width: 26, height: 26, borderRadius: 4,
-                        border: "none", background: "transparent", cursor: "pointer",
-                        display: "flex", alignItems: "center", justifyContent: "center", color: "#475569"
-                    }}>
-                        <AlignJustify style={{ width: 15, height: 15 }} />
+                    <button
+                        onClick={() => setExpanded(v => !v)}
+                        className="ml-auto p-1.5 rounded hover:bg-pt-bg transition-colors text-pt-text-muted hover:text-pt-text"
+                    >
+                        <AlignJustify size={14} />
                     </button>
                 </div>
 
                 {/* Nav groups */}
-                <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: 6, paddingBottom: 4 }}>
+                <div className="flex-1 overflow-y-auto overflow-x-hidden pt-4 pb-2 custom-scrollbar">
                     {NAV_GROUPS.map(group => (
-                        <div key={group.label}>
+                        <div key={group.label} className="mb-4">
                             {expanded && (
-                                <div style={{
-                                    padding: "10px 12px 3px 13px",
-                                    fontSize: 9.5, fontWeight: 700, letterSpacing: "0.09em",
-                                    textTransform: "uppercase", color: "#334155"
-                                }}>
+                                <div className="px-5 mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-pt-text-muted opacity-40">
                                     {group.label}
                                 </div>
                             )}
-                            {!expanded && group !== NAV_GROUPS[0] && (
-                                <div style={{
-                                    margin: "6px 10px", height: 1,
-                                    background: "rgba(255,255,255,0.06)"
-                                }} />
+                            {!expanded && (
+                                <div className="mx-3 h-px bg-pt-border mb-2 opacity-50" />
                             )}
-                            {group.items.map(nav => {
-                                const active = isActive(nav.href);
-                                const Icon = nav.icon;
-                                return (
-                                    <Link key={nav.name} href={nav.href}
-                                        title={!expanded ? nav.name : undefined}
-                                        style={{ textDecoration: "none", display: "block" }}>
-                                        <div style={{
-                                            display: "flex", alignItems: "center", gap: 9,
-                                            padding: "7px 12px", margin: "1px 5px", borderRadius: 5,
-                                            background: active ? "rgba(255,255,255,0.08)" : "transparent",
-                                            borderLeft: active ? "2px solid #3B82F6" : "2px solid transparent",
-                                            cursor: "pointer", position: "relative",
-                                            transition: "background 0.1s",
-                                        }}>
-                                            <Icon style={{
-                                                width: 15, height: 15, flexShrink: 0,
-                                                color: active ? "#93C5FD" : "#4B5563"
-                                            }} />
-                                            {expanded && (
-                                                <span style={{
-                                                    fontSize: 12.5, fontWeight: active ? 600 : 400,
-                                                    color: active ? "#F1F5F9" : "#94A3B8",
-                                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                                                }}>
-                                                    {nav.name}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </Link>
-                                );
-                            })}
+                            <div className="space-y-0.5">
+                                {group.items.map(nav => {
+                                    const active = isActive(nav.href);
+                                    const Icon = nav.icon;
+                                    return (
+                                        <Link key={nav.name} href={nav.href}
+                                            className="block group no-underline">
+                                            <div className={`flex items-center gap-3 py-2 px-4 transition-all relative ${active
+                                                    ? 'bg-pt-intent-primary/10'
+                                                    : 'hover:bg-pt-bg-panel/80'
+                                                }`}>
+                                                {active && (
+                                                    <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-pt-intent-primary" />
+                                                )}
+                                                <Icon size={14} className={`shrink-0 transition-colors ${active ? 'text-pt-intent-primary' : 'text-pt-text-muted group-hover:text-pt-text'
+                                                    }`} />
+                                                {expanded && (
+                                                    <span className={`text-[11px] uppercase tracking-wide truncate ${active ? 'text-pt-text font-black' : 'text-pt-text-muted group-hover:text-pt-text'
+                                                        }`}>
+                                                        {nav.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
                         </div>
                     ))}
                 </div>
 
-                {/* Bottom */}
-                <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "4px 0", flexShrink: 0 }}>
-                    {[{ icon: Settings, label: "Settings" }, { icon: HelpCircle, label: "Help & Info" }].map(
-                        ({ icon: Icon, label }) => (
-                            <div key={label} title={!expanded ? label : undefined} style={{
-                                display: "flex", alignItems: "center", gap: 9,
-                                padding: "7px 12px", margin: "1px 5px", borderRadius: 5, cursor: "pointer",
-                                borderLeft: "2px solid transparent",
-                            }}>
-                                <Icon style={{ width: 14, height: 14, color: "#4B5563", flexShrink: 0 }} />
-                                {expanded && <span style={{ fontSize: 12.5, color: "#64748B" }}>{label}</span>}
-                            </div>
-                        )
-                    )}
+                {/* System Controls */}
+                <div className="border-top border-pt-border p-2 bg-pt-bg">
+                    {[
+                        { icon: Settings, label: "Configuration" },
+                        { icon: HelpCircle, label: "Documentation" }
+                    ].map(({ icon: Icon, label }) => (
+                        <button key={label} className="w-full flex items-center gap-3 p-2.5 rounded hover:bg-pt-bg-panel transition-colors text-pt-text-muted hover:text-pt-text group">
+                            <Icon size={14} className="shrink-0" />
+                            {expanded && <span className="text-[10px] uppercase font-black tracking-widest">{label}</span>}
+                        </button>
+                    ))}
                 </div>
             </aside>
 
             {/* ── MAIN CONTENT ── */}
-            <main className="flex-1 min-w-0 relative flex flex-col overflow-hidden"
-                style={{ background: "#F5F8FA" }}>
+            <main className="flex-1 min-w-0 relative flex flex-col overflow-hidden bg-pt-bg">
                 {children}
 
-                {/* AIP Assist */}
-                <button style={{
-                    position: "absolute", bottom: 24, right: 24, width: 44, height: 44,
-                    borderRadius: "50%", background: "#0B0F18", color: "white",
-                    border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 4px 14px rgba(0,0,0,0.5)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", zIndex: 100,
-                }} className="group hover:scale-105 transition-transform">
-                    <MessageSquare style={{ width: 18, height: 18, opacity: 0.8 }} />
-                    <span style={{
-                        position: "absolute", right: 52, background: "#0B0F18", color: "white",
-                        fontSize: 11, fontWeight: 700, padding: "5px 10px", borderRadius: 6,
-                        border: "1px solid rgba(255,255,255,0.1)", whiteSpace: "nowrap", pointerEvents: "none"
-                    }} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        AIP Assist
-                    </span>
+                {/* Tactical AI Assist */}
+                <button className="absolute bottom-8 right-8 w-12 h-12 rounded-full bg-pt-bg-panel border border-pt-border shadow-2xl flex items-center justify-center hover:border-pt-intent-primary group transition-all hover:scale-110 active:scale-95 z-50">
+                    <MessageSquare size={18} className="text-pt-intent-primary opacity-80" />
+                    <div className="absolute right-14 bg-pt-bg-panel border border-pt-border text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-xl text-pt-text whitespace-nowrap">
+                        Strategic Assist
+                    </div>
                 </button>
             </main>
         </div>

@@ -22,6 +22,8 @@ import { AbacEngine } from './abac-engine';
 // import { createPipelineRouter } from './routers/pipeline-router';
 import { createAipRouter } from './routers/aip-router';
 import { createHealthRouter } from './routers/health-router';
+import { createMavenRouter } from './routers/maven-router';
+import agentRouter from './routers/agent-router';
 // import { pool } from './db';
 import { OutboxService } from './outbox-service';
 import helmet from 'helmet';
@@ -105,6 +107,8 @@ const orchestrator = new Orchestrator(prisma);
 const lineageSvc = new LineageService(prisma);
 app.use('/api/v1/health', createHealthRouter(prismaRaw));
 app.use('/api/v1/aip', createAipRouter(prismaRaw));
+app.use('/api/v1/maven', createMavenRouter(prismaRaw));
+app.use('/api/v1/agents', agentRouter);
 
 // ── Outbox Setup ────────────────────────────────────────────────────────────
 // ── Error Handling ──────────────────────────────────────────────

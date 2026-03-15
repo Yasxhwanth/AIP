@@ -1,75 +1,98 @@
 import {
     LayoutTemplate, Search, Bell, UserCircle,
-    Hexagon, Activity, Map, FolderOpen
+    Hexagon, Activity, Map, FolderOpen, ChevronDown,
+    Command, Settings, LayoutDashboard
 } from "lucide-react";
 import Link from "next/link";
 
 export default function RunLayout({ children }: { children: React.ReactNode }) {
     return (
-        <div className="flex flex-col h-screen w-full bg-[#0B1015] text-slate-300 font-sans text-[13px] overflow-hidden">
+        <div className="flex flex-col h-screen w-full bg-pt-bg text-pt-text font-mono text-[11px] overflow-hidden">
 
-            {/* Global Operational Navbar (Palantir Workshop Runtime Style) */}
-            <header className="h-[48px] bg-[#11161B] border-b border-black/50 flex items-center justify-between px-4 shrink-0 shadow-sm z-50">
-                <div className="flex items-center gap-4 h-full">
+            {/* Global Operational Navbar (Mission Command Style) */}
+            <header className="h-[48px] bg-pt-bg-panel border-b border-pt-border flex items-center justify-between px-6 shrink-0 z-[60] shadow-2xl">
+                <div className="flex items-center gap-6 h-full">
                     {/* Platform Branding */}
-                    <div className="flex items-center gap-2 pr-4 border-r border-white/5 h-full cursor-pointer hover:text-white transition-colors">
-                        <Hexagon className="w-5 h-5 text-blue-500 fill-blue-500/20" />
-                        <span className="font-black text-[14px] text-white tracking-tight">O.S. PLATFORM</span>
-                    </div>
+                    <Link href="/" className="flex items-center gap-3 pr-6 border-r border-pt-border h-full group">
+                        <Hexagon className="w-5 h-5 text-pt-intent-primary fill-pt-intent-primary/10 group-hover:scale-110 transition-transform" />
+                        <div className="flex flex-col">
+                            <span className="font-black text-[12px] text-pt-text tracking-tighter leading-none">AIP MISSION CONTROL</span>
+                            <span className="text-[8px] text-pt-text-muted font-bold tracking-[0.2em] mt-1 opacity-50 uppercase">Operational Stack</span>
+                        </div>
+                    </Link>
 
-                    {/* App Navigation */}
-                    <div className="flex items-center gap-1 h-full">
-                        <Link href="/run/dashboard" className="h-full px-3 flex items-center gap-2 text-white border-b-2 border-blue-500 bg-white/5">
-                            <Activity className="w-4 h-4 text-blue-400" />
-                            <span className="font-bold">Fleet Command Center</span>
+                    {/* Persistence Navigation */}
+                    <nav className="flex items-center gap-1 h-full">
+                        <Link href="/run/dashboard" className="h-[48px] px-5 flex items-center gap-2.5 text-pt-text transition-all relative group bg-pt-bg/30">
+                            <LayoutDashboard className="w-3.5 h-3.5 text-pt-intent-primary" />
+                            <span className="font-black uppercase tracking-widest text-[10px]">Command Center</span>
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.5)]" />
                         </Link>
-                        <Link href="/run/map" className="h-full px-3 flex items-center gap-2 text-[#8A9BA8] hover:text-white hover:bg-white/5 transition-colors border-b-2 border-transparent">
-                            <Map className="w-4 h-4" />
-                            <span className="font-bold">Geospatial Intel</span>
+
+                        <Link href="/run/map" className="h-[48px] px-5 flex items-center gap-2.5 text-pt-text-muted hover:text-pt-text hover:bg-pt-bg/20 transition-all group">
+                            <Map className="w-3.5 h-3.5 group-hover:text-pt-intent-primary transition-colors" />
+                            <span className="font-black uppercase tracking-widest text-[10px]">Geospatial</span>
                         </Link>
-                        <Link href="/run/cases" className="h-full px-3 flex items-center gap-2 text-[#8A9BA8] hover:text-white hover:bg-white/5 transition-colors border-b-2 border-transparent">
-                            <FolderOpen className="w-4 h-4" />
-                            <span className="font-bold">Active Cases</span>
+
+                        <Link href="/run/cases" className="h-[48px] px-5 flex items-center gap-2.5 text-pt-text-muted hover:text-pt-text hover:bg-pt-bg/20 transition-all group">
+                            <FolderOpen className="w-3.5 h-3.5 group-hover:text-pt-intent-primary transition-colors" />
+                            <span className="font-black uppercase tracking-widest text-[10px]">Inbound Cases</span>
                         </Link>
-                    </div>
+                    </nav>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    {/* Global Search */}
+                <div className="flex items-center gap-5">
+                    {/* Global Command Buffer */}
                     <div className="relative group">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5C7080] group-focus-within:text-blue-400 transition-colors" />
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+                            <Command className="w-3.5 h-3.5 text-pt-text-muted opacity-40 group-focus-within:text-pt-intent-primary transition-colors" />
+                        </div>
                         <input
-                            placeholder="Search ontology (Cmd+K)..."
-                            className="bg-[#182026] border border-black rounded-sm pl-8 pr-3 py-1.5 text-[12px] text-white focus:outline-none focus:border-blue-500 focus:bg-[#11161B] w-64 transition-all placeholder:text-[#5C7080] shadow-inner"
+                            placeholder="QUERY SYSTEM REGISTRY…"
+                            className="bg-pt-bg border border-pt-border rounded-lg pl-10 pr-12 py-1.5 text-[10px] font-black tracking-widest text-pt-text focus:outline-none focus:border-pt-intent-primary focus:bg-pt-bg-panel w-72 transition-all placeholder:opacity-30 shadow-inner"
                         />
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                            <span className="text-[10px] font-mono text-[#5C7080] border border-[#5C7080]/30 rounded px-1">⌘</span>
-                            <span className="text-[10px] font-mono text-[#5C7080] border border-[#5C7080]/30 rounded px-1">K</span>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-20 group-hover:opacity-40 transition-opacity">
+                            <kbd className="bg-pt-bg-panel border border-pt-border px-1.5 py-0.5 rounded text-[9px] font-sans">⌘</kbd>
+                            <kbd className="bg-pt-bg-panel border border-pt-border px-1.5 py-0.5 rounded text-[9px] font-sans">K</kbd>
                         </div>
                     </div>
 
-                    <div className="w-px h-5 bg-white/10" />
+                    <div className="w-px h-6 bg-pt-border" />
 
-                    {/* Utilities */}
-                    <button className="text-[#8A9BA8] hover:text-white transition-colors relative">
-                        <Bell className="w-4 h-4" />
-                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-[#11161B]" />
-                    </button>
+                    {/* Operational Utilities */}
+                    <div className="flex items-center gap-3">
+                        <button className="p-2 text-pt-text-muted hover:text-pt-intent-primary transition-all relative rounded-lg hover:bg-pt-bg/40 group">
+                            <Bell className="w-4 h-4 group-hover:animate-swing" />
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-pt-intent-danger rounded-full border-2 border-pt-bg-panel" />
+                        </button>
 
-                    <button className="flex items-center gap-2 text-[#8A9BA8] hover:text-white transition-colors">
-                        <UserCircle className="w-6 h-6" />
-                    </button>
+                        <button className="p-2 text-pt-text-muted hover:text-pt-text transition-all rounded-lg hover:bg-pt-bg/40">
+                            <Settings className="w-4 h-4" />
+                        </button>
 
-                    {/* Toggle Back to Builder (for demo purposes) */}
-                    <Link href="/build/app" className="ml-2 px-3 py-1 bg-[#293742] hover:bg-[#394B59] text-white rounded-sm text-[11px] font-bold transition-colors border border-black flex items-center gap-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
-                        <LayoutTemplate className="w-3 h-3" /> Edit App
-                    </Link>
+                        <button className="flex items-center gap-2 pl-3 pr-2 py-1.5 border border-pt-border rounded-xl hover:bg-pt-bg/40 transition-all group">
+                            <div className="w-6 h-6 rounded-full bg-pt-intent-primary/20 border border-pt-intent-primary/30 flex items-center justify-center">
+                                <UserCircle className="w-4 h-4 text-pt-intent-primary" />
+                            </div>
+                            <ChevronDown className="w-3.5 h-3.5 text-pt-text-muted group-hover:text-pt-text transition-colors" />
+                        </button>
+
+                        <Link href="/build" className="ml-2 px-4 h-8 bg-pt-bg-panel hover:bg-pt-bg border border-pt-border hover:border-pt-intent-primary text-pt-text rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl active:scale-95 group">
+                            <LayoutTemplate className="w-3.5 h-3.5 text-pt-intent-primary group-hover:scale-110 transition-transform" />
+                            Switch to Builder
+                        </Link>
+                    </div>
                 </div>
             </header>
 
-            {/* Application Canvas Area */}
-            <main className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-[#0B1015] relative">
+            {/* Application Operational Canvas */}
+            <main className="flex-1 min-w-0 min-h-0 overflow-hidden bg-pt-bg relative flex flex-col">
                 {children}
+
+                {/* Background Lattice Accent */}
+                <div className="absolute inset-0 pointer-events-none opacity-[0.02] z-[-1]"
+                    style={{ backgroundImage: 'linear-gradient(var(--pt-border) 1px, transparent 1px), linear-gradient(90deg, var(--pt-border) 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+                />
             </main>
         </div>
     );

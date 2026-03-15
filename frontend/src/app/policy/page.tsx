@@ -81,6 +81,7 @@ function EffectBadge({ effect }: { effect: string }) {
     );
 }
 
+// ─── Main Component ─────────────────────────────────────────
 export default function PolicyEngine() {
     const [rules, setRules] = useState<Rule[]>(INITIAL_RULES);
     const [selectedRule, setSelectedRule] = useState<Rule | null>(INITIAL_RULES[0]);
@@ -91,174 +92,218 @@ export default function PolicyEngine() {
         if (selectedRule?.id === id) setSelectedRule(r => r ? { ...r, enabled: !r.enabled } : r);
     };
 
-    const allowed = rules.filter(r => r.effect === 'ALLOW' && r.enabled).length;
-    const denied = rules.filter(r => r.effect === 'DENY' && r.enabled).length;
+    const allowedCount = rules.filter(r => r.effect === 'ALLOW' && r.enabled).length;
+    const deniedCount = rules.filter(r => r.effect === 'DENY' && r.enabled).length;
 
     return (
-        <div className="h-full flex flex-col font-mono" style={{ background: "#060A12", color: "#CBD5E1" }}>
-
-            {/* Classification Banner */}
-            <div className="shrink-0 text-center py-1 text-[10px] font-black tracking-[0.2em] uppercase bg-red-700 text-white">
-                ██ SECRET ██ POLICY ENGINE ACCESS — AUTHORIZED ADMINISTRATORS ONLY ██
+        <div className="h-full flex flex-col bg-pt-bg text-pt-text font-mono">
+            {/* Classification Header */}
+            <div className="shrink-0 text-center py-1 text-[10px] font-black tracking-[0.3em] uppercase bg-pt-intent-danger text-white">
+                SECRET // NOFORN // AIP POLICY ENGINE ACCESS AUTHORIZED
             </div>
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-white/8" style={{ background: "rgba(0,0,0,0.4)" }}>
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-blue-600/15 border border-blue-500/25 flex items-center justify-center">
-                        <Shield className="w-4 h-4 text-blue-400" />
+            {/* Tactical Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-pt-border bg-pt-bg-panel/50 backdrop-blur">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-pt-intent-primary/10 border border-pt-intent-primary/30 flex items-center justify-center shadow-lg shadow-pt-intent-primary/5">
+                        <Shield className="w-5 h-5 text-pt-intent-primary" />
                     </div>
                     <div>
-                        <h1 className="text-sm font-bold text-white">Policy Engine</h1>
-                        <p className="text-[10px] text-slate-500">AI access controls, guardrails, and safe handoff rules</p>
+                        <h1 className="text-sm font-black uppercase tracking-widest text-pt-text">Governance & Policy</h1>
+                        <div className="flex items-center gap-3 mt-1">
+                            <span className="text-[9px] font-bold text-pt-text-muted uppercase tracking-tighter">AI Guardrail Enforcement</span>
+                            <div className="w-1 h-1 rounded-full bg-pt-border" />
+                            <span className="text-[9px] font-mono text-pt-intent-primary">v2.4.9-STABLE</span>
+                        </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-3 text-[11px]">
-                        <span className="text-emerald-400 font-bold">{allowed} ALLOW</span>
-                        <span className="text-red-400 font-bold">{denied} DENY</span>
-                        <span className="text-slate-600">{rules.length} total rules</span>
+
+                <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4 bg-pt-bg px-4 py-2 border border-pt-border rounded shadow-inner">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[8px] font-black text-pt-text-muted uppercase">Allowed</span>
+                            <span className="text-xs font-mono font-black text-pt-intent-success">{allowedCount}</span>
+                        </div>
+                        <div className="w-px h-6 bg-pt-border" />
+                        <div className="flex flex-col items-end">
+                            <span className="text-[8px] font-black text-pt-text-muted uppercase">Blocked</span>
+                            <span className="text-xs font-mono font-black text-pt-intent-danger">{deniedCount}</span>
+                        </div>
                     </div>
-                    <div className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/8">
+
+                    <div className="flex p-1 bg-pt-bg-panel border border-pt-border rounded-lg">
                         {(['rules', 'evallog'] as const).map(v => (
-                            <button key={v} onClick={() => setView(v)}
-                                className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${view === v ? 'bg-white/10 text-white' : 'text-slate-600 hover:text-slate-400'}`}>
-                                {v === 'rules' ? 'POLICY RULES' : 'EVAL LOG'}
+                            <button
+                                key={v}
+                                onClick={() => setView(v)}
+                                className={`px-4 py-1.5 rounded text-[10px] font-black uppercase tracking-widest transition-all ${view === v ? 'bg-pt-intent-primary text-white shadow-lg' : 'text-pt-text-muted hover:text-pt-text'
+                                    }`}
+                            >
+                                {v === 'rules' ? 'Policy Deck' : 'Audit Trail'}
                             </button>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* Body */}
+            {/* Main Workspace */}
             <div className="flex-1 flex min-h-0">
-
-                {/* Left: Rule list */}
-                <div className="w-80 border-r border-white/8 flex flex-col shrink-0" style={{ background: "rgba(0,0,0,0.2)" }}>
-                    <div className="p-3 border-b border-white/5 flex items-center justify-between">
-                        <span className="text-[10px] text-slate-500 uppercase tracking-widest">Access Rules</span>
-                        <button className="w-6 h-6 rounded bg-blue-600/20 border border-blue-500/20 flex items-center justify-center hover:bg-blue-600/30 transition-all">
-                            <Plus className="w-3.5 h-3.5 text-blue-400" />
+                {/* Left Rails: Rule Selector */}
+                <div className="w-80 border-r border-pt-border bg-pt-bg-panel/30 flex flex-col shrink-0">
+                    <div className="px-4 py-3 border-b border-pt-border flex items-center justify-between bg-pt-bg-panel/50">
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-pt-text-muted">Directives</span>
+                        <button className="w-6 h-6 rounded bg-pt-intent-primary/20 border border-pt-intent-primary/30 flex items-center justify-center hover:bg-pt-intent-primary/30 transition-all">
+                            <Plus className="w-3.5 h-3.5 text-pt-intent-primary" />
                         </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                         {rules.map(rule => (
-                            <div key={rule.id}
+                            <button
+                                key={rule.id}
                                 onClick={() => setSelectedRule(rule)}
-                                className={`p-3 rounded-xl cursor-pointer border transition-all ${selectedRule?.id === rule.id ? 'border-blue-500/25 bg-blue-500/8' : 'border-transparent hover:border-white/8 hover:bg-white/2'}`}>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <code className="text-[10px] text-blue-400">{rule.id}</code>
-                                    <EffectBadge effect={rule.effect} />
+                                className={`w-full text-left p-3 rounded border transition-all relative overflow-hidden group ${selectedRule?.id === rule.id
+                                        ? 'bg-pt-intent-primary/10 border-pt-intent-primary/40'
+                                        : 'bg-transparent border-transparent hover:bg-pt-bg-panel hover:border-pt-border'
+                                    }`}
+                            >
+                                {selectedRule?.id === rule.id && (
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-pt-intent-primary shadow-lg shadow-pt-intent-primary/50" />
+                                )}
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[9px] font-mono text-pt-intent-primary font-black uppercase">{rule.id}</span>
+                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${rule.effect === 'ALLOW'
+                                            ? 'bg-pt-intent-success/10 text-pt-intent-success border-pt-intent-success/30'
+                                            : 'bg-pt-intent-danger/10 text-pt-intent-danger border-pt-intent-danger/30'
+                                        }`}>
+                                        {rule.effect}
+                                    </span>
                                 </div>
-                                <p className="text-[11px] text-slate-300 leading-snug mb-1.5">{rule.name}</p>
-                                <div className="flex items-center justify-between">
-                                    <code className="text-[10px] text-slate-600">{rule.resource}</code>
-                                    <button onClick={e => { e.stopPropagation(); toggleRule(rule.id); }}
-                                        className={`transition-colors ${rule.enabled ? 'text-emerald-400' : 'text-slate-700'}`}>
-                                        {rule.enabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                                    </button>
+                                <div className="text-[11px] font-bold text-pt-text truncate">{rule.name}</div>
+                                <div className="mt-2 flex items-center justify-between">
+                                    <span className="text-[9px] font-mono text-pt-text-muted opacity-50 lowercase">{rule.resource}</span>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${rule.enabled ? 'bg-pt-intent-success animate-pulse' : 'bg-pt-border'}`} />
                                 </div>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </div>
 
-                {/* Center: Rule detail */}
-                {view === 'rules' && selectedRule && (
-                    <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* Center Rails: Detail View */}
+                {view === 'rules' && selectedRule ? (
+                    <div className="flex-1 overflow-y-auto p-8 bg-pt-bg space-y-8 custom-scrollbar">
                         <div className="flex items-start justify-between">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <code className="text-sm text-blue-400">{selectedRule.id}</code>
-                                    <EffectBadge effect={selectedRule.effect} />
-                                    {!selectedRule.enabled && <span className="text-[10px] text-slate-600 font-sans">(DISABLED)</span>}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs font-mono text-pt-intent-primary font-black">{selectedRule.id}</span>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-pt-border" />
+                                    <span className={`text-[10px] font-black uppercase tracking-widest ${selectedRule.enabled ? 'text-pt-intent-success' : 'text-pt-text-muted'}`}>
+                                        {selectedRule.enabled ? 'ACTIVE' : 'DEACTIVATED'}
+                                    </span>
                                 </div>
-                                <h2 className="text-lg font-bold text-white font-sans">{selectedRule.name}</h2>
-                                <p className="text-[11px] text-slate-500 mt-0.5 font-sans">{selectedRule.notes}</p>
+                                <h2 className="text-2xl font-black text-pt-text uppercase tracking-tight">{selectedRule.name}</h2>
+                                <p className="text-xs text-pt-text-muted leading-relaxed max-w-2xl">{selectedRule.notes}</p>
                             </div>
-                            <button onClick={() => toggleRule(selectedRule.id)}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold border font-sans transition-all ${selectedRule.enabled ? 'border-red-500/25 text-red-400 hover:bg-red-500/10' : 'border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/10'}`}>
-                                {selectedRule.enabled ? 'Disable Rule' : 'Enable Rule'}
+
+                            <button
+                                onClick={() => toggleRule(selectedRule.id)}
+                                className={`px-5 py-2 rounded font-black text-[10px] uppercase tracking-[0.2em] border transition-all ${selectedRule.enabled
+                                        ? 'border-pt-intent-danger text-pt-intent-danger hover:bg-pt-intent-danger/10'
+                                        : 'border-pt-intent-success text-pt-intent-success hover:bg-pt-intent-success/10'
+                                    }`}
+                            >
+                                {selectedRule.enabled ? 'Revoke Directive' : 'Approve Directive'}
                             </button>
                         </div>
 
-                        {/* Rule grid */}
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* Attribute Grid */}
+                        <div className="grid grid-cols-4 gap-4">
                             {[
-                                { label: "Resource", value: selectedRule.resource, icon: Database },
-                                { label: "Model", value: selectedRule.model, icon: Brain },
-                                { label: "Action", value: selectedRule.action, icon: Zap },
-                                { label: "Priority", value: `P-${selectedRule.priority} (${selectedRule.priority === 1 ? 'highest' : 'normal'})`, icon: Layers },
-                            ].map(f => (
-                                <div key={f.label} className="bg-white/2 border border-white/6 rounded-xl p-4">
-                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-600 mb-1.5 uppercase tracking-wider font-sans">
-                                        <f.icon className="w-3.5 h-3.5" />{f.label}
+                                { label: "Target Resource", value: selectedRule.resource, icon: Database },
+                                { label: "Executing Model", value: selectedRule.model, icon: Brain },
+                                { label: "Operation", value: selectedRule.action, icon: Zap },
+                                { label: "Authority Level", value: `LEVEL-${selectedRule.priority}`, icon: Shield },
+                            ].map((f, i) => (
+                                <div key={i} className="bg-pt-bg-panel border border-pt-border p-4 rounded shadow-sm hover:border-pt-border-hover transition-colors">
+                                    <div className="flex items-center gap-2 text-[8px] font-black text-pt-text-muted uppercase tracking-widest mb-2">
+                                        <f.icon className="w-3 h-3" />
+                                        {f.label}
                                     </div>
-                                    <code className="text-sm text-white">{f.value}</code>
+                                    <div className="text-[11px] font-mono font-bold text-pt-text truncate">{f.value}</div>
                                 </div>
                             ))}
                         </div>
 
-                        {/* Effect Preview */}
-                        <div className={`rounded-xl border p-4 ${selectedRule.effect === 'ALLOW' ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-red-500/20 bg-red-500/5'}`}>
-                            <h3 className="text-[10px] text-slate-500 uppercase tracking-wider mb-3 font-sans">Effect Preview</h3>
-                            <div className="flex items-start gap-3">
-                                {selectedRule.effect === 'ALLOW'
-                                    ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                                    : <Lock className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />}
-                                <p className="text-sm text-slate-300 font-sans leading-relaxed">
+                        {/* Impact Assessment */}
+                        <div className={`p-6 border rounded-lg flex gap-4 ${selectedRule.effect === 'ALLOW'
+                                ? 'bg-pt-intent-success/5 border-pt-intent-success/20'
+                                : 'bg-pt-intent-danger/5 border-pt-intent-danger/20'
+                            }`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${selectedRule.effect === 'ALLOW'
+                                    ? 'bg-pt-intent-success/10 border-pt-intent-success/30 text-pt-intent-success'
+                                    : 'bg-pt-intent-danger/10 border-pt-intent-danger/30 text-pt-intent-danger'
+                                }`}>
+                                {selectedRule.effect === 'ALLOW' ? <CheckCircle2 size={20} /> : <Lock size={20} />}
+                            </div>
+                            <div>
+                                <h3 className="text-[11px] font-black uppercase tracking-widest text-pt-text mb-1">Impact Analysis</h3>
+                                <p className="text-xs text-pt-text-muted font-sans leading-relaxed">
                                     {selectedRule.effect === 'ALLOW'
-                                        ? `Model "${selectedRule.model}" is PERMITTED to ${selectedRule.action} resource "${selectedRule.resource}". Access logged to audit trail.`
-                                        : `NO model matching "${selectedRule.model}" may ${selectedRule.action} resource "${selectedRule.resource}". Request blocked and logged. Operator notified.`}
+                                        ? `AIP Core will permit "${selectedRule.model}" to perform ${selectedRule.action} operations on "${selectedRule.resource}". All interactions are cryptographically signed and archived for audit.`
+                                        : `Security barrier will block all ${selectedRule.action} attempts from "${selectedRule.model}" against "${selectedRule.resource}". Violation alerts will be dispatched to Strategic Operations.`}
                                 </p>
                             </div>
                         </div>
 
-                        {/* Recent evaluations for this rule */}
-                        <div>
-                            <h3 className="text-[10px] text-slate-500 uppercase tracking-wider mb-3 font-sans">Recent Evaluations</h3>
-                            <div className="border border-white/6 rounded-xl overflow-hidden">
-                                {EVAL_LOG.filter(e => e.policy === selectedRule.id).slice(0, 4).map(e => (
-                                    <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors">
-                                        <EffectBadge effect={e.effect} />
-                                        <code className="text-[11px] text-slate-500">{e.ts} UTC</code>
-                                        <code className="text-[11px] text-slate-400 flex-1 truncate">{e.model}</code>
-                                        <code className="text-[10px] text-slate-600">{e.sessionId}</code>
-                                    </div>
-                                ))}
-                                {EVAL_LOG.filter(e => e.policy === selectedRule.id).length === 0 && (
-                                    <div className="py-4 text-center text-[11px] text-slate-700 font-sans">No recent evaluations</div>
+                        {/* Recent Evaluations */}
+                        <div className="space-y-4">
+                            <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-pt-text-muted">Telemetry Log (Recent Evaluations)</h3>
+                            <div className="bg-pt-bg-panel border border-pt-border rounded-lg overflow-hidden shadow-inner">
+                                {EVAL_LOG.filter(e => e.policy === selectedRule.id).length > 0 ? (
+                                    EVAL_LOG.filter(e => e.policy === selectedRule.id).slice(0, 5).map(e => (
+                                        <div key={e.id} className="grid grid-cols-5 px-5 py-3 border-b border-pt-border last:border-0 hover:bg-pt-bg-panel/50 transition-colors items-center">
+                                            <span className="text-[10px] font-mono text-pt-text-muted">{e.ts}</span>
+                                            <span className={`text-[9px] font-black uppercase ${e.effect === 'ALLOW' ? 'text-pt-intent-success' : 'text-pt-intent-danger'}`}>{e.effect}</span>
+                                            <span className="text-[10px] font-mono text-pt-text truncate">{e.model}</span>
+                                            <span className="text-[10px] font-mono text-pt-text-muted">{e.user}</span>
+                                            <span className="text-[9px] font-mono text-pt-text-muted text-right uppercase opacity-40">{e.sessionId}</span>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="py-8 text-center text-[10px] text-pt-text-muted uppercase tracking-widest opacity-30 italic">No evaluated events for this Directive</div>
                                 )}
                             </div>
                         </div>
                     </div>
-                )}
-
-                {/* Eval Log View */}
-                {view === 'evallog' && (
-                    <div className="flex-1 overflow-y-auto p-5">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xs font-bold text-white font-sans">Live Policy Evaluation Log</h2>
-                            <div className="flex items-center gap-1.5">
-                                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                <span className="text-[10px] text-emerald-400 font-mono">STREAMING</span>
+                ) : (
+                    <div className="flex-1 overflow-y-auto p-6 bg-pt-bg custom-scrollbar">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex flex-col gap-1">
+                                <h2 className="text-sm font-black uppercase tracking-widest text-pt-text">Policy Audit Trail</h2>
+                                <p className="text-[10px] text-pt-text-muted font-mono lowercase">monitoring real-time evaluation flow</p>
+                            </div>
+                            <div className="flex items-center gap-2 bg-pt-intent-success/10 px-3 py-1 border border-pt-intent-success/20 rounded">
+                                <Activity className="w-3.5 h-3.5 text-pt-intent-success animate-pulse" />
+                                <span className="text-[9px] font-black text-pt-intent-success uppercase tracking-widest">Live Telemetry</span>
                             </div>
                         </div>
-                        <div className="border border-white/6 rounded-xl overflow-hidden">
-                            <div className="grid grid-cols-7 px-4 py-2 bg-white/2 border-b border-white/6 text-[10px] text-slate-500 uppercase tracking-wider font-sans">
-                                <span>Time</span><span>Policy</span><span>Model</span><span>Resource</span><span>Effect</span><span>User</span><span>Session</span>
+
+                        <div className="bg-pt-bg-panel border border-pt-border rounded-xl overflow-hidden shadow-2xl">
+                            <div className="grid grid-cols-7 px-5 py-3 bg-pt-bg border-b border-pt-border text-[8px] font-black text-pt-text-muted uppercase tracking-[0.2em]">
+                                <span>Timestamp</span><span>Policy ID</span><span>Subject</span><span>Object</span><span>Action</span><span>Identity</span><span>Token</span>
                             </div>
-                            {EVAL_LOG.map(e => (
-                                <div key={e.id} className="grid grid-cols-7 px-4 py-3 border-b border-white/4 last:border-0 hover:bg-white/2 text-[11px] items-center transition-colors">
-                                    <code className="text-slate-600">{e.ts}</code>
-                                    <code className="text-blue-400">{e.policy}</code>
-                                    <code className="text-slate-400 truncate">{e.model}</code>
-                                    <code className="text-slate-400 truncate">{e.resource}</code>
-                                    <EffectBadge effect={e.effect} />
-                                    <code className="text-slate-500">{e.user}</code>
-                                    <code className="text-slate-600">{e.sessionId}</code>
-                                </div>
-                            ))}
+                            <div className="divide-y divide-pt-border">
+                                {EVAL_LOG.map(e => (
+                                    <div key={e.id} className="grid grid-cols-7 px-5 py-3 hover:bg-pt-bg-panel/50 text-[10px] items-center transition-colors font-mono">
+                                        <span className="text-pt-text-muted">{e.ts}</span>
+                                        <span className="text-pt-intent-primary font-bold">{e.policy}</span>
+                                        <span className="text-pt-text truncate pr-2">{e.model}</span>
+                                        <span className="text-pt-text truncate pr-2">{e.resource}</span>
+                                        <span className={`font-black uppercase tracking-tighter ${e.effect === 'ALLOW' ? 'text-pt-intent-success' : 'text-pt-intent-danger'}`}>{e.effect}</span>
+                                        <span className="text-pt-text-muted">{e.user}</span>
+                                        <span className="text-pt-text-muted opacity-40 text-right">{e.sessionId}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}

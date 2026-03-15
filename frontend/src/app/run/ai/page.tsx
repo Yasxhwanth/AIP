@@ -5,7 +5,8 @@ import { useRuntimeStore } from "@/store/runtimeStore";
 import { useBuilderStore } from "@/store/builderStore";
 import {
     BrainCircuit, Send, User, ChevronRight, Database,
-    Zap, AlertTriangle, CheckCircle2, ShieldAlert
+    Zap, AlertTriangle, CheckCircle2, ShieldAlert, Cpu,
+    Terminal, MoreHorizontal, Command, Sparkles, AlertCircle
 } from "lucide-react";
 
 interface ChatMessage {
@@ -30,7 +31,7 @@ export default function RuntimeAiConsole() {
     const [messages, setMessages] = useState<ChatMessage[]>([{
         id: 'msg-1',
         role: 'ai',
-        content: `AIP Operations Copilot online. I am running the **${activeAgent?.model || 'GPT-4-AIP'}** model with access to your restricted operational ontology. How can I assist you today?`
+        content: `AIP Operations Copilot online. I am running the **${activeAgent?.model || 'GPT-4-PT'}** mission-tuned model with access to your high-integrity operational ontology. How can I assist with your objectives today?`
     }]);
 
     const [input, setInput] = useState("");
@@ -60,43 +61,41 @@ export default function RuntimeAiConsole() {
             let aiResponse: ChatMessage = {
                 id: `ai-${Date.now()}`,
                 role: 'ai',
-                content: "I've analyzed your request against the current ontology."
+                content: "I've analyzed your telemetry request against the active operational lattice."
             };
 
             const lowerInput = userMsg.toLowerCase();
 
             if (lowerInput.includes("risk") || lowerInput.includes("critical") || lowerInput.includes("drone")) {
-                // Find critical drones
                 const criticalDrones = instances.filter(i => i.entityTypeId === 'ent-drone' && i.properties.status === 'CRITICAL');
 
                 if (criticalDrones.length > 0) {
                     const target = criticalDrones[0];
-                    // Find an AI-triggerable action for drones
                     const validAction = actions.find(a => a.targetEntityTypeId === 'ent-drone' && activeAgent.allowedActions.includes(a.id));
 
-                    aiResponse.content = `I queried the **Drone** entity table. We currently have **${criticalDrones.length}** drone(s) in CRITICAL status. Drone \`${target.id}\` is reporting a dangerously low battery level (${target.properties.batteryLevel}%).`;
+                    aiResponse.content = `I queried the **Drone** registry. We have **${criticalDrones.length}** vector(s) in CRITICAL state. Vector \`${target.id}\` is reporting power depletion (${target.properties.batteryLevel}%).`;
                     aiResponse.queriedEntities = ['ent-drone'];
 
                     if (validAction) {
-                        aiResponse.content += `\n\nI recommend executing a recall protocol immediately to prevent structural loss.`;
+                        aiResponse.content += `\n\nI recommend immediate execution of the recall protocol to maintain asset integrity.`;
                         aiResponse.actionProposal = {
                             actionId: validAction.id,
                             instanceId: target.id,
                             confidence: 94
                         };
                     } else {
-                        aiResponse.content += `\n\nNo AI-triggerable actions are bound to this entity in my current agent scope. Manual intervention is required.`;
+                        aiResponse.content += `\n\nNo authorized mission overrides are bound to this vector in my current scope. Escalating to Manual Intervention.`;
                     }
                 } else {
-                    aiResponse.content = "All drones are currently operating within nominal parameters. No critical risks detected.";
+                    aiResponse.content = "All registered assets are currently operating within nominal parameters. No high-threat risks detected.";
                     aiResponse.queriedEntities = ['ent-drone'];
                 }
             } else if (lowerInput.includes("mission") || lowerInput.includes("conflict")) {
                 const conflictMissions = instances.filter(i => i.entityTypeId === 'ent-mission' && i.properties.status === 'CONFLICT');
-                aiResponse.content = `I found **${conflictMissions.length}** mission conflict(s) in the active roster. Would you like me to analyze potential rerouting options?`;
+                aiResponse.content = `I have identified **${conflictMissions.length}** trajectory conflict(s) in the mission roster. Initiate re-route analysis?`;
                 aiResponse.queriedEntities = ['ent-mission'];
             } else {
-                aiResponse.content = "I didn't recognize any specific operational parameters in that request. You can ask me about at-risk drones, mission conflicts, or general fleet analytics.";
+                aiResponse.content = "Awaiting valid operational parameters. You can query at-risk drones, mission trajectory conflicts, or request comprehensive fleet analytics.";
             }
 
             setMessages(prev => [...prev, aiResponse]);
@@ -116,80 +115,106 @@ export default function RuntimeAiConsole() {
         setMessages(prev => [...prev, {
             id: `sys-${Date.now()}`,
             role: 'ai',
-            content: `Execution confirmed. System payload committed to **${execProposal.instanceId}** via the API layer.`
+            content: `Transaction committed. State change successfully broadcast to vector **${execProposal.instanceId}** via the API bridge.`
         }]);
     };
 
     if (!activeAgent) {
-        return <div className="flex-1 flex items-center justify-center bg-[#060A12] text-slate-500 font-sans">No AI Agents configured in Builder mode.</div>;
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center bg-pt-bg text-pt-text-muted font-mono gap-4">
+                <ShieldAlert size={48} className="opacity-20" />
+                <div className="text-[11px] font-black uppercase tracking-[0.4em]">Intelligence Layer Offline</div>
+                <p className="text-[10px] opacity-40 uppercase tracking-widest text-center max-w-xs">No AI Agents initialized in Builder mode. Interface restricted.</p>
+            </div>
+        );
     }
 
     return (
-        <div className="flex-1 flex flex-col min-w-0 bg-[#060A12] text-slate-300 font-sans relative">
+        <div className="flex-1 flex flex-col min-w-0 bg-pt-bg text-pt-text font-mono relative overflow-hidden">
 
-            {/* Header */}
-            <div className="border-b border-white/5 bg-[#0B1220] p-4 flex justify-between items-center shrink-0 z-10">
-                <div>
-                    <div className="flex items-center gap-2">
-                        <BrainCircuit className="w-5 h-5 text-blue-400" />
-                        <h1 className="text-lg font-black text-white">AI Operations Console</h1>
-                        <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded text-[10px] uppercase font-bold tracking-wider ml-2">
-                            {activeAgent.model}
-                        </span>
+            {/* Tactical Header Overlay */}
+            <div className="h-16 border-b border-pt-border bg-pt-bg-panel flex items-center justify-between px-6 shrink-0 z-20 shadow-xl">
+                <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 bg-pt-intent-primary/10 border border-pt-intent-primary/30 rounded-lg flex items-center justify-center">
+                        <BrainCircuit className="w-5 h-5 text-pt-intent-primary" />
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Bound to {activeAgent.entityScopes.length} Ontology Entities • {activeAgent.allowedActions.length} Actions Authorized</p>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-sm font-black text-pt-text uppercase tracking-widest">AIP Intelligence Console</h1>
+                            <div className="h-4 w-px bg-pt-border mx-1" />
+                            <span className="px-2 py-0.5 bg-pt-intent-primary border border-pt-intent-primary text-pt-bg rounded text-[8px] font-black uppercase tracking-[0.2em] shadow-lg">
+                                {activeAgent.model}
+                            </span>
+                        </div>
+                        <p className="text-[9px] text-pt-text-muted font-bold tracking-widest mt-1 opacity-50 uppercase leading-none">
+                            Bound: {activeAgent.entityScopes.length} Entity Sets • {activeAgent.allowedActions.length} Actions Authorized
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button className="p-2 text-pt-text-muted hover:text-pt-text transition-all">
+                        <Settings size={16} />
+                    </button>
+                    <button className="p-2 text-pt-text-muted hover:text-pt-text transition-all">
+                        <MoreHorizontal size={16} />
+                    </button>
                 </div>
             </div>
 
-            {/* Chat Area */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-6">
-                <div className="max-w-4xl mx-auto space-y-8">
+            {/* Chat Vector Area */}
+            <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
+                <div className="max-w-4xl mx-auto space-y-12">
                     {messages.map((msg) => (
-                        <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${msg.role === 'user'
-                                ? 'bg-[#0B1220] border-white/10'
-                                : 'bg-blue-600/20 border-blue-500/30'
+                        <div key={msg.id} className={`flex gap-6 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                            {/* Avatar */}
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-2xl transition-all ${msg.role === 'user'
+                                ? 'bg-pt-bg-panel border-pt-border group-hover:border-pt-text transition-colors'
+                                : 'bg-pt-intent-primary/10 border-pt-intent-primary/40'
                                 }`}>
-                                {msg.role === 'user' ? <User className="w-5 h-5 text-slate-400" /> : <BrainCircuit className="w-5 h-5 text-blue-400" />}
+                                {msg.role === 'user' ? <User className="w-5 h-5 text-pt-text-muted" /> : <Cpu className="w-5 h-5 text-pt-intent-primary" />}
                             </div>
 
-                            <div className={`max-w-[85%] ${msg.role === 'user' ? 'flex flex-col items-end' : ''}`}>
-                                <div className={`px-5 py-4 text-sm leading-relaxed ${msg.role === 'user'
-                                    ? 'bg-[#1E3A8A]/50 border border-blue-500/20 text-blue-50 rounded-2xl rounded-tr-sm'
-                                    : 'bg-[#0B1220] border border-white/5 text-slate-300 rounded-2xl rounded-tl-sm shadow-xl'
+                            {/* Message Bubble */}
+                            <div className={`max-w-[80%] ${msg.role === 'user' ? 'flex flex-col items-end' : ''}`}>
+                                <div className={`relative px-6 py-5 text-[12px] leading-relaxed shadow-2xl transition-all ${msg.role === 'user'
+                                    ? 'bg-pt-intent-primary/20 border border-pt-intent-primary/30 text-pt-text rounded-2xl rounded-tr-sm'
+                                    : 'bg-pt-bg-panel border border-pt-border text-pt-text rounded-2xl rounded-tl-sm'
                                     }`}>
 
-                                    {/* System Context Badges */}
+                                    {/* Data Query Persistence Trace */}
                                     {msg.queriedEntities && (
-                                        <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/5 text-[10px] font-mono text-slate-500">
-                                            <Database className="w-3.5 h-3.5 text-blue-400/50" />
-                                            <span>Queried Source Sets: {msg.queriedEntities.map(id => entityTypes.find(e => e.id === id)?.name).join(', ')}</span>
+                                        <div className="flex items-center gap-3 mb-4 pb-4 border-b border-pt-border/30 text-[9px] font-black text-pt-text-muted uppercase tracking-[0.2em]">
+                                            <Database className="w-3.5 h-3.5 text-pt-intent-primary opacity-50" />
+                                            <span>Telemetry Bridge: {msg.queriedEntities.map(id => entityTypes.find(e => e.id === id)?.name).join(', ')}</span>
                                         </div>
                                     )}
 
                                     {/* Text Content */}
-                                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                                    <div className="font-bold tracking-tight whitespace-pre-wrap">{msg.content}</div>
 
-                                    {/* Proposed Action Card */}
+                                    {/* Proposed Logic Overrides (Action Card) */}
                                     {msg.actionProposal && (
-                                        <div className="mt-4 bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 shadow-lg flex flex-col gap-3">
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="font-bold text-blue-400 uppercase tracking-widest">Proposed Action</span>
-                                                <span className="text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                                    Confidence {msg.actionProposal.confidence}%
+                                        <div className="mt-6 bg-pt-bg border border-pt-intent-primary/30 rounded-xl p-5 shadow-2xl flex flex-col gap-4 relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 p-3 opacity-5">
+                                                <Zap size={48} className="text-pt-intent-primary" />
+                                            </div>
+                                            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+                                                <span className="text-pt-intent-primary flex items-center gap-2"><Zap size={12} /> Proposed Intervention</span>
+                                                <span className="text-pt-intent-success bg-pt-intent-success/10 px-2 py-1 rounded border border-pt-intent-success/30">
+                                                    94% Reliability
                                                 </span>
                                             </div>
 
-                                            <div className="flex justify-between items-center">
-                                                <div className="text-slate-300 text-sm">Target: <code className="text-blue-300 font-mono text-xs">{msg.actionProposal.instanceId}</code></div>
+                                            <div className="flex flex-col gap-1">
+                                                <div className="text-pt-text-muted text-[10px] font-black uppercase tracking-widest opacity-40">Target Vector</div>
+                                                <div className="text-pt-text font-black text-[13px] tracking-tight">{msg.actionProposal.instanceId}</div>
                                             </div>
 
                                             <button
                                                 onClick={() => setExecProposal(msg.actionProposal!)}
-                                                className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-blue-600/20 relative overflow-hidden group">
-                                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                                                <Zap className="w-4 h-4 relative z-10" />
-                                                <span className="relative z-10">Execute {actions.find(a => a.id === msg.actionProposal?.actionId)?.name || 'Command'}</span>
+                                                className="w-full h-11 flex justify-center items-center gap-2.5 bg-pt-intent-primary text-pt-bg rounded-lg text-[10px] font-black uppercase tracking-widest shadow-xl relative overflow-hidden active:scale-95 transition-all">
+                                                <Zap className="w-4 h-4" />
+                                                Execute {actions.find(a => a.id === msg.actionProposal?.actionId)?.name || 'Command'}
                                             </button>
                                         </div>
                                     )}
@@ -198,17 +223,18 @@ export default function RuntimeAiConsole() {
                         </div>
                     ))}
 
+                    {/* AI Loading State */}
                     {isTyping && (
-                        <div className="flex gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
-                                <BrainCircuit className="w-5 h-5 text-blue-400" />
+                        <div className="flex gap-6">
+                            <div className="w-10 h-10 rounded-xl bg-pt-intent-primary/10 border border-pt-intent-primary/40 flex items-center justify-center shrink-0">
+                                <Cpu className="w-5 h-5 text-pt-intent-primary animate-pulse" />
                             </div>
-                            <div className="px-5 py-4 bg-[#0B1220] border border-white/5 rounded-2xl rounded-tl-sm flex items-center gap-2">
-                                <span className="text-xs text-slate-500 font-mono">Traversing Ontology</span>
-                                <div className="flex gap-1 ml-2">
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" />
+                            <div className="px-6 py-5 bg-pt-bg-panel border border-pt-border rounded-2xl rounded-tl-sm flex items-center gap-3">
+                                <span className="text-[10px] text-pt-text-muted font-black uppercase tracking-[0.3em]">Traversing Lattice</span>
+                                <div className="flex gap-1.5 ml-2">
+                                    <div className="w-1.5 h-1.5 bg-pt-intent-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                    <div className="w-1.5 h-1.5 bg-pt-intent-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                    <div className="w-1.5 h-1.5 bg-pt-intent-primary rounded-full animate-bounce" />
                                 </div>
                             </div>
                         </div>
@@ -217,60 +243,82 @@ export default function RuntimeAiConsole() {
                 </div>
             </div>
 
-            {/* Input Area */}
-            <div className="p-6 bg-gradient-to-t from-[#060A12] via-[#060A12] to-transparent shrink-0">
+            {/* Input Buffer */}
+            <div className="p-8 bg-gradient-to-t from-pt-bg via-pt-bg to-transparent shrink-0">
                 <form onSubmit={handleSubmit} className="max-w-4xl mx-auto relative group">
+                    <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-3 pointer-events-none opacity-40 group-focus-within:opacity-100 transition-opacity">
+                        <Terminal size={14} className="text-pt-intent-primary" />
+                    </div>
                     <input
                         value={input} onChange={e => setInput(e.target.value)}
-                        placeholder="Query operations data or request manual actions..."
-                        className="w-full bg-[#0B1220] border border-white/10 rounded-2xl pl-6 pr-14 py-4 text-sm text-white focus:border-blue-500/50 outline-none shadow-2xl transition-colors group-hover:border-white/20" />
+                        placeholder="ISSUE COMMAND OR QUERY TELEMETRY…"
+                        className="w-full bg-pt-bg-panel border border-pt-border rounded-2xl pl-14 pr-16 py-5 text-[11px] font-black uppercase tracking-widest text-pt-text focus:border-pt-intent-primary outline-none shadow-[0_0_50px_rgba(0,0,0,0.5)] transition-all placeholder:opacity-20" />
                     <button
                         type="submit" disabled={!input.trim() || isTyping}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-500 disabled:bg-white/5 text-white disabled:text-slate-500 rounded-xl transition-colors">
-                        <Send className="w-4 h-4" />
+                        className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-pt-intent-primary disabled:bg-pt-border disabled:opacity-20 text-pt-bg rounded-xl transition-all active:scale-90 flex items-center justify-center shadow-lg">
+                        <Send size={16} />
                     </button>
                 </form>
-                <div className="text-center mt-3 text-[10px] text-slate-600 font-sans tracking-wide">
-                    AI responses are constrained by RBAC and Ontology Access Scope.
+                <div className="flex items-center justify-center gap-6 mt-4 opacity-30">
+                    <div className="flex items-center gap-2">
+                        <Command size={10} className="text-pt-text-muted" />
+                        <span className="text-[9px] font-black text-pt-text-muted uppercase tracking-widest">Logic Constraint: RBAC_ON</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Sparkles size={10} className="text-pt-intent-primary" />
+                        <span className="text-[9px] font-black text-pt-text-muted uppercase tracking-widest">Ontology Scope: FULL</span>
+                    </div>
                 </div>
             </div>
 
-            {/* Action Execution Confirmation Modal */}
+            {/* HIGH-LEVEL INTERVENTION AUTHORIZATION MODAL */}
             {execProposal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-50 animate-in fade-in duration-200">
-                    <div className="bg-[#111827] border border-blue-500/30 rounded-2xl w-full max-w-lg shadow-2xl p-6">
+                <div className="fixed inset-0 bg-pt-bg/95 backdrop-blur-md flex items-center justify-center p-8 z-[100] animate-in fade-in duration-300">
+                    <div className="bg-pt-bg-panel border border-pt-intent-primary/30 rounded-2xl w-full max-w-xl shadow-[0_0_100px_rgba(var(--pt-intent-primary),0.2)] p-8 relative overflow-hidden">
+                        {/* Background warning pattern */}
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                            <ShieldAlert size={120} className="text-pt-intent-primary" />
+                        </div>
+
                         {(() => {
                             const action = actions.find(a => a.id === execProposal.actionId);
                             if (!action) return null;
                             return (
                                 <>
-                                    <div className="flex justify-between items-start mb-6">
-                                        <div className="flex gap-4">
-                                            <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 border border-blue-500/20">
-                                                <Zap className="w-6 h-6 text-blue-500" />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-xl font-black text-white font-sans">Confirm AI Proposed Action</h3>
-                                                <p className="text-xs text-slate-400 font-sans mt-1">AI agent is attempting to execute <code className="text-blue-300">{action.name}</code> against <code className="text-blue-300">{execProposal.instanceId}</code>.</p>
-                                            </div>
+                                    <div className="flex gap-6 mb-10 relative z-10">
+                                        <div className="w-16 h-16 rounded-2xl bg-pt-intent-primary/10 flex items-center justify-center shrink-0 border border-pt-intent-primary/40 shadow-2xl">
+                                            <Zap className="w-8 h-8 text-pt-intent-primary" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-2xl font-black text-pt-text uppercase tracking-tighter">Intervention Authorized</h3>
+                                            <p className="text-[10px] text-pt-text-muted font-black tracking-widest mt-2 opacity-60 uppercase leading-relaxed">
+                                                Commit protocol <span className="text-pt-intent-primary">{action.name}</span> <br />
+                                                Target Object: <span className="text-pt-intent-primary">{execProposal.instanceId}</span>
+                                            </p>
                                         </div>
                                     </div>
 
                                     {activeAgent.confirmBeforeExecute && (
-                                        <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 mb-6 flex items-start gap-3">
-                                            <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                        <div className="bg-pt-intent-warning/5 border border-pt-intent-warning/30 rounded-xl p-5 mb-10 flex items-start gap-4">
+                                            <AlertCircle className="w-5 h-5 text-pt-intent-warning shrink-0 mt-0.5" />
                                             <div>
-                                                <div className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Human-in-the-Loop Required</div>
-                                                <div className="text-xs text-slate-400 font-sans leading-relaxed">The AI Agent is requesting your explicit authorization to commit this transaction to the state graph.</div>
+                                                <div className="text-[10px] font-black text-pt-intent-warning uppercase tracking-[0.2em] mb-1">Human-in-the-Loop Constraint</div>
+                                                <div className="text-[11px] text-pt-text-muted font-bold leading-relaxed opacity-80 uppercase tracking-tight">
+                                                    Manual override required for cross-lattice state mutations.
+                                                </div>
                                             </div>
                                         </div>
                                     )}
 
-                                    <div className="flex justify-end gap-3 font-sans mt-8 pt-6 border-t border-white/10">
-                                        <button onClick={() => setExecProposal(null)} disabled={isExecuting} className="px-5 py-2.5 rounded-lg text-sm font-bold text-slate-300 hover:bg-white/5 transition-colors">Abort</button>
-                                        <button onClick={handleExecuteAction} disabled={isExecuting} className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50">
-                                            {isExecuting ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Zap className="w-4 h-4" />}
-                                            {isExecuting ? 'Committing...' : 'Confirm & Execute'}
+                                    <div className="flex justify-end gap-4 mt-10 pt-8 border-t border-pt-border">
+                                        <button onClick={() => setExecProposal(null)} disabled={isExecuting}
+                                            className="px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-pt-text-muted hover:text-pt-text hover:bg-pt-bg transition-all">
+                                            Abort Cycle
+                                        </button>
+                                        <button onClick={handleExecuteAction} disabled={isExecuting}
+                                            className="flex items-center gap-3 px-8 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-pt-intent-primary text-pt-bg transition-all shadow-2xl shadow-pt-intent-primary/20 hover:brightness-110 active:scale-95 disabled:opacity-50">
+                                            {isExecuting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                                            {isExecuting ? 'Committing…' : 'Finalize Override'}
                                         </button>
                                     </div>
                                 </>
@@ -279,7 +327,11 @@ export default function RuntimeAiConsole() {
                     </div>
                 </div>
             )}
-
         </div>
     );
+}
+
+// Simple Loader component for the modal
+function Loader2({ className, size }: { className?: string, size?: number }) {
+    return <RefreshCcw className={className} size={size} />;
 }

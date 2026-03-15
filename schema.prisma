@@ -1,0 +1,1384 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Core Organization ──────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  entityTypes         EntityType[]
+  attributeDefinitions AttributeDefinition[]
+  relationshipDefinitions RelationshipDefinition[]
+  relationshipInstances RelationshipInstance[]
+  entityInstances      EntityInstance[]
+  domainEvents        DomainEvent[]
+  auditLogs           AuditLog[]
+  currentEntityStates CurrentEntityState[]
+  jobQueues           JobQueue[]
+  
+  dataSources         DataSource[]
+  integrationJobs     IntegrationJob[]
+  decisionRules       DecisionRule[]
+  modelDefinitions    ModelDefinition[]
+  dashboards          Dashboard[]
+  pipelines           Pipeline[]
+  apiKeys             ApiKey[]
+  releases            ProjectRelease[]
+  ontologyRules       OntologyRule[]
+  aipAgents           AIPAgent[]
+  aipFunctions        AIPFunction[]
+  aipActions          AIPAction[]
+  aipMetrics          AIPMetric[]
+  workshopApps        WorkshopApp[]
+  automations         AIPAutomate[]
+  aiWorkflows         AIWorkflow[]
+  changeRequests      ChangeRequest[]
+  outboxEvents        OutboxEvent[]
+  rejectedRecords     RejectedRecord[]
+}
+
+model EntityType {
+  id        String   @id @default(uuid())
+  name      String
+  version   Int
+  branchName String  @default("main")
+  createdAt DateTime @default(now())
+
+  attributes            AttributeDefinition[]
+  instances             EntityInstance[]
+  outgoingRelationships RelationshipDefinition[]   @relation("RelationshipSource")
+  incomingRelationships RelationshipDefinition[]   @relation("RelationshipTarget")
+  integrationJobs       IntegrationJob[]
+  computedMetrics       ComputedMetricDefinition[]
+  modelDefinitions      ModelDefinition[]
+  decisionRules         DecisionRule[]
+  currentStates         CurrentEntityState[]
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name, version, branchName])
+  @@index([projectId, branchName])
+}
+
+model AttributeDefinition {
+  id       String  @id @default(uuid())
+  name     String
+  dataType String
+  required Boolean
+  temporal Boolean @default(false)
+  branchName String @default("main")
+
+  entityTypeId String
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model RelationshipDefinition {
+  id        String   @id @default(uuid())
+  name      String
+  branchName String  @default("main")
+  createdAt DateTime @default(now())
+
+  sourceEntityTypeId String
+  targetEntityTypeId String
+
+  sourceEntityType EntityType @relation("RelationshipSource", fields: [sourceEntityTypeId], references: [id], onDelete: Restrict)
+  targetEntityType EntityType @relation("RelationshipTarget", fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  instances RelationshipInstance[]
+
+  @@index([sourceEntityTypeId])
+  @@index([targetEntityTypeId])
+  @@index([branchName])
+  @@index([projectId])
+}
+
+model RelationshipInstance {
+  id                       String @id @default(uuid())
+  relationshipDefinitionId String
+  sourceLogicalId          String
+  targetLogicalId          String
+  properties               Json?
+
+  validFrom       DateTime
+  validTo         DateTime?
+  transactionTime DateTime  @default(now())
+
+  relationshipDef RelationshipDefinition @relation(fields: [relationshipDefinitionId], references: [id])
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([sourceLogicalId, validFrom, validTo])
+  @@index([targetLogicalId, validFrom, validTo])
+  @@index([relationshipDefinitionId, sourceLogicalId, targetLogicalId])
+  @@index([projectId])
+}
+
+model EntityInstance {
+  id            String @id @default(uuid())
+  logicalId     String
+  entityTypeId  String
+  entityVersion Int
+  data          Json
+
+  // Identity & Trust
+  confidenceScore Float  @default(1.0)
+  reviewStatus    String @default("APPROVED") // PENDING, APPROVED, REJECTED, MERGED
+
+  validFrom       DateTime
+  validTo         DateTime?
+  transactionTime DateTime  @default(now())
+
+  entityType        EntityType         @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+  provenanceRecords ProvenanceRecord[]
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([entityTypeId, logicalId])
+  @@index([validFrom, validTo, transactionTime])
+  @@index([projectId])
+}
+
+model EntityAlias {
+  id              String @id @default(uuid())
+  externalId      String // The ID from the source system (e.g. OpenSky callsign)
+  sourceSystem    String // e.g. "OPENSKY", "ADSB_EXCHANGE"
+  targetLogicalId String // The platform's logicalId this maps to
+
+  confidence Float   @default(1.0)
+  isPrimary  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([sourceSystem, externalId])
+  @@index([targetLogicalId])
+}
+
+// ── Entity Resolution: Fuzzy Match Candidates ──────────────────────
+
+model MatchCandidate {
+  id             String   @id @default(uuid())
+  logicalIdA     String   // Candidate entity A (canonical logicalId)
+  logicalIdB     String   // Candidate entity B
+  entityTypeId   String   // Both candidates must be same entity type
+  scoreOverall   Float    // 0.0 – 1.0 composite similarity score
+  scoreBreakdown Json     // { "name": 0.9, "address": 0.7, ... }
+  matchReasons   Json     // ["same_name_fuzzy", "same_lat_lon", ...]
+  status         String   @default("PENDING") // PENDING | MERGED | REJECTED
+  reviewedBy     String?  // apiKeyName of the reviewer
+  reviewedAt     DateTime?
+  mergedIntoId   String?  // logicalId this was merged into (when MERGED)
+  sourceJobId    String?  // which integration job triggered this
+  createdAt      DateTime @default(now())
+
+  @@unique([logicalIdA, logicalIdB, entityTypeId])
+  @@index([entityTypeId, status])
+  @@index([logicalIdA])
+  @@index([logicalIdB])
+}
+
+model MatchResolutionHistory {
+  id               String   @id @default(uuid())
+  matchCandidateId String   @unique
+  logicalIdA       String
+  logicalIdB       String
+  entityTypeId     String
+  
+  // The state of the candidate when the decision was made
+  scoreOverall     Float
+  scoreBreakdown   Json
+  matchReasons     Json
+
+  // The decision made by human/system
+  resolution       String   // MERGED | REJECTED
+  resolvedBy       String
+  resolvedAt       DateTime @default(now())
+
+  @@index([entityTypeId, resolution])
+  @@index([resolvedAt])
+}
+
+// ── Audit Log ─────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actor        String   // apiKeyName or "system"
+  actorRole    String   // role at time of action
+  action       String   // e.g. "CREATE_ENTITY", "MERGE_CANDIDATE", "EXECUTE_DECISION"
+  resourceType String   // e.g. "EntityType", "MatchCandidate", "DecisionLog"
+  resourceId   String?  // id of the affected resource
+  before       Json?    // state before (for mutating operations)
+  after        Json?    // state after
+  metadata     Json?    // request metadata (IP, correlationId, etc)
+  occurredAt   DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  @@index([actor, occurredAt(sort: Desc)])
+  @@index([resourceType, resourceId, occurredAt(sort: Desc)])
+  @@index([action, occurredAt(sort: Desc)])
+  @@index([projectId])
+}
+
+model ProvenanceRecord {
+  id               String   @id @default(uuid())
+  entityInstanceId String
+  attributeName    String? // Null means the entire record, otherwise specific field
+  sourceSystem     String
+  sourceRecordId   String // The ID in the external system for this specific data point
+  sourceTimestamp  DateTime
+  ingestedAt       DateTime @default(now())
+
+  entityInstance EntityInstance @relation(fields: [entityInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([entityInstanceId, attributeName])
+}
+
+// ── Epic 2: Data Lineage & Contracts ──────────────────────────────
+model LineageEdge {
+  id               String   @id @default(uuid())
+  sourceType       String   // e.g. "IntegrationJob", "PipelineNode", "ModelDefinition"
+  sourceId         String   // ID of the upstream source
+  targetType       String   // e.g. "EntityType", "Field", "ConsumerApp"
+  targetId         String   // ID of the downstream consumer/field
+  transformation   String?  // Description of what changed the data (e.g. "mapped via fieldMapping")
+  
+  createdAt        DateTime @default(now())
+
+  @@unique([sourceType, sourceId, targetType, targetId])
+  @@index([sourceType, sourceId])
+  @@index([targetType, targetId])
+}
+
+model DomainEvent {
+  id             String   @id @default(uuid())
+  idempotencyKey String?  @unique
+  eventType      String
+  entityTypeId   String
+  logicalId      String
+  entityVersion  Int
+  payload        Json
+  occurredAt     DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  outboxEvents   OutboxEvent[]
+
+  @@index([entityTypeId, logicalId])
+  @@index([eventType])
+  @@index([occurredAt])
+  @@index([projectId])
+}
+
+// Outbox pattern for reliable write-back to external systems
+model OutboxEvent {
+  id            String   @id @default(uuid())
+  projectId     String
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  targetSystem  String
+  payload       Json
+  status        String   @default("PENDING") // PENDING, SENT, FAILED, DEAD_LETTER
+  retryCount    Int      @default(0)
+  lastError     String?
+  domainEventId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  domainEvent DomainEvent? @relation(fields: [domainEventId], references: [id])
+
+  @@index([projectId, status, createdAt(sort: Desc)])
+}
+
+model PolicyDefinition {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  entityTypeId String
+  eventType    String   @default("EntityStateChanged")
+  condition    Json // { "field": "temperature", "operator": ">", "value": 100 }
+  actionType   String   @default("EmitAlert")
+  actionConfig Json? // { "alertType": "HighTemperatureAlert", "severity": "critical" }
+  version      Int      @default(1)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([entityTypeId, eventType])
+}
+
+// ── Epic 4: Governance & Compliance ───────────────────────────────
+
+model AbacPolicy {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  action       String   // e.g. "READ", "WRITE", "DELETE", "*"
+  resourceType String   // e.g. "EntityType", "MatchCandidate", "*"
+  effect       String   @default("ALLOW") // "ALLOW" or "DENY"
+  condition    Json?    // ABAC rule definition (e.g. { "req.user.clearance": ">=", "resource.classification" })
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([action, resourceType])
+}
+
+model ChangeRequest {
+  id              String   @id @default(uuid())
+  resourceType    String   // "EntityType", "Pipeline", "DecisionRule", etc.
+  resourceId      String?  // Can be null if it's a creation request
+  proposedChanges Json     // The desired delta
+  diff            Json?    // Visualizable diff of changes
+  branchName      String   @default("main")
+  status          String   @default("DRAFT") // DRAFT, IN_REVIEW, APPROVED, REJECTED
+  createdBy       String   // apiKeyName
+  reviewedBy      String?  // apiKeyName
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+
+  projectId       String
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@index([resourceType, resourceId])
+  @@index([branchName])
+}
+
+model Alert {
+  id              String   @id @default(uuid())
+  alertType       String
+  severity        String   @default("warning")
+  policyId        String
+  policyVersion   Int?
+  eventId         String?
+  entityTypeId    String
+  logicalId       String
+  payload         Json
+  evaluationTrace Json?
+  acknowledged    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([eventId, policyId])
+  @@index([entityTypeId, logicalId])
+  @@index([alertType])
+  @@index([createdAt])
+}
+
+// ── CQRS Read Models (Projections) ───────────────────────────────
+
+model CurrentEntityState {
+  logicalId    String   @id
+  entityTypeId String
+  data         Json
+  legalHold    Boolean  @default(false)
+  updatedAt    DateTime
+
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Cascade)
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([entityTypeId])
+  @@index([projectId])
+}
+
+model CurrentGraph {
+  id                       String @id @default(uuid())
+  relationshipDefinitionId String
+  relationshipName         String
+  sourceLogicalId          String
+  targetLogicalId          String
+  properties               Json?
+
+  // Probabilistic Relationship Decay
+  confidence               Float    @default(1.0) // Current computed or asserted confidence (0.0-1.0)
+  baseConfidence           Float    @default(1.0) // Initial confidence at inference time
+  decayRate                Float    @default(0.0) // e.g. 0.05 (5%) decay per day. 0 = no decay
+  lastObservedAt           DateTime @default(now())
+
+  @@unique([relationshipDefinitionId, sourceLogicalId, targetLogicalId])
+  @@index([sourceLogicalId])
+  @@index([targetLogicalId])
+}
+
+// ── Time-Series & Telemetry ────────────────────────────────────────
+
+model TimeseriesMetric {
+  id        String   @id @default(uuid())
+  logicalId String // The entity this metric belongs to
+  metric    String // e.g., "temperature", "pressure"
+  value     Float
+  timestamp DateTime @default(now())
+
+  // Optimize for: "Get all 'temperature' readings for 'asset-001' over time X to Y"
+  @@index([logicalId, metric, timestamp(sort: Desc)])
+}
+
+// ── Data Integration Layer ─────────────────────────────────────────
+
+model DataSource {
+  id               String   @id @default(uuid())
+  name             String   @unique
+  type             String // REST_API, JSON_UPLOAD, CSV_UPLOAD
+  connectionConfig Json // { url, headers, auth, ... }
+  schemaDefinition Json? // Optional expected schema/constraints for validation
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  integrationJobs IntegrationJob[]
+  rejectedRecords RejectedRecord[]
+
+  @@index([projectId])
+}
+
+// Records that failed validation at ingestion time and were quarantined
+model RejectedRecord {
+  id           String   @id @default(uuid())
+  projectId    String
+  dataSourceId String?
+  jobId        String?  // IntegrationJob id or external job identifier
+  rawRecord    Json
+  errors       Json     // Validation errors / schema drift details
+  createdAt    DateTime @default(now())
+
+  project Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dataSource DataSource? @relation(fields: [dataSourceId], references: [id])
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([dataSourceId, createdAt(sort: Desc)])
+}
+
+model Pipeline {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  nodes       Json // ReactFlow nodes
+  edges       Json // ReactFlow edges
+  enabled     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs      PipelineRun[]
+
+  @@index([projectId])
+}
+
+model PipelineRun {
+  id          String   @id @default(uuid())
+  pipelineId  String
+  projectId   String
+  status      String   @default("running") // running | success | failed | cancelled
+  trigger     String   @default("manual")  // manual | schedule | event
+
+  // Step-level progress (stored as JSON array)
+  steps       Json     @default("[]")
+  // e.g. [{ stepId, name, status, recordsIn, recordsOut, error, durationMs }]
+
+  recordsIn   Int      @default(0)
+  recordsOut  Int      @default(0)
+  errorCount  Int      @default(0)
+
+  logs        Json     @default("[]")   // string[] of log lines
+  summary     Json?                     // final output summary
+
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  duration    Int?     // ms
+
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineId, startedAt(sort: Desc)])
+  @@index([projectId, status])
+}
+
+
+model IntegrationJob {
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  dataSourceId       String
+  targetEntityTypeId String
+  fieldMapping       Json // { "external_field": "ontology_attribute", ... }
+  logicalIdField     String // Which external field becomes logicalId
+  schedule           String? // Cron expression for polling (null = manual only)
+  retryPolicy        Json? // { maxAttempts: 5, backoffMultiplier: 2 }
+  dataContract       Json? // JSON Schema for validating incoming records
+  enabled            Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  dataSource       DataSource     @relation(fields: [dataSourceId], references: [id], onDelete: Restrict)
+  targetEntityType EntityType     @relation(fields: [targetEntityTypeId], references: [id], onDelete: Restrict)
+  executions       JobQueue[]
+
+  @@index([projectId])
+  @@index([dataSourceId])
+  @@index([targetEntityTypeId])
+}
+
+// ── Epic 1: Orchestration & Reliability Queue ─────────────────────
+
+model JobWorker {
+  id             String   @id @default(uuid())
+  hostname       String
+  pid            Int
+  status         String   @default("ACTIVE") // ACTIVE, DRAINING, OFFLINE
+  lastHeartbeat  DateTime @default(now())
+  startedAt      DateTime @default(now())
+
+  @@index([status, lastHeartbeat(sort: Desc)])
+}
+
+model JobQueue {
+  id               String    @id @default(uuid())
+  jobType          String    // e.g., "INTEGRATION_SYNC", "SCHEMA_INFERENCE", "BACKFILL"
+  status           String    @default("QUEUED") // QUEUED, RUNNING, COMPLETED, FAILED, DEAD_LETTER
+  priority         Int       @default(0) // Higher number = higher priority
+  
+  // Payload & Idempotency
+  payload          Json      // The actual instructions/data for the job
+  idempotencyKey   String?   @unique
+  
+  // Execution tracking
+  startedAt        DateTime?
+  completedAt      DateTime?
+  lockedAt         DateTime?
+  lockedByWorkerId String?   // References JobWorker.id
+  
+  // Retry & DLQ Semantics
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(3)
+  nextAttemptAt    DateTime? 
+  lastError        String?
+  
+  // Metrics (mapped from old JobExecution)
+  recordsProcessed Int       @default(0)
+  recordsFailed    Int       @default(0)
+  recordsDropped   Int       @default(0)
+  
+  // Optional References to parent definitions
+  integrationJobId String?
+  integrationJob   IntegrationJob? @relation(fields: [integrationJobId], references: [id], onDelete: Cascade)
+  
+  // Parent/Child DAG dependencies
+  parentJobId      String?
+  parentJob        JobQueue?  @relation("JobDependencies", fields: [parentJobId], references: [id])
+  childJobs        JobQueue[] @relation("JobDependencies")
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([jobType, status])
+  @@index([integrationJobId, startedAt(sort: Desc)])
+  @@index([projectId])
+}
+
+// ── Computed Metrics & Transforms ──────────────────────────────────
+
+model ComputedMetricDefinition {
+  id           String   @id @default(uuid())
+  name         String
+  entityTypeId String
+  expression   String // e.g., "output / input * 100"
+  unit         String? // e.g., "%", "kW"
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  entityType EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([entityTypeId, name])
+  @@index([entityTypeId])
+}
+
+model TelemetryRollup {
+  id          String   @id @default(uuid())
+  logicalId   String
+  metric      String
+  windowSize  String // "5m", "1h", "1d"
+  windowStart DateTime
+  avg         Float
+  min         Float
+  max         Float
+  sum         Float
+  count       Int
+
+  @@unique([logicalId, metric, windowSize, windowStart])
+  @@index([logicalId, metric, windowSize, windowStart(sort: Desc)])
+}
+
+// ── ML Model Registry & Inference ─────────────────────────────────
+
+model ModelDefinition {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  entityTypeId String
+  description  String?
+  inputFields  Json // ["temperature", "pressure", "vibration"]
+  outputField  String // e.g., "anomalyScore"
+  createdAt    DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  entityType EntityType     @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+  versions   ModelVersion[]
+
+  @@index([projectId])
+  @@index([entityTypeId])
+}
+
+model ModelVersion {
+  id                String   @id @default(uuid())
+  modelDefinitionId String
+  version           Int
+  status            String   @default("DRAFT") // DRAFT, STAGING, PRODUCTION, RETIRED, SHADOW
+  strategy          String // THRESHOLD, ANOMALY_ZSCORE, LINEAR_REGRESSION, CUSTOM
+  hyperparameters   Json // Strategy-specific config
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  modelDefinition  ModelDefinition   @relation(fields: [modelDefinitionId], references: [id], onDelete: Cascade)
+  inferenceResults InferenceResult[]
+  driftMetrics     ModelDriftMetric[]
+  latencyMetrics   ModelLatencyMetric[]
+
+  @@unique([modelDefinitionId, version])
+  @@index([modelDefinitionId, status])
+}
+
+model ModelDriftMetric {
+  id             String   @id @default(uuid())
+  modelVersionId String
+  featureName    String   // which input feature drifted
+  metricType     String   // JENSEN_SHANNON, KS_STATISTIC, WASSERSTEIN
+  value          Float    // the calculated drift score
+  referenceStart DateTime // the time window of the baseline data
+  referenceEnd   DateTime
+  currentStart   DateTime // the time window of the evaluated data
+  currentEnd     DateTime
+  createdAt      DateTime @default(now())
+
+  modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Cascade)
+
+  @@index([modelVersionId, featureName, createdAt(sort: Desc)])
+}
+
+model ModelLatencyMetric {
+  id             String   @id @default(uuid())
+  modelVersionId String
+  windowStart    DateTime // the start of the bucket (e.g., 5 min window)
+  windowSize     String   // "5m", "1h"
+  p50            Float    // median latency in ms
+  p90            Float
+  p95            Float
+  p99            Float
+  avg            Float
+  requestCount   Int
+  errorCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Cascade)
+
+  @@index([modelVersionId, windowStart(sort: Desc)])
+}
+
+model InferenceResult {
+  id             String   @id @default(uuid())
+  modelVersionId String
+  logicalId      String
+  input          Json
+  output         Json
+  confidence     Float?
+  createdAt      DateTime @default(now())
+
+  modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Cascade)
+
+  @@index([modelVersionId, createdAt(sort: Desc)])
+  @@index([logicalId, createdAt(sort: Desc)])
+}
+
+// ── Decision & Execution Engine ───────────────────────────────
+
+model DecisionRule {
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  entityTypeId        String
+  conditions          Json // [{ field, operator, value }]
+  logicOperator       String   @default("AND") // AND | OR
+  priority            Int      @default(100) // lower = higher priority
+  autoExecute         Boolean  @default(false) // true = skip approval
+  confidenceThreshold Float? // only fire if inference confidence >= this
+  enabled             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  entityType     EntityType      @relation(fields: [entityTypeId], references: [id], onDelete: Restrict)
+  executionPlans ExecutionPlan[]
+  decisionLogs   DecisionLog[]
+
+  @@index([projectId])
+  @@index([entityTypeId, enabled])
+}
+
+model ActionDefinition {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  type      String // WEBHOOK, UPDATE_ENTITY, CREATE_ALERT, RUN_INFERENCE, LOG_ONLY
+  config    Json // type-specific: { url, headers, fields, severity, ... }
+  createdAt DateTime @default(now())
+
+  executionPlans ExecutionPlan[]
+  executionSteps ExecutionStep[]
+}
+
+model ExecutionPlan {
+  id                 String  @id @default(uuid())
+  decisionRuleId     String
+  actionDefinitionId String
+  stepOrder          Int
+  continueOnFailure  Boolean @default(false)
+
+  decisionRule     DecisionRule     @relation(fields: [decisionRuleId], references: [id], onDelete: Cascade)
+  actionDefinition ActionDefinition @relation(fields: [actionDefinitionId], references: [id], onDelete: Cascade)
+
+  @@unique([decisionRuleId, stepOrder])
+  @@index([decisionRuleId, stepOrder])
+}
+
+model DecisionLog {
+  id               String   @id @default(uuid())
+  decisionRuleId   String
+  logicalId        String
+  triggerType      String // INFERENCE, STATE_CHANGE, MANUAL, SIMULATION
+  triggerData      Json // snapshot of input data
+  conditionResults Json // per-condition evaluation details
+  decision         String // EXECUTE, PENDING_APPROVAL, SKIPPED, SIMULATED
+  status           String   @default("PENDING") // COMPLETED, FAILED, PENDING, SIMULATED
+  createdAt        DateTime @default(now())
+
+  decisionRule   DecisionRule    @relation(fields: [decisionRuleId], references: [id], onDelete: Cascade)
+  executionTrace ExecutionTrace? // Optional because log might be SKIPPED or PENDING_APPROVAL
+
+  @@index([decisionRuleId, createdAt(sort: Desc)])
+  @@index([logicalId, createdAt(sort: Desc)])
+}
+
+model ExecutionTrace {
+  id            String   @id @default(uuid())
+  decisionLogId String   @unique // 1:1 with DecisionLog
+  status        String   @default("RUNNING") // RUNNING, COMPLETED, PARTIAL_FAILURE, FAILED
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  error         String?  // overall error if dag failed
+  
+  decisionLog   DecisionLog     @relation(fields: [decisionLogId], references: [id], onDelete: Cascade)
+  steps         ExecutionStep[]
+
+  @@index([status, startedAt(sort: Desc)])
+}
+
+model ExecutionStep {
+  id                 String   @id @default(uuid())
+  executionTraceId   String
+  actionDefinitionId String
+  stepOrder          Int
+  status             String   @default("PENDING") // PENDING, RUNNING, SUCCESS, FAILED, RETRYING, SKIPPED
+  attempts           Int      @default(0)
+  inputPayload       Json?    // exact payload sent to the action
+  outputPayload      Json?    // exact response received from the action
+  errorMessage       String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+
+  executionTrace   ExecutionTrace   @relation(fields: [executionTraceId], references: [id], onDelete: Cascade)
+  actionDefinition ActionDefinition @relation(fields: [actionDefinitionId], references: [id], onDelete: Restrict)
+
+  @@unique([executionTraceId, stepOrder])
+  @@index([executionTraceId, status])
+}
+
+// ── Enterprise: Authentication ───────────────────────────────────
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  name       String
+  keyHash    String    @unique // SHA-256 hash
+  role       String    @default("VIEWER") // ADMIN, OPERATOR, VIEWER
+  rateLimit  Int       @default(100) // requests per minute
+  enabled    Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  
+  projectId  String?   // For tenant isolation
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId])
+}
+
+// ── UI Dashboard Builder ─────────────────────────────────────────
+
+model Dashboard {
+  id        String   @id @default(uuid())
+  projectId String?
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  widgets DashboardWidget[]
+
+  @@index([projectId])
+}
+
+model DashboardWidget {
+  id          String @id @default(uuid())
+  dashboardId String
+  type        String // e.g., "TELEMETRY", "MAP", "ONTOLOGY_GRAPH", "DATA_INTEGRATION"
+  configData  Json // Widget specific config (e.g. which entity or metric to show)
+
+  // React-Grid-Layout properties
+  x Int // Grid X position
+  y Int // Grid Y position
+  w Int // Grid width
+  h Int // Grid height
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEW: PHASE 6 - RUNTIME & RELEASE ENGINE
+// ═══════════════════════════════════════════════════════════
+
+model ProjectRelease {
+    id          String   @id @default(uuid())
+    projectId   String
+    environment String   // "STAGING" | "PRODUCTION"
+    version     String   // e.g. "v1.0.0"
+    
+    // The atomic frozen state of all pipelines, datasets, apps, and logic rules
+    payload     Json
+
+    createdBy   String
+    createdAt   DateTime @default(now())
+
+    project Project?  @relation(fields: [projectId], references: [id])
+}
+
+// ── Ontology Semantic Reasoner Rules ──────────────────────────────
+
+model OntologyRule {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+
+  // Antecedent: ordered chain of relationship hops to follow in CurrentGraph
+  // e.g. [{"relDefId": "rel-a", "direction": "outgoing"}, {"relDefId": "rel-b", "direction": "outgoing"}]
+  antecedent  Json
+
+  // Consequent: the relationship to derive when the antecedent chain is satisfied
+  // e.g. {"relDefId": "rel-c", "confidence": 0.9, "decayRate": 0.0}
+  consequent  Json
+
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId, enabled])
+}
+
+// ── AIP Agent Studio ──────────────────────────────────────────────
+
+model AIPAgent {
+  id              String   @id @default(uuid())
+  projectId       String
+  name            String
+  description     String?
+  systemPrompt    String
+  modelConfig     Json     // { provider: "openai", model: "gpt-4" }
+  ontologyAccess  Json     // Array of EntityType IDs the agent can query
+  tools           Json?    // Optional Array of AIPFunction string IDs the agent can execute
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@index([projectId])
+}
+
+// Model for user-defined Typescript functions (Tools) that AIP Agents can execute
+model AIPFunction {
+  id          String   @id @default(uuid())
+  projectId   String
+  name        String   // e.g "promote_soldier"
+  description String   // Given to the LLM to understand what this tool does
+  parameters  Json     // JSON Schema defining the expected arguments for this tool
+  code        String   // The actual Javascript/Typescript code the worker executes securely
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ── Phase 8: AIP Actions (Foundry-style write-back Operations) ─────────────
+
+// An AIPAction is a typed, form-driven write-back operation that modifies the Ontology.
+// Analogous to Palantir Foundry "Action Types" in the ActionCenter.
+model AIPAction {
+  id          String   @id @default(uuid())
+  projectId   String
+
+  name        String                 // e.g. "EscalateMission"
+  description String
+  category    String                 // create | edit | delete | link | function-backed
+  objectType  String                 // Target Ontology entity type name
+
+  // JSON arrays stored as Json
+  params      Json                   // ActionParam[] - defines the input schema
+  rbac        Json                   // RbacEntry[] - role-based access control
+  approvalRules Json                 // ApprovalRule[] - approval workflow config
+  writesTo    Json                   // string[] - which properties/types are mutated
+
+  riskTier    String   @default("low") // low | medium | high | critical
+  status      String   @default("draft") // active | draft | deprecated
+
+  usages      Int      @default(0)
+  lastUsedAt  DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executions  AIPActionExecution[]
+
+  @@index([projectId])
+  @@index([objectType])
+}
+
+// Audit log - every time an Action is applied against a specific entity instance
+model AIPActionExecution {
+  id           String   @id @default(uuid())
+  actionId     String
+  logicalId    String   // the entity instance this action was applied to
+  objectType   String
+  parameters   Json     // the actual param values at the time of execution
+  status       String   @default("PENDING") // PENDING | APPROVED | REJECTED | APPLIED | FAILED
+  submittedBy  String   @default("system")
+  approvedBy   String?
+  appliedAt    DateTime?
+  result       Json?    // the outcome / changes made
+  error        String?
+  createdAt    DateTime @default(now())
+
+  action       AIPAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([actionId, createdAt(sort: Desc)])
+  @@index([logicalId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+// ── Phase 9: AIP Metrics (Live Ontology Aggregations) ─────────────────────────
+
+model AIPMetric {
+  id           String   @id @default(uuid())
+  projectId    String
+
+  name         String                 // e.g. "Drone Battery Level"
+  objectType   String                 // Ontology entity type to aggregate over
+  property     String                 // Which property field to aggregate
+  unit         String   @default("")  // e.g. "%" or "hr"
+  aggr         String   @default("AVG") // AVG | SUM | COUNT | MIN | MAX | P95 | P99
+  window       String   @default("Last 1 hr") // e.g. "Last 1 hr"
+  threshold    Float    @default(0)
+  thresholdOp  String   @default(">") // > | < | >= | <=
+  alertOutputType String @default("streaming") // streaming | batch
+  status       String   @default("draft") // active | draft | warning | inactive
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([objectType])
+}
+
+// ── Phase 10: Workshop Apps (Persistent Application Builder) ──────────────────
+
+// Stores the full Workshop app definition as a nested JSON document.
+// The pages, sections, and widgets hierarchy is persisted in the `pages` Json field,
+// matching the WorkshopApp interface in the frontend directly.
+model WorkshopApp {
+  id          String   @id @default(uuid())
+  projectId   String
+
+  name        String
+  description String   @default("")
+  status      String   @default("draft") // draft | staging | published
+
+  // Full pages → sections → widgets tree stored as JSON
+  pages       Json     @default("[]")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}
+
+// ── Phase 11: AIP Automate — Event & Schedule-Triggered Function Execution ────
+
+model AIPAutomate {
+  id          String   @id @default(uuid())
+  projectId   String
+
+  name        String
+  description String   @default("")
+  status      String   @default("inactive") // active | inactive | paused
+
+  // Trigger configuration
+  triggerType String   @default("schedule") // schedule | event | webhook | manual
+  cronExpr    String?  // cron expression e.g. "0 */5 * * * *" (every 5 min)
+  eventType   String?  // e.g. "entity.created", "entity.updated", "action.executed"
+  eventFilter Json?    // e.g. { objectType: "Drone", property: "batteryLevel", op: "<", value: 20 }
+  webhookPath String?  // unique path for inbound webhook trigger
+
+  // What to execute
+  functionId  String?  // bound AIPFunction id
+  actionId    String?  // or bound AIPAction id
+  inputParams Json?    // default input parameters
+
+  // Run statistics
+  totalRuns   Int      @default(0)
+  successRuns Int      @default(0)
+  failedRuns  Int      @default(0)
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project?              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs        AIPAutomateRun[]
+
+  @@index([projectId])
+  @@index([triggerType, status])
+  @@index([eventType])
+}
+
+model AIPAutomateRun {
+  id           String   @id @default(uuid())
+  automationId String
+  projectId    String
+
+  status       String   @default("running") // running | success | failed | timeout
+  trigger      String   @default("schedule") // schedule | event | webhook | manual
+
+  inputData    Json?    // what was passed in
+  outputData   Json?    // what the function returned
+  errorMessage String?
+
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+  duration     Int?     // ms
+
+  automation   AIPAutomate @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId, startedAt(sort: Desc)])
+  @@index([projectId, status])
+}
+
+// ── Phase 14: AIP Logic Visual Workflow Builder ───────────────────
+
+model AIWorkflow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  nodes       Json     @default("[]")
+  edges       Json     @default("[]")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projectId   String
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runs        AIWorkflowRun[]
+
+  @@index([projectId])
+}
+
+model AIWorkflowRun {
+  id         String   @id @default(uuid())
+  workflowId String
+  projectId  String
+  status     String   @default("running")  // running | success | failed | cancelled
+  trigger    String   @default("manual")   // manual | schedule | event
+
+  inputs     Json?                          // user-supplied inputs
+  steps      Json     @default("[]")        // [{stepId, name, type, status, input, output, error, durationMs}]
+  logs       Json     @default("[]")
+  summary    Json?                          // final output
+
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  duration   Int?
+
+  workflow   AIWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, startedAt(sort: Desc)])
+  @@index([projectId, status])
+}
+
+// ─── Phase 18: AIP Evals ─────────────────────────────────────────────────────
+
+model AIPEval {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  workflowId  String?                        // optional: link to an AIWorkflow to test
+  testCases   Json                           // Array of { input: any, expectedOutput: string, description: string }
+  projectId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  runs        AIPEvalRun[]
+}
+
+model AIPEvalRun {
+  id        String   @id @default(uuid())
+  evalId    String
+  status    String   @default("pending")    // pending | running | complete | failed
+  results   Json?                           // Array of { caseIndex, input, actualOutput, expectedOutput, score: 0-1, judgeReason, passed }
+  summary   Json?                           // { total, passed, failed, avgScore, duration }
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  duration  Int?
+
+  eval      AIPEval  @relation(fields: [evalId], references: [id], onDelete: Cascade)
+
+  @@index([evalId, startedAt(sort: Desc)])
+}
+
+// ─── Phase 21: Function Version History ──────────────────────────────────────
+
+
+
+model FunctionVersion {
+  id         String   @id @default(uuid())
+  functionId String
+  version    Int
+  code       String   @db.Text
+  language   String   @default("javascript")
+  savedAt    DateTime @default(now())
+  savedBy    String?
+
+  @@index([functionId, version(sort: Desc)])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 22: APOLLO INFRASTRUCTURE
+// ═══════════════════════════════════════════════════════════════
+
+// Represents a deployment target environment (dev, staging, prod, classified)
+model ApolloEnvironment {
+  id          String   @id @default(uuid())
+  name        String   // "dev" | "staging" | "production" | "classified-scif"
+  tier        String   @default("cloud") // "cloud" | "on-prem" | "air-gap" | "classified"
+  region      String?  // e.g. "us-east-1", "dc-vault-7"
+  description String?
+  agentUrl    String?  // URL of the Apollo agent running on this environment
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  deployments  ApolloDeployment[]
+  healthChecks ApolloHealthCheck[]
+
+  @@index([tier, active])
+}
+
+// A deployment event: pushing a release snapshot to an environment
+model ApolloDeployment {
+  id             String   @id @default(uuid())
+  environmentId  String
+  releaseVersion String   // e.g. "v2.4.1"
+  payload        Json     // frozen snapshot of pipelines/agents/functions/actions
+  strategy       String   @default("rolling") // "rolling" | "canary" | "blue-green" | "immediate"
+  canaryPercent  Int      @default(100)  // % of nodes receiving this release
+  status         String   @default("pending") // "pending" | "deploying" | "healthy" | "degraded" | "rolled-back"
+  deployedBy     String   @default("system")
+  startedAt      DateTime @default(now())
+  completedAt    DateTime?
+  rollbackFrom   String?  // previous deploymentId if this is a rollback
+  notes          String?
+
+  environment ApolloEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([environmentId, startedAt(sort: Desc)])
+  @@index([status])
+}
+
+// Heartbeat results from agents running in each environment
+model ApolloHealthCheck {
+  id            String   @id @default(uuid())
+  environmentId String
+  service       String   // e.g. "api-server" | "pipeline-worker" | "ws-broker"
+  status        String   // "ok" | "degraded" | "down"
+  latencyMs     Int?
+  cpuPercent    Float?
+  memPercent    Float?
+  errorMessage  String?
+  checkedAt     DateTime @default(now())
+
+  environment ApolloEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+
+  @@index([environmentId, service, checkedAt(sort: Desc)])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 22: SPARK PROCESSING ENGINE
+// ═══════════════════════════════════════════════════════════════
+
+// A reusable Spark-style job definition (DAG of transform stages)
+model SparkJob {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  projectId   String?
+  stages      Json     // Array of SparkStageConfig: { id, type, config, dependsOn[] }
+  schedule    String?  // optional cron for scheduled execution
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  runs SparkJobRun[]
+
+  @@index([projectId, enabled])
+}
+
+// One execution of a SparkJob
+model SparkJobRun {
+  id        String   @id @default(uuid())
+  jobId     String
+  status    String   @default("queued") // "queued" | "running" | "success" | "failed" | "cancelled"
+  trigger   String   @default("manual") // "manual" | "schedule" | "event"
+  inputData Json?
+  summary   Json?    // { totalRecords, processedRecords, droppedRecords, durationMs }
+  error     String?
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  job    SparkJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stages SparkJobStage[]
+
+  @@index([jobId, startedAt(sort: Desc)])
+  @@index([status])
+}
+
+// Per-stage execution record within a run
+model SparkJobStage {
+  id            String   @id @default(uuid())
+  runId         String
+  stageId       String   // matches stages[].id in SparkJob.stages
+  stageType     String   // "source" | "filter" | "project" | "join" | "aggregate" | "sort" | "output"
+  status        String   @default("pending") // "pending" | "running" | "success" | "failed" | "skipped"
+  recordsIn     Int?
+  recordsOut    Int?
+  partitions    Int      @default(1)
+  durationMs    Int?
+  errorMessage  String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+
+  run SparkJobRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, stageId])
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 22: MILITARY-GRADE CRYPTOGRAPHIC PROVENANCE
+// ═══════════════════════════════════════════════════════════════
+
+// Field-level provenance entry: SHA-256 hash of each field value at write time
+model CryptoProvenanceChain {
+  id              String   @id @default(uuid())
+  entityId        String   // logical entity ID (e.g. "drone-001")
+  entityType      String
+  field           String   // field name (e.g. "status", "latitude")
+  valueHash       String   // SHA-256(fieldValue)
+  rawValue        String?  // optional: store original value for audit
+  sourceSystem    String   // data source (e.g. "kafka-ingest", "manual-api", "pipeline-42")
+  sourceRecordId  String?
+  operationType   String   @default("write") // "write" | "update" | "delete" | "transform"
+  operatorId      String?  // user/service that performed the operation
+  previousHash    String?  // SHA-256 of the previous value (creates a hash chain)
+  recordedAt      DateTime @default(now())
+
+  @@index([entityId, field, recordedAt(sort: Desc)])
+  @@index([entityType, recordedAt(sort: Desc)])
+}
+
+// HMAC-SHA256 integrity seal for a complete entity's field hashes at a point in time
+model CryptoProvenanceSeal {
+  id            String   @id @default(uuid())
+  entityId      String
+  entityType    String
+  sealHmac      String   // HMAC-SHA256(sorted field hashes; server secret key)
+  fieldCount    Int
+  fieldHashes   Json     // { [fieldName]: SHA-256(value) } — snapshot at seal time
+  sealedAt      DateTime @default(now())
+  sealedBy      String?
+  verified      Boolean  @default(false) // flipped to true by last verify call
+  lastVerifiedAt DateTime?
+  tamperedFields Json?   // null if valid, array of field names if tampered
+
+  @@index([entityId, sealedAt(sort: Desc)])
+  @@unique([entityId, sealedAt])
+}

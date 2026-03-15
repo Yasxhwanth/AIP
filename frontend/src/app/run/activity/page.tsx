@@ -1,65 +1,106 @@
 "use client";
 
 import { useRuntimeStore } from "@/store/runtimeStore";
-import { History, Clock, FileJson } from "lucide-react";
+import { History, Clock, FileJson, Cpu, ShieldAlert, Zap, User, ArrowRight } from "lucide-react";
 
 export default function ActivityLogPage() {
     const { activity } = useRuntimeStore();
 
     return (
-        <div className="flex-1 flex flex-col min-w-0 bg-[#060A12] text-slate-300 font-sans p-8">
-            <div className="max-w-4xl mx-auto w-full space-y-6">
+        <div className="flex-1 flex flex-col min-w-0 bg-pt-bg text-pt-text font-mono p-8 overflow-y-auto custom-scrollbar">
+            <div className="max-w-4xl mx-auto w-full space-y-10">
 
-                <div className="flex justify-between items-end mb-8">
+                {/* Tactical Header */}
+                <div className="flex justify-between items-end border-b border-pt-border pb-8">
                     <div>
-                        <div className="flex items-center gap-2 text-blue-400 mb-2">
-                            <History className="w-5 h-5" />
-                            <span className="text-[10px] uppercase font-black tracking-[0.2em]">Immutable Ledger</span>
+                        <div className="flex items-center gap-3 text-pt-intent-primary mb-3">
+                            <History className="w-5 h-5 animate-pulse" />
+                            <span className="text-[10px] uppercase font-black tracking-[0.4em]">Audit Persistence Layer</span>
                         </div>
-                        <h1 className="text-3xl font-black text-white">Global Activity Log</h1>
-                        <p className="text-sm text-slate-500 mt-1">Immutable tracking of all ontology alterations, telemetry updates, and AI actions.</p>
+                        <h1 className="text-4xl font-black text-pt-text uppercase tracking-tighter">Global Activity Log</h1>
+                        <p className="text-[11px] text-pt-text-muted font-bold tracking-[0.2em] mt-2 opacity-60 uppercase">
+                            Immutable ledger documenting all operational vector shifts.
+                        </p>
                     </div>
                 </div>
 
-                <div className="bg-[#0B1220] border border-white/5 rounded-2xl p-6 shadow-xl space-y-8">
-                    {activity.map((act, idx) => (
-                        <div key={act.id} className="relative pl-8">
-                            {idx !== activity.length - 1 && (
-                                <div className="absolute left-[15px] top-6 bottom-[-32px] w-px bg-white/10" />
-                            )}
-                            <div className={`absolute left-0 top-1 w-8 h-8 rounded-full flex items-center justify-center border-2 border-[#0B1220] ${act.type === 'ai_triggered' ? 'bg-blue-500' :
-                                    act.type === 'action_executed' ? 'bg-emerald-500' :
-                                        act.type === 'case_created' ? 'bg-amber-500' :
-                                            'bg-slate-600'
-                                }`}>
-                                <div className="w-2.5 h-2.5 bg-[#0B1220] rounded-full" />
-                            </div>
+                {/* Timeline Matrix */}
+                <div className="bg-pt-bg-panel border border-pt-border rounded-xl p-8 shadow-2xl relative">
+                    <div className="space-y-12">
+                        {activity.map((act, idx) => {
+                            const typeCfg =
+                                act.type === 'ai_triggered' ? { color: 'text-pt-intent-primary', bg: 'bg-pt-intent-primary', icon: Zap } :
+                                    act.type === 'action_executed' ? { color: 'text-pt-intent-success', bg: 'bg-pt-intent-success', icon: Activity } :
+                                        act.type === 'case_created' ? { color: 'text-pt-intent-danger', bg: 'bg-pt-intent-danger', icon: ShieldAlert } :
+                                            { color: 'text-pt-text-muted', bg: 'bg-pt-border', icon: History };
 
-                            <div className="flex justify-between items-start mb-1">
-                                <div className="text-sm font-bold text-slate-200">{act.title}</div>
-                                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
-                                    <Clock className="w-3 h-3" /> {new Date(act.timestamp).toLocaleString()}
+                            const Icon = typeCfg.icon;
+
+                            return (
+                                <div key={act.id} className="relative pl-12 group">
+                                    {/* Connection Line */}
+                                    {idx !== activity.length - 1 && (
+                                        <div className="absolute left-[15px] top-8 bottom-[-48px] w-0.5 bg-pt-border/30 group-hover:bg-pt-intent-primary/20 transition-colors" />
+                                    )}
+
+                                    {/* Timeline Marker */}
+                                    <div className={`absolute left-0 top-1 w-8 h-8 rounded-lg flex items-center justify-center border border-pt-border bg-pt-bg-panel shadow-lg group-hover:border-pt-intent-primary group-hover:shadow-[0_0_10px_rgba(var(--pt-intent-primary),0.2)] transition-all z-10`}>
+                                        <Icon className={`w-3.5 h-3.5 ${typeCfg.color}`} />
+                                    </div>
+
+                                    {/* Content Header */}
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex flex-col">
+                                            <div className="text-[13px] font-black text-pt-text uppercase tracking-tight leading-none group-hover:text-pt-intent-primary transition-colors">
+                                                {act.title}
+                                            </div>
+                                            <div className="mt-2 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest text-pt-text-muted opacity-40">
+                                                <span>{act.id}</span>
+                                                <span>•</span>
+                                                <span className={`${typeCfg.color} font-black`}>{act.type.replace('_', ' ')}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 px-3 py-1 bg-pt-bg border border-pt-border rounded text-[9px] text-pt-text-muted font-black tracking-widest shadow-inner">
+                                            <Clock className="w-3 h-3 opacity-50" />
+                                            {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </div>
+                                    </div>
+
+                                    {/* Description Body */}
+                                    <div className="text-[11px] text-pt-text-muted font-bold leading-relaxed mb-5 max-w-2xl bg-pt-bg/20 p-3 rounded-lg border border-transparent group-hover:border-pt-border/50 transition-all">
+                                        {act.description}
+                                    </div>
+
+                                    {/* Metadata Sensors */}
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <div className="px-3 py-1 bg-pt-bg border border-pt-border rounded-lg flex items-center gap-2 group/meta cursor-pointer hover:border-pt-intent-primary transition-all">
+                                            <FileJson className="w-3 h-3 text-pt-intent-primary opacity-50 group-hover/meta:opacity-100" />
+                                            <span className="text-[9px] text-pt-text-muted font-black uppercase tracking-widest">
+                                                Target: <span className="text-pt-text">{act.entityInstanceId}</span>
+                                            </span>
+                                        </div>
+                                        <div className="px-3 py-1 bg-pt-bg border border-pt-border rounded-lg flex items-center gap-2">
+                                            <User className="w-3 h-3 text-pt-text-muted opacity-30" />
+                                            <span className="text-[9px] text-pt-text-muted font-black uppercase tracking-widest">
+                                                Actor: <span className="text-pt-intent-success">{act.actor}</span>
+                                            </span>
+                                        </div>
+                                        <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button className="flex items-center gap-2 text-[9px] font-black text-pt-intent-primary uppercase tracking-widest hover:brightness-110">
+                                                Full Trace <ArrowRight size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
+                            );
+                        })}
+                        {activity.length === 0 && (
+                            <div className="text-center py-24 flex flex-col items-center gap-4 opacity-20">
+                                <History size={40} />
+                                <span className="text-[11px] font-black uppercase tracking-[0.5em]">Lattice Ledger Empty</span>
                             </div>
-
-                            <div className="text-xs text-slate-400 leading-relaxed mb-3 max-w-2xl">{act.description}</div>
-
-                            <div className="flex flex-wrap items-center gap-3">
-                                <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded flex items-center gap-1.5 text-slate-400 font-bold uppercase tracking-wider">
-                                    <FileJson className="w-3 h-3 text-blue-400" /> Target: {act.entityInstanceId}
-                                </span>
-                                <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-400 font-bold uppercase tracking-wider">
-                                    Actor: <span className="text-white">{act.actor}</span>
-                                </span>
-                                <span className="text-[10px] text-blue-400 bg-blue-500/10 px-2 py-1 rounded font-mono border border-blue-500/20 uppercase">
-                                    {act.type.replace('_', ' ')}
-                                </span>
-                            </div>
-                        </div>
-                    ))}
-                    {activity.length === 0 && (
-                        <div className="text-center text-sm text-slate-500 italic py-12">System log is entirely empty.</div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
             </div>

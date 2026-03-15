@@ -1,12 +1,16 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRuntimeStore } from "@/store/runtimeStore";
 import {
     Activity, Battery, AlertTriangle, Crosshair,
     Wifi, Search, Filter, MoreHorizontal, ArrowUpRight,
-    Map, Database
+    Map, Database, ShieldAlert, Cpu, Zap, Signal, Settings,
+    FileText, Download, ChevronRight, BarChart3, RefreshCcw,
+    Calendar, ChevronDown
 } from "lucide-react";
+import { Card } from "@/components/ui/Card";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { SeverityChip } from "@/components/ui/SeverityChip";
+import { useIntelligenceStore } from "@/store/intelligenceStore";
 
 export default function RuntimeDashboard() {
     const { instances } = useRuntimeStore();
@@ -14,214 +18,226 @@ export default function RuntimeDashboard() {
     // Map runtime instances to the Drone format
     const drones = instances.filter(i => i.entityTypeId === 'ent-drone').map(inst => ({
         id: inst.id,
-        status: inst.properties.status || 'UNKNOWN',
-        battery: inst.properties.batteryLevel || 0,
-        dist: inst.properties.location || 'Unknown',
-        signal: inst.properties.signal || 'N/A'
+        status: (inst.properties as any).status || 'UNKNOWN',
+        battery: (inst.properties as any).batteryLevel || 0,
+        dist: (inst.properties as any).location || 'Unknown',
+        signal: (inst.properties as any).signal || 'N/A'
     }));
 
     const [selectedIdx, setSelectedIdx] = useState<number | null>(drones.length > 0 ? 0 : null);
+    const { setContext, updateSelection } = useIntelligenceStore();
+
+    useEffect(() => {
+        setContext('run', {
+            workspaceId: 'fleet-alpha',
+            filters: { activeAssetCount: drones.length }
+        });
+    }, [drones.length]);
+
+    const handleSelectDrone = (idx: number) => {
+        setSelectedIdx(idx);
+        updateSelection({
+            logicalId: drones[idx].id,
+            entityTypeId: 'ent-drone'
+        });
+    };
 
     return (
-        <div className="w-full text-white p-6 max-w-[1600px] mx-auto min-h-full">
-
-            {/* Header / Section 1 */}
-            <div className="flex items-end justify-between mb-6">
-                <div>
-                    <h1 className="text-[28px] font-light tracking-tight mb-1 text-white">Drone Fleet Operations</h1>
-                    <p className="text-[13px] text-[#8A9BA8] max-w-2xl">Real-time operational overview of deployed UAS assets. Data is bound to Live Ontology <span className="text-blue-400 font-mono text-[11px] bg-blue-500/10 px-1 rounded">var_ActiveFleet</span>.</p>
-                </div>
-                <div className="flex gap-2 text-[12px] font-bold">
-                    <button className="px-4 py-2 bg-[#293742] hover:bg-[#394B59] rounded-sm transition-colors border border-black shadow-sm flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-[#8A9BA8]" /> Advanced Filter
-                    </button>
-                    <button className="px-4 py-2 bg-[#137CBD] hover:bg-[#106BA3] rounded-sm transition-colors border border-black shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
-                        Generate Report
-                    </button>
-                </div>
-            </div>
-
-            {/* Metric Cards Row */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="bg-[#182026] border border-[#293742] rounded-sm p-4 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-bl-full group-hover:scale-110 transition-transform" />
-                    <div className="text-[11px] font-bold text-[#8A9BA8] uppercase tracking-wider mb-2 flex items-center justify-between">
-                        Total Assets <Activity className="w-4 h-4 text-[#5C7080]" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-light">142</span>
-                        <span className="text-[11px] font-bold text-[#0F9960]">+12%</span>
-                    </div>
-                </div>
-                <div className="bg-[#182026] border border-[#D9822B]/30 rounded-sm p-4 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-[#D9822B]/5 rounded-bl-full group-hover:scale-110 transition-transform" />
-                    <div className="text-[11px] font-bold text-[#8A9BA8] uppercase tracking-wider mb-2 flex items-center justify-between">
-                        Critical Battery <Battery className="w-4 h-4 text-[#D9822B]" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-light text-[#D9822B]">4</span>
-                        <span className="text-[11px] font-bold text-[#D9822B]">-2</span>
-                    </div>
-                </div>
-                <div className="bg-[#182026] border border-red-500/30 rounded-sm p-4 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-red-500/5 rounded-bl-full group-hover:scale-110 transition-transform" />
-                    <div className="text-[11px] font-bold text-[#8A9BA8] uppercase tracking-wider mb-2 flex items-center justify-between">
-                        Signal Loss <Wifi className="w-4 h-4 text-red-500" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-light text-red-500">1</span>
-                    </div>
-                </div>
-                <div className="bg-[#182026] border border-[#293742] rounded-sm p-4 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-bl-full group-hover:scale-110 transition-transform" />
-                    <div className="text-[11px] font-bold text-[#8A9BA8] uppercase tracking-wider mb-2 flex items-center justify-between">
-                        Op Range <Crosshair className="w-4 h-4 text-[#5C7080]" />
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-light text-emerald-500">12km</span>
-                        <span className="text-[11px] font-bold text-[#8A9BA8]">avg</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Split View: Table + Detail Inspector */}
-            <div className="flex gap-6 h-[500px]">
-
-                {/* Object Table */}
-                <div className="flex-[2] bg-[#182026] border border-[#293742] rounded-sm shadow-sm flex flex-col min-w-0">
-                    <div className="h-10 border-b border-[#293742] flex items-center justify-between px-4 bg-[#11161B]">
-                        <h2 className="text-[13px] font-bold flex items-center gap-2"><Database className="w-4 h-4 text-blue-400" /> Active Fleet</h2>
-                        <div className="relative">
-                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#5C7080]" />
-                            <input
-                                placeholder="Search by ID..."
-                                className="bg-[#182026] border border-[#293742] rounded-sm pl-7 pr-3 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-colors placeholder:text-[#5C7080]"
-                            />
+        <div className="flex-1 flex flex-col min-h-0 bg-pt-bg">
+            {/* Operator Header */}
+            <header className="px-6 py-4 border-b border-pt-border bg-pt-bg-panel/20 shrink-0">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <SeverityChip severity="info" label="FLEET_OPS_CENTER" className="text-[8px]" />
+                            <span className="text-[9px] font-mono text-pt-text-muted opacity-50">LOCATION: PACIFIC-HUB-4</span>
                         </div>
+                        <h1 className="text-xl font-black text-pt-text uppercase tracking-tight">Drone Fleet Operations</h1>
+                        <p className="text-[10px] text-pt-text-muted font-bold uppercase tracking-widest mt-1">Integrated Fleet Telemetry & C2 Protocol</p>
                     </div>
 
-                    <div className="flex-1 overflow-auto">
-                        <table className="w-full text-left text-[12px] whitespace-nowrap">
-                            <thead className="bg-[#11161B] sticky top-0 z-10">
-                                <tr>
-                                    <th className="px-4 py-2 font-bold text-[#8A9BA8] border-b border-[#293742]">Asset ID</th>
-                                    <th className="px-4 py-2 font-bold text-[#8A9BA8] border-b border-[#293742]">Status</th>
-                                    <th className="px-4 py-2 font-bold text-[#8A9BA8] border-b border-[#293742]">Battery</th>
-                                    <th className="px-4 py-2 font-bold text-[#8A9BA8] border-b border-[#293742]">Distance</th>
-                                    <th className="px-4 py-2 font-bold text-[#8A9BA8] border-b border-[#293742]">Signal</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {drones.map((drone, idx) => {
-                                    const isSelected = selectedIdx === idx;
-                                    const statusColor =
-                                        drone.status === 'ACTIVE' ? 'text-emerald-400 bg-emerald-400/10' :
-                                            drone.status === 'CRITICAL' ? 'text-red-400 bg-red-400/10' :
-                                                drone.status === 'RETURN' ? 'text-orange-400 bg-orange-400/10' :
-                                                    'text-[#8A9BA8] bg-[#8A9BA8]/10';
-
-                                    return (
-                                        <tr
-                                            key={drone.id}
-                                            onClick={() => setSelectedIdx(idx)}
-                                            className={`cursor-pointer border-b border-[#293742]/50 transition-colors
-                                                ${isSelected ? 'bg-blue-500/10' : 'hover:bg-[#293742]/50'}
-                                            `}
-                                        >
-                                            <td className="px-4 py-2.5 font-mono">
-                                                <div className="flex items-center gap-2">
-                                                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                                                    <span className={isSelected ? 'text-white font-bold' : 'text-[#8A9BA8]'}>{drone.id}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-2.5">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusColor}`}>{drone.status}</span>
-                                            </td>
-                                            <td className="px-4 py-2.5 font-mono text-[#8A9BA8]">{drone.battery}%</td>
-                                            <td className="px-4 py-2.5 font-mono text-[#8A9BA8]">{drone.dist}</td>
-                                            <td className="px-4 py-2.5 text-[#8A9BA8]"><span className="text-[11px] px-2 py-0.5 border border-[#394B59] rounded-sm">{drone.signal}</span></td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                    <div className="flex items-center gap-3">
+                        <button className="h-8 px-4 bg-pt-bg border border-pt-border rounded text-[9px] font-black uppercase tracking-widest text-pt-text-muted hover:text-pt-text transition-all flex items-center gap-2">
+                            <RefreshCcw size={10} /> Sync Fleet
+                        </button>
+                        <button className="h-8 px-4 bg-pt-intent-primary text-pt-bg rounded text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                            <FileText size={10} /> Intelligence Report
+                        </button>
                     </div>
                 </div>
+            </header>
 
-                {/* Right Panel Properties Inspector (Bound to selection) */}
-                <div className="flex-[1] bg-[#182026] border border-[#293742] rounded-sm shadow-sm flex flex-col min-w-0">
-                    {selectedIdx !== null ? (
-                        <>
-                            <div className="p-4 border-b border-[#293742] bg-gradient-to-r from-blue-500/10 to-transparent">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h2 className="text-[18px] font-light text-white font-mono">{drones[selectedIdx].id}</h2>
-                                    <button className="p-1 hover:bg-[#293742] rounded text-[#8A9BA8] hover:text-white transition-colors">
-                                        <MoreHorizontal className="w-4 h-4" />
+            {/* Operator Toolbar */}
+            <Toolbar className="shrink-0 bg-pt-bg/50">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-pt-bg border border-pt-border rounded text-[9px] font-black uppercase tracking-widest text-pt-text-muted">
+                        <Calendar size={10} />
+                        <span>Real-time</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-pt-bg border border-pt-border rounded text-[9px] font-black uppercase tracking-widest text-pt-text-muted">
+                        <Filter size={10} />
+                        <span>Status: All</span>
+                        <ChevronDown size={10} />
+                    </div>
+                    <div className="h-4 w-px bg-pt-border mx-2" />
+                    <div className="text-[9px] text-pt-text-muted font-bold tracking-widest opacity-60 flex items-center gap-2">
+                        ONTOLOGY: <span className="text-pt-intent-primary">var_ActiveFleet</span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                    <div className="px-2 py-0.5 border border-pt-intent-success/30 bg-pt-intent-success/5 text-pt-intent-success rounded text-[9px] font-black uppercase tracking-tighter shadow-[0_0_10px_rgba(var(--pt-intent-success),0.2)]">Uplink Nominal</div>
+                </div>
+            </Toolbar>
+
+            <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                {/* Metric Sensors Grid (Metric Strip) */}
+                <div className="grid grid-cols-4 gap-4">
+                    {[
+                        { label: 'Total Assets', val: '142', detail: '+12% VEL', icon: Activity, color: 'text-pt-text' },
+                        { label: 'Critical Battery', val: '4', detail: '-2 NODES', icon: Battery, color: 'text-pt-intent-warning' },
+                        { label: 'Signal Loss', val: '1', detail: 'SIG_DROPPED', icon: Signal, color: 'text-pt-intent-danger' },
+                        { label: 'Range Radius', val: '12km', detail: 'AVG_SECTOR', icon: Crosshair, color: 'text-pt-intent-primary' }
+                    ].map((m, i) => (
+                        <div key={i} className="bg-pt-bg-panel/40 border border-pt-border p-4 rounded flex items-center justify-between group hover:border-pt-intent-primary/30 transition-all cursor-pointer shadow-sm">
+                            <div>
+                                <div className="text-[9px] font-black text-pt-text-muted uppercase tracking-[0.2em] mb-1">{m.label}</div>
+                                <div className="flex items-baseline gap-2">
+                                    <div className={`text-2xl font-black ${m.color}`}>{m.val}</div>
+                                    <div className="text-[8px] font-black text-pt-text-muted opacity-50">{m.detail}</div>
+                                </div>
+                            </div>
+                            <m.icon size={20} className={`${m.color} opacity-20 group-hover:opacity-100 transition-opacity`} />
+                        </div>
+                    ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Telemetry Matrix */}
+                    <Card
+                        title="Fleet Status Matrix"
+                        pill={`ONLINE: ${drones.filter(d => d.status === 'ACTIVE').length}`}
+                        className="lg:col-span-2 min-h-[600px] flex flex-col"
+                    >
+                        <div className="flex-1 overflow-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-pt-bg border-b border-pt-border sticky top-0 z-20">
+                                    <tr className="text-[8px] font-black text-pt-text-muted uppercase tracking-[0.2em]">
+                                        <th className="px-6 py-3">Asset identifier</th>
+                                        <th className="px-6 py-3">Status</th>
+                                        <th className="px-6 py-3">Charge</th>
+                                        <th className="px-6 py-3">Sector</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-pt-border/30">
+                                    {drones.map((drone, idx) => {
+                                        const isSelected = selectedIdx === idx;
+                                        return (
+                                            <tr
+                                                key={drone.id}
+                                                onClick={() => handleSelectDrone(idx)}
+                                                className={`cursor-pointer transition-all ${isSelected ? 'bg-pt-intent-primary/10' : 'hover:bg-pt-intent-primary/[0.02]'}`}
+                                            >
+                                                <td className="px-6 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-1 h-3 rounded-full ${isSelected ? 'bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.5)]' : 'bg-pt-border opacity-20'}`} />
+                                                        <span className={`text-[10px] font-black ${isSelected ? 'text-pt-text' : 'text-pt-text-muted'}`}>{drone.id}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <SeverityChip
+                                                        severity={drone.status === 'ACTIVE' ? 'success' : drone.status === 'CRITICAL' ? 'danger' : 'warning'}
+                                                        label={drone.status}
+                                                    />
+                                                </td>
+                                                <td className="px-6 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-16 h-1 bg-pt-bg rounded-full overflow-hidden border border-pt-border">
+                                                            <div className={`h-full ${drone.battery < 20 ? 'bg-pt-intent-danger' : 'bg-pt-intent-success'}`} style={{ width: `${drone.battery}%` }} />
+                                                        </div>
+                                                        <span className="font-mono text-[9px] font-black text-pt-text-muted">{drone.battery}%</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-3 font-mono text-[9px] font-bold text-pt-text-muted uppercase tracking-tighter">{drone.dist}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+
+                    {/* Detail Inspector */}
+                    <Card title="Asset Inspector" className="min-h-[600px] flex flex-col">
+                        {selectedIdx !== null ? (
+                            <div className="flex flex-col h-full">
+                                <div className="p-4 border-b border-pt-border bg-pt-bg-panel/20">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <div className="text-[10px] font-black text-pt-intent-primary uppercase tracking-[0.3em] mb-1">Asset Inspector</div>
+                                            <h2 className="text-xl font-black text-pt-text tracking-tight font-mono">{drones[selectedIdx].id}</h2>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <SeverityChip
+                                            severity={drones[selectedIdx].status === 'ACTIVE' ? 'success' : 'danger'}
+                                            label={`${drones[selectedIdx].status}_MODE`}
+                                        />
+                                        <span className="px-2 py-0.5 bg-pt-bg border border-pt-border rounded text-[8px] font-black text-pt-text-muted uppercase tracking-widest">v4.1.0-SIG</span>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 flex-1 overflow-y-auto space-y-6 custom-scrollbar">
+                                    <div className="space-y-3">
+                                        <h3 className="text-[9px] font-black text-pt-text-muted uppercase tracking-[0.4em] opacity-40">System Telemetry</h3>
+                                        <div className="space-y-2">
+                                            {[
+                                                { label: 'Battery Capacity', val: `${drones[selectedIdx].battery}%`, alert: drones[selectedIdx].battery < 20 },
+                                                { label: 'Sector Location', val: drones[selectedIdx].dist },
+                                                { label: 'Signal Vector', val: drones[selectedIdx].signal },
+                                                { label: 'Uplink Latency', val: '24ms' }
+                                            ].map((p, i) => (
+                                                <div key={i} className="flex justify-between items-baseline border-b border-pt-border/30 pb-1.5">
+                                                    <span className="text-[9px] font-bold text-pt-text-muted uppercase tracking-tight">{p.label}</span>
+                                                    <span className={`font-mono text-[10px] font-black ${p.alert ? 'text-pt-intent-danger' : 'text-pt-text'}`}>
+                                                        {p.val}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Geospatial Matrix */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-[9px] font-black text-pt-text-muted uppercase tracking-[0.4em] opacity-40">Geospatial Target</h3>
+                                        <div className="w-full h-32 bg-pt-bg border border-pt-border rounded flex items-center justify-center relative overflow-hidden group hover:border-pt-intent-primary/30 transition-all cursor-crosshair">
+                                            <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: 'linear-gradient(var(--pt-border) 1px, transparent 1px), linear-gradient(90deg, var(--pt-border) 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
+                                            <Map className="w-8 h-8 text-pt-border group-hover:scale-110 transition-transform" />
+                                            <div className="absolute inset-x-0 bottom-0 p-2 bg-pt-bg-panel/80 backdrop-blur-md border-t border-pt-border opacity-0 group-hover:opacity-100 transition-all flex justify-between items-center">
+                                                <span className="text-[8px] font-black text-pt-text uppercase tracking-widest">Active Mapping UI</span>
+                                                <ArrowUpRight className="w-2.5 h-2.5 text-pt-intent-primary" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 border-t border-pt-border bg-pt-bg-panel/50 space-y-2">
+                                    <button className={`w-full h-9 rounded text-[9px] font-black uppercase tracking-[0.2em] transition-all border shadow-sm active:scale-95 flex items-center justify-center gap-2
+                                        ${drones[selectedIdx].status === 'CRITICAL' ? 'bg-pt-intent-danger border-pt-intent-danger text-pt-bg' : 'bg-pt-intent-primary border-pt-intent-primary text-pt-bg'}
+                                    `}>
+                                        {drones[selectedIdx].status === 'CRITICAL' ? <ShieldAlert size={12} /> : <Zap size={12} />}
+                                        Override {drones[selectedIdx].status === 'CRITICAL' ? 'Forced Recall' : 'Vector Shift'}
                                     </button>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
-                                    ${drones[selectedIdx].status === 'CRITICAL' ? 'text-red-400 bg-red-400/10 border border-red-500/30' :
-                                        drones[selectedIdx].status === 'WARNING' ? 'text-[#D9822B] bg-[#D9822B]/10 border border-[#D9822B]/30' :
-                                            'text-emerald-400 bg-emerald-400/10 border border-emerald-500/30'}
-                                `}>
-                                    {drones[selectedIdx].status}
-                                </span>
                             </div>
-
-                            <div className="p-4 flex-1 overflow-y-auto space-y-6">
-                                {/* Property Grid */}
-                                <div>
-                                    <h3 className="text-[11px] font-bold text-[#5C7080] uppercase tracking-wider mb-3">Telemetry Properties</h3>
-                                    <div className="space-y-2 text-[12px]">
-                                        <div className="flex justify-between border-b border-[#293742] pb-1">
-                                            <span className="text-[#8A9BA8]">Battery Level</span>
-                                            <span className="font-mono text-white">{drones[selectedIdx].battery}%</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-[#293742] pb-1">
-                                            <span className="text-[#8A9BA8]">Location Sector</span>
-                                            <span className="font-mono text-white">{drones[selectedIdx].dist}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-[#293742] pb-1">
-                                            <span className="text-[#8A9BA8]">Signal Integrity</span>
-                                            <span className="text-white">{drones[selectedIdx].signal}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Mini Map Visual Placeholder */}
-                                <div>
-                                    <h3 className="text-[11px] font-bold text-[#5C7080] uppercase tracking-wider mb-3">Geospatial Context</h3>
-                                    <div className="w-full h-32 bg-[#11161B] border border-[#293742] rounded-sm flex items-center justify-center relative overflow-hidden group hover:border-blue-500/50 transition-colors cursor-pointer">
-                                        {/* Mock map background grid */}
-                                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #8A9BA8 1px, transparent 0)', backgroundSize: '16px 16px' }} />
-                                        <Map className="w-8 h-8 text-[#293742] group-hover:scale-110 transition-transform" />
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                                            <span className="text-white text-[11px] font-bold px-3 py-1 bg-black/60 rounded-full border border-white/20 backdrop-blur-md flex items-center gap-1">Open in Map <ArrowUpRight className="w-3 h-3" /></span>
-                                        </div>
-                                    </div>
-                                </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-pt-text-muted p-10 text-center space-y-4">
+                                <Activity size={32} className="opacity-10" />
+                                <p className="text-[10px] font-black text-pt-text-muted uppercase tracking-widest">Select target for inspection</p>
                             </div>
-
-                            {/* Action Button Bar */}
-                            <div className="p-4 border-t border-[#293742] bg-[#11161B]">
-                                <button className={`w-full py-2 rounded-sm text-[12px] font-bold transition-colors border shadow-sm
-                                    ${drones[selectedIdx].status === 'CRITICAL' ? 'bg-[#D9822B] hover:bg-[#B86820] border-[#D9822B] text-white' : 'bg-[#293742] hover:bg-[#394B59] border-black text-white'}
-                                `}>
-                                    {drones[selectedIdx].status === 'CRITICAL' ? 'Execute Emergency Recall' : 'Trigger Standard Maintenance'}
-                                </button>
-                                <p className="text-[10px] text-[#5C7080] text-center mt-2">Action bound to <span className="font-mono">act_RecallFleet</span></p>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-[#5C7080] p-6 text-center">
-                            <Activity className="w-12 h-12 mb-4 opacity-20" />
-                            <p className="text-[13px] font-bold text-white mb-1">No Object Selected</p>
-                            <p className="text-[11px]">Select a row in the Object Table to inspect properties and execute actions.</p>
-                        </div>
-                    )}
+                        )}
+                    </Card>
                 </div>
-
-            </div>
+            </main>
         </div>
     );
 }
