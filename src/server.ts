@@ -5,25 +5,31 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Prisma } from './generated/prisma';
 import { evaluatePolicies, simulatePolicy } from './policy-engine';
+import { recordDomainEvent } from './domain-events';
 import { executeJob, startScheduler, dryRunJob, schedulerTelemetry } from './data-integration';
 import { RelationshipDerivationService, startConfidenceDecayScheduler } from './relationship-derivation-service';
 import { evaluateComputedMetrics } from './computed-metrics';
 import { computeRollups, computeAllRecentRollups, startRollupScheduler, rollupTelemetry } from './rollup-engine';
 import { Orchestrator } from './orchestrator';
+import { OntologyRebuilder } from './ontology-rebuilder';
+import { QualityService } from './quality-service';
 import { runInference, runInferenceByModel, runAllModelsForEntity } from './inference-engine';
 import { executeDecision, evaluateAllRules } from './decision-engine';
 import { SchemaInferenceService } from './schema-inference-service';
 import { ProvenanceService } from './provenance-service';
+import { AbacEngine } from './abac-engine';
 import { ApolloService } from './apollo-service';
 import { SparkService } from './spark-service';
 import { IdentityService } from './identity-service';
 import { LineageService } from './lineage-service';
-import { AbacEngine } from './abac-engine';
 // import { createPipelineRouter } from './routers/pipeline-router';
 import { createAipRouter } from './routers/aip-router';
+import { createAgentRouter } from './routers/agent-router';
 import { createHealthRouter } from './routers/health-router';
 import { createMavenRouter } from './routers/maven-router';
-import agentRouter from './routers/agent-router';
+import { executeWorkflow } from './workflow-engine';
+import { executePipeline } from './pipeline-engine';
+import { GovernanceService } from './governance-service';
 // import { pool } from './db';
 import { OutboxService } from './outbox-service';
 import helmet from 'helmet';
@@ -43,6 +49,7 @@ import {
   enforceIdempotency,
   tenantContext,
   auditMiddleware,
+  securityGuard,
 } from './middleware';
 import { getTenantPrisma } from './tenant-context';
 import { randomUUID } from 'crypto';
@@ -98,17 +105,23 @@ const prismaRaw = new PrismaClient({
 // Enhanced Prisma with RLS Awareness
 const prisma = getTenantPrisma(prismaRaw) as any;
 
+// Initialize engines
+const abac = new AbacEngine(prisma);
+
 // Initialize services
 const apolloService = new ApolloService(prisma);
 const sparkService = new SparkService(prisma);
 const orchestrator = new Orchestrator(prisma);
+const rebuilder = new OntologyRebuilder(prisma);
+const qualitySvc = new QualityService(prisma);
 
 // Global maps for WebSockets and Jobs
 const lineageSvc = new LineageService(prisma);
+const governanceSvc = new GovernanceService(prisma);
 app.use('/api/v1/health', createHealthRouter(prismaRaw));
 app.use('/api/v1/aip', createAipRouter(prismaRaw));
 app.use('/api/v1/maven', createMavenRouter(prismaRaw));
-app.use('/api/v1/agents', agentRouter);
+app.use('/api/v1/agents', createAgentRouter(prismaRaw));
 
 // ── Outbox Setup ────────────────────────────────────────────────────────────
 // ── Error Handling ──────────────────────────────────────────────
@@ -131,8 +144,11 @@ if (!corsOrigin) {
 app.use(cors({ origin: corsOrigin ?? '*' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(correlationId());
+app.use(requestLogger());
 app.use(apiKeyAuth(prisma));
+app.use(tenantContext());
 app.use(auditMiddleware(prisma));
+app.use(securityGuard(abac));
 app.use(createRateLimiter());
 
 
@@ -196,123 +212,237 @@ app.get('/dashboards', async (req, res) => {
 
 // ── Health Checks (no auth) ──────────────────────────────────────
 
-app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date(), correlationId: req.correlationId });
-});
+app.get('/api/health', (req, res) => res.json({ status: 'UP', timestamp: new Date(), workerId: orchestrator['workerId'] }));
 
-app.use(apiKeyAuth(prismaRaw as any));
-app.use(tenantContext());
-
-// ── Role Guard Verification ──────────────────────────────────────
-app.get('/api/v1/admin/verify', requireRole('ADMIN'), (req, res) => {
-  res.json({ message: 'Welcome, Admin', actor: req.auth?.apiKeyName });
-});
-
+// ── Telemetry APIs ────────────────────────────────────────────────────────
 app.get('/api/v1/telemetry/jobs', async (req, res) => {
   try {
-    const [counts, recentJobs, workers] = await Promise.all([
-      prisma.jobQueue.groupBy({
-        by: ['status'],
-        _count: true
-      }),
-      prisma.jobQueue.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        include: { integrationJob: true }
-      }),
-      prisma.jobWorker.findMany({
-        where: { lastHeartbeat: { gte: new Date(Date.now() - 60000) } }
-      })
-    ]);
+    const rawProjectId = getProjectId(req);
+    const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const summary = await (prisma as any).jobQueue.groupBy({
+      by: ['status'],
+      where: { projectId },
+      _count: true
+    });
+
+    const activeWorkers = await (prisma as any).jobWorker.count({
+      where: {
+        status: 'ACTIVE',
+        lastHeartbeat: { gte: new Date(Date.now() - 5 * 60 * 1000) }
+      }
+    });
+
+    const recentJobs = await (prisma as any).jobQueue.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: { lockedByWorker: true }
+    });
 
     return res.json({
-      summary: counts.reduce((acc: any, curr) => {
-        acc[curr.status] = curr._count;
-        return acc;
-      }, {}),
-      activeWorkers: workers.length,
+      summary: summary.reduce((acc: any, curr: any) => ({ ...acc, [curr.status]: curr._count }), {}),
+      activeWorkers,
       recentJobs
+    });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+app.get('/api/v1/telemetry/workers', async (req, res) => {
+  try {
+    const workers = await prisma.jobWorker.findMany({
+      where: { lastHeartbeat: { gte: new Date(Date.now() - 5 * 60 * 1000) } }, // Alive in last 5m
+      orderBy: { lastHeartbeat: 'desc' }
+    });
+    return res.json(workers);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+app.get('/api/v1/telemetry/agents', async (req, res) => {
+  try {
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') {
+      projectId = (global as any).DEFAULT_PROJECT_ID;
+    }
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
+    // Aggregate stats from AuditLog for AGENT_TOOL actions
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        projectId,
+        resourceType: 'AGENT_TOOL',
+        occurredAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24h
+      },
+      orderBy: { occurredAt: 'desc' }
+    });
+
+    const toolStats: Record<string, { success: number; failed: number; total: number; durSum: number; p90Samples: number[] }> = {};
+    const executionTrace: any[] = [];
+
+    logs.forEach(log => {
+      const toolName = log.resourceId || 'unknown';
+      const metadata = log.metadata as any;
+      const status = metadata?.status || 'SUCCESS';
+      const duration = metadata?.durationMs || 0;
+
+      if (!toolStats[toolName]) {
+        toolStats[toolName] = { success: 0, failed: 0, total: 0, durSum: 0, p90Samples: [] };
+      }
+
+      toolStats[toolName].total++;
+      if (status === 'SUCCESS') toolStats[toolName].success++;
+      else toolStats[toolName].failed++;
+
+      toolStats[toolName].durSum += duration;
+      toolStats[toolName].p90Samples.push(duration);
+
+      executionTrace.push({
+        id: log.id,
+        tool: toolName,
+        actor: log.actor,
+        status,
+        durationMs: duration,
+        timestamp: log.occurredAt
+      });
+    });
+
+    // Finalize metrics
+    const metricsByTool = Object.entries(toolStats).map(([name, stats]) => {
+      const sortedDurs = [...stats.p90Samples].sort((a, b) => a - b);
+      const p90 = sortedDurs[Math.floor(sortedDurs.length * 0.9)] || 0;
+      return {
+        tool: name,
+        successRate: stats.total > 0 ? (stats.success / stats.total) * 100 : 0,
+        avgLatency: stats.total > 0 ? stats.durSum / stats.total : 0,
+        p90Latency: p90,
+        totalCalls: stats.total
+      };
+    });
+
+    return res.json({
+      summary: {
+        totalCalls: logs.length,
+        successRate: logs.length > 0 ? (logs.filter(l => (l.metadata as any)?.status === 'SUCCESS').length / logs.length) * 100 : 0,
+        avgLatency: logs.length > 0 ? logs.reduce((acc, l) => acc + ((l.metadata as any)?.durationMs || 0), 0) / logs.length : 0
+      },
+      metricsByTool,
+      recentTrace: executionTrace.slice(0, 20)
     });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
 
-app.get('/api/v1/health/deep', async (_req, res) => {
+// ── Change Request Governance APIs ───────────────────────────────
+app.get('/api/v1/change-requests', async (req, res) => {
   try {
-    // 1. Database liveness
-    const dbStart = Date.now();
-    await prisma.$queryRaw`SELECT 1`;
-    const dbLatencyMs = Date.now() - dbStart;
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
 
-    // 2. Derive scheduler status from live telemetry
-    const now = Date.now();
-    const STALL_MULTIPLIER = 2; // flag as stalled if silent for 2× the expected interval
+    const status = req.query.status as string | undefined;
+    const crs = await governanceSvc.listChangeRequests(projectId, status);
+    return res.json(crs);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
 
-    function deriveSchedulerStatus(telemetry: {
-      startedAt: Date | null;
-      lastTickAt: Date | null;
-      lastError: string | null;
-      tickIntervalMs: number;
-    }): { status: string; lagMs: number | null; lastTickAt: string | null; lastError: string | null } {
-      if (!telemetry.startedAt) {
-        return { status: 'not_started', lagMs: null, lastTickAt: null, lastError: null };
-      }
-      const lagMs = telemetry.lastTickAt ? now - telemetry.lastTickAt.getTime() : null;
-      const stalled = lagMs !== null && lagMs > STALL_MULTIPLIER * telemetry.tickIntervalMs;
-      const status = stalled ? 'stalled' : telemetry.lastError ? 'error' : 'ok';
-      return {
-        status,
-        lagMs,
-        lastTickAt: telemetry.lastTickAt?.toISOString() ?? null,
-        lastError: telemetry.lastError,
-      };
+app.post('/api/v1/change-requests', async (req, res) => {
+  try {
+    let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+    if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
+    const { resourceType, resourceId, proposedChanges, branchName } = req.body;
+    if (!resourceType || !proposedChanges) return res.status(400).json({ error: 'resourceType and proposedChanges are required' });
+
+    const cr = await governanceSvc.createChangeRequest({
+      projectId,
+      resourceType,
+      resourceId,
+      proposedChanges,
+      createdBy: req.auth?.apiKeyName || 'system',
+      branchName: branchName || 'main'
+    });
+    return res.status(201).json(cr);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+app.patch('/api/v1/change-requests/:id/approve', async (req, res) => {
+  try {
+    const reviewer = req.auth?.apiKeyName || 'system';
+    const updated = await governanceSvc.approveAndApply(req.params.id, reviewer);
+    return res.json(updated);
+  } catch (err: any) {
+    if (err.message?.includes('not found') || err.message?.includes('cannot be approved')) {
+      return res.status(400).json({ error: err.message });
     }
-
-    const jobSchedulerHealth = deriveSchedulerStatus(schedulerTelemetry.jobScheduler);
-    const rollupSchedulerHealth = deriveSchedulerStatus(rollupTelemetry.rollupScheduler);
-
-    const allHealthy =
-      jobSchedulerHealth.status === 'ok' &&
-      rollupSchedulerHealth.status === 'ok';
-
-    // 3. Queue Depth & Execution Lag
-    const queueDepth = await prisma.jobQueue.count({
-      where: { status: 'QUEUED' }
-    });
-
-    const oldestPending = await prisma.jobQueue.findFirst({
-      where: { status: 'QUEUED' },
-      orderBy: { createdAt: 'asc' },
-      select: { createdAt: true }
-    });
-
-    const maxQueueLagMs = oldestPending ? now - oldestPending.createdAt.getTime() : 0;
-
-    const responseBody = {
-      status: allHealthy ? 'ok' : 'degraded',
-      database: { status: 'connected', latencyMs: dbLatencyMs },
-      schedulers: {
-        jobScheduler: jobSchedulerHealth,
-        rollupScheduler: rollupSchedulerHealth,
-      },
-      metrics: {
-        queueDepth: queueDepth,
-        maxQueueLagMs: maxQueueLagMs
-      },
-      timestamp: new Date().toISOString(),
-    };
-
-    res.status(allHealthy ? 200 : 503).json(responseBody);
-  } catch (error) {
-    res.status(503).json({
-      status: 'degraded',
-      database: { status: 'disconnected' },
-      error: String(error),
-      timestamp: new Date().toISOString(),
-    });
+    return res.status(500).json({ error: String(err) });
   }
 });
+
+app.patch('/api/v1/change-requests/:id/reject', async (req, res) => {
+  try {
+    const reviewer = req.auth?.apiKeyName || 'system';
+    const { reason } = req.body;
+    const updated = await governanceSvc.rejectChangeRequest(req.params.id, reviewer, reason || 'Rejected by reviewer');
+    return res.json(updated);
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// ── API Latency Telemetry (for SRE dashboard) ─────────────────────
+app.get('/api/v1/telemetry/api-latency', async (req, res) => {
+  try {
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+
+    // Aggregate last 60 minutes of AuditLog into 5-minute buckets
+    const now = Date.now();
+    const windowMs = 60 * 60 * 1000; // 1 hour
+    const bucketMs = 5 * 60 * 1000;  // 5 min bucket
+    const NUM_BUCKETS = 12;
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        ...(projectId ? { projectId } : {}),
+        occurredAt: { gte: new Date(now - windowMs) }
+      },
+      select: { occurredAt: true, metadata: true, status: true }
+    });
+
+    // Build 12 × 5-min buckets
+    const buckets: { label: string; avgLatency: number; errorRate: number; count: number; errorCount: number; sumLatency: number }[] = [];
+    for (let i = NUM_BUCKETS - 1; i >= 0; i--) {
+      const bucketStart = now - (i + 1) * bucketMs;
+      const bucketEnd = now - i * bucketMs;
+      const d = new Date(bucketStart);
+      const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      buckets.push({ label, avgLatency: 0, errorRate: 0, count: 0, errorCount: 0, sumLatency: 0 });
+      const idx = NUM_BUCKETS - 1 - i;
+
+      for (const log of logs) {
+        const ts = new Date(log.occurredAt).getTime();
+        if (ts >= bucketStart && ts < bucketEnd) {
+          buckets[idx].count++;
+          if (log.status === 'FAILED' || log.status === 'DENIED') buckets[idx].errorCount++;
+          const meta = log.metadata as any;
+          buckets[idx].sumLatency += meta?.durationMs || meta?.responseTimeMs || 0;
+        }
+      }
+    }
+
+    const result = buckets.map(b => ({
+      label: b.label,
+      avgLatency: b.count > 0 ? Math.round(b.sumLatency / b.count) : 0,
+      errorRate: b.count > 0 ? parseFloat(((b.errorCount / b.count) * 100).toFixed(1)) : 0,
+      requestCount: b.count
+    }));
+
+    return res.json({ buckets: result, windowMinutes: 60, bucketMinutes: 5 });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// Routes below are also protected by the global middleware initialized above
 
 // ── Policy Simulation & Pre-Flight Checks ────────────────────────
 
@@ -469,6 +599,21 @@ app.post('/entity-types', async (req, res) => {
       projectId = (global as any).DEFAULT_PROJECT_ID;
     }
     if (!projectId) return res.status(400).json({ error: 'Project ID is required' });
+
+    const isProduction = projectId.toLowerCase().includes('prod') || projectId === 'proj-production';
+    if (isProduction) {
+      const changeRequest = await governanceSvc.createChangeRequest({
+        projectId,
+        resourceType: 'EntityType',
+        proposedChanges: { name, attributes },
+        createdBy: req.auth?.apiKeyName || 'system',
+        branchName: 'main'
+      });
+      return res.status(202).json({
+        message: 'PLATFORM_GOVERNANCE_ENFORCED: ChangeRequest created for production workspace.',
+        changeRequest
+      });
+    }
 
     const created = await prisma.entityType.create({
       data: {
@@ -627,24 +772,52 @@ app.post('/api/v1/pipelines/:id/run', async (req, res) => {
     const pipeline = await prisma.pipeline.findUnique({ where: { id } });
     if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
 
-    // Simulate dry-run execution trace
-    const nodes = (pipeline.nodes as any[]) || [];
-    const trace = nodes.map((n, i) => ({
-      nodeId: n.id,
-      status: 'SUCCESS',
-      recordsProcessed: Math.floor(Math.random() * 1000) + 100,
-      durationMs: Math.floor(Math.random() * 50) + 10,
-      timestamp: new Date().toISOString()
-    }));
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
-    // In a real execution, this would dispatch to a worker cluster.
-    // For Phase 1, we return the synchronous trace to prove the UI wire-up.
-    return res.json({
+    // Dry run remains synchronous logic for immediate feedback (per roadmap Stage 1 context)
+    if (isDryRun) {
+      const nodes = (pipeline.nodes as any[]) || [];
+      const trace = nodes.map((n) => ({
+        nodeId: n.id,
+        status: 'SUCCESS',
+        recordsProcessed: Math.floor(Math.random() * 1000) + 100,
+        durationMs: Math.floor(Math.random() * 50) + 10,
+        timestamp: new Date().toISOString()
+      }));
+      return res.json({
+        pipelineId: id,
+        executionId: `dry_${Date.now()}`,
+        status: 'COMPLETED',
+        isDryRun: true,
+        trace
+      });
+    }
+
+    // Production run: create run record and enqueue job
+    const run = await prisma.pipelineRun.create({
+      data: {
+        pipelineId: id,
+        status: 'QUEUED',
+        projectId,
+        trigger: 'manual',
+        startedAt: new Date()
+      }
+    });
+
+    const job = await orchestrator.enqueue('PIPELINE_RUN', {
       pipelineId: id,
-      executionId: `exec_${Date.now()}`,
-      status: 'COMPLETED',
-      isDryRun,
-      trace
+      runId: run.id,
+      trigger: 'manual'
+    }, {
+      projectId
+    });
+
+    return res.status(202).json({
+      pipelineId: id,
+      runId: run.id,
+      jobId: job.id,
+      status: 'QUEUED'
     });
 
   } catch (err) {
@@ -1236,6 +1409,17 @@ app.get('/api/ontology/entity-types', async (req, res) => {
   }
 });
 
+app.get('/api/v1/ontology/entity-types/:id/distribution', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+    const stats = await qualitySvc.calculateDistribution(req.params.id, projectId);
+    return res.json(stats);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── GET /api/ontology/entity-types/:id/impact — preview downstream dependencies
 app.get('/api/ontology/entity-types/:id/impact', async (req, res) => {
   try {
@@ -1262,18 +1446,16 @@ app.post('/api/ontology/entity-types', async (req, res) => {
     const { name, attributes = [], strictGovernance = false, branchName = 'main' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
-    if (strictGovernance && branchName === 'main') {
-      const changeRequest = await prisma.changeRequest.create({
-        data: {
-          resourceType: 'EntityType',
-          proposedChanges: { name, attributes },
-          branchName,
-          status: 'DRAFT',
-          createdBy: req.auth?.apiKeyName || 'system',
-          projectId
-        }
+    const isProduction = projectId.toLowerCase().includes('prod') || projectId === 'proj-production';
+    if ((isProduction || strictGovernance) && branchName === 'main') {
+      const changeRequest = await governanceSvc.createChangeRequest({
+        projectId,
+        resourceType: 'EntityType',
+        proposedChanges: { name, attributes },
+        createdBy: req.auth?.apiKeyName || 'system',
+        branchName
       });
-      return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
+      return res.status(202).json({ message: 'PLATFORM_GOVERNANCE_ENFORCED: ChangeRequest created for review', changeRequest });
     }
 
     const created = await prisma.entityType.create({
@@ -1288,7 +1470,14 @@ app.post('/api/ontology/entity-types', async (req, res) => {
     });
 
     // Track lineage
-    await lineageSvc.registerEdge({ sourceType: 'Project', sourceId: projectId, targetType: 'EntityType', targetId: created.id, transformation: 'created' });
+    await lineageSvc.registerEdge({
+      sourceType: 'Project',
+      sourceId: projectId,
+      targetType: 'EntityType',
+      targetId: created.id,
+      transformation: 'created',
+      projectId
+    });
 
     return res.status(201).json({ ...created, objectCount: 0 });
   } catch (err: any) {
@@ -1327,10 +1516,25 @@ app.post('/api/ontology/entity-types/:id/instances', enforceIdempotency(prisma),
     } else {
       // Fallback if broker is down: Synchronous insert
       const newInstance = await prisma.currentEntityState.create({
-        data: { logicalId: String(logicalId), entityTypeId, data: (data || {}) as Prisma.InputJsonValue, updatedAt: new Date() },
+        data: {
+          logicalId: String(logicalId),
+          entityTypeId,
+          data: (data || {}) as Prisma.InputJsonValue,
+          updatedAt: new Date(),
+          projectId: et.projectId
+        },
       });
-      await (prisma as any).entityEvent.create({
-        data: { logicalId: String(logicalId), entityTypeId, eventType: 'CREATED', payload: data || {} },
+      await recordDomainEvent({
+        prisma,
+        entityTypeId,
+        logicalId: String(logicalId),
+        entityVersion: et.version,
+        eventType: 'EntityCreated',
+        payload: {
+          previousState: null,
+          newState: (data || {}) as Record<string, unknown>,
+        },
+        projectId: et.projectId
       });
 
       if (redisClient) {
@@ -1525,7 +1729,7 @@ app.post('/api/ontology/relationships', async (req, res) => {
     }
 
     const rel = await prisma.relationshipDefinition.create({
-      data: { name, sourceEntityTypeId, targetEntityTypeId, branchName },
+      data: { name, sourceEntityTypeId, targetEntityTypeId, branchName, projectId: sourceEt.projectId },
       include: {
         sourceEntityType: { select: { id: true, name: true } },
         targetEntityType: { select: { id: true, name: true } },
@@ -1547,128 +1751,99 @@ app.delete('/api/ontology/relationships/:id', async (req, res) => {
   }
 });
 
-// ── GET /api/ontology/change-requests — list pending changes ──────────────────
-app.get('/api/ontology/change-requests', async (req, res) => {
+// ── GET /api/governance/change-requests — list changes ──────────────────
+app.get('/api/governance/change-requests', async (req, res) => {
   try {
-    const projectId = getProjectId(req);
-    const status = (req.query.status as string) || 'DRAFT';
+    const projectId = req.auth?.projectId || (req.query.projectId as string);
+    const status = req.query.status as string;
     if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
-    const crs = await prisma.changeRequest.findMany({
-      where: { projectId, status },
-      orderBy: { createdAt: 'desc' }
-    });
+    const crs = await governanceSvc.listChangeRequests(projectId, status);
     return res.json(crs);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
 
-// ── POST /api/ontology/change-requests — submit a branch for merge review ─────
-app.post('/api/ontology/change-requests', async (req, res) => {
+// ── POST /api/governance/change-requests/:id/approve ────────────────────────────
+app.post('/api/governance/change-requests/:id/approve', async (req, res) => {
   try {
-    const projectId = getProjectId(req);
-    const { branchName, description } = req.body;
-    if (!projectId || !branchName) return res.status(400).json({ error: 'Project ID and Branch name required' });
+    const reviewedBy = req.auth?.apiKeyName || 'system';
+    const cr = await governanceSvc.approveAndApply(req.params.id, reviewedBy);
+    return res.json({ success: true, cr });
+  } catch (err) {
+    logger.error({ crId: req.params.id, error: String(err) }, 'Failed to approve change request');
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
-    // Determine diff (very simple version for now)
-    const branchTypes = await prisma.entityType.findMany({ where: { projectId, branchName }, include: { attributes: true } });
-    const mainTypes = await prisma.entityType.findMany({ where: { projectId, branchName: 'main' }, include: { attributes: true } });
+// ── POST /api/governance/change-requests/:id/reject ─────────────────────────────
+app.post('/api/governance/change-requests/:id/reject', async (req, res) => {
+  try {
+    const reviewedBy = req.auth?.apiKeyName || 'system';
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Rejection reason required' });
 
-    const cr = await prisma.changeRequest.create({
-      data: {
-        projectId,
-        resourceType: 'Branch',
-        branchName,
-        proposedChanges: { description, entitiesCount: branchTypes.length },
-        diff: {
-          added: branchTypes.filter(bt => !mainTypes.find(mt => mt.name === bt.name)).map(t => t.name),
-          modified: branchTypes.filter(bt => mainTypes.find(mt => mt.name === bt.name)).map(t => t.name)
-        },
-        status: 'IN_REVIEW',
-        createdBy: req.auth?.apiKeyName || 'system'
-      }
-    });
-
-    return res.status(201).json(cr);
+    const cr = await governanceSvc.rejectChangeRequest(req.params.id, reviewedBy, reason);
+    return res.json({ success: true, cr });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
 });
 
-// ── POST /api/ontology/change-requests/:id/approve ────────────────────────────
-app.post('/api/ontology/change-requests/:id/approve', async (req, res) => {
+// ── LEGACY Ontology-specific Change Requests (for backward compatibility) ─────
+app.get('/api/ontology/change-requests', async (req, res) => {
   try {
-    const cr = await prisma.changeRequest.findUnique({ where: { id: req.params.id } });
-    if (!cr || cr.status !== 'IN_REVIEW') return res.status(404).json({ error: 'Reviewable ChangeRequest not found' });
+    const projectId = req.auth?.projectId || (req.query.projectId as string);
+    const crs = await governanceSvc.listChangeRequests(projectId || '', req.query.status as string);
+    return res.json(crs);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
-    if (cr.resourceType === 'Branch') {
-      // Execute Merge: Copy everything from branch to main
-      await prisma.$transaction(async (tx) => {
-        const branchTypes = await tx.entityType.findMany({
-          where: { projectId: cr.projectId, branchName: cr.branchName },
-          include: { attributes: true }
-        });
+// (Keep branch merge logic as specialized case in /api/ontology/change-requests)
+app.post('/api/ontology/change-requests', async (req, res) => {
+  try {
+    const projectId = req.auth?.projectId || (req.query.projectId as string);
+    const { branchName, description } = req.body;
+    if (!projectId || !branchName) return res.status(400).json({ error: 'Project ID and Branch name required' });
 
-        const branchRels = await tx.relationshipDefinition.findMany({
-          where: { branchName: cr.branchName, sourceEntityType: { projectId: cr.projectId } }
-        });
+    const branchTypes = await prisma.entityType.findMany({ where: { projectId, branchName }, include: { attributes: true } });
+    const mainTypes = await prisma.entityType.findMany({ where: { projectId, branchName: 'main' }, include: { attributes: true } });
 
-        // 1. Wipe existing main ontology for this project (or do partial update, but replace is safer for v1)
-        await tx.attributeDefinition.deleteMany({ where: { branchName: 'main', entityType: { projectId: cr.projectId } } });
-        await tx.relationshipDefinition.deleteMany({ where: { branchName: 'main', sourceEntityType: { projectId: cr.projectId } } });
-        await tx.entityType.deleteMany({ where: { projectId: cr.projectId, branchName: 'main' } });
+    const cr = await governanceSvc.createChangeRequest({
+      projectId,
+      resourceType: 'Branch',
+      proposedChanges: { description, entitiesCount: branchTypes.length },
+      createdBy: req.auth?.apiKeyName || 'system',
+      branchName
+    });
 
-        // 2. Clone branch to main
-        const oldToNewIdMap: Record<string, string> = {};
-        for (const et of branchTypes) {
-          const newEt = await tx.entityType.create({
-            data: {
-              name: et.name,
-              version: et.version + 1, // increment version on merge
-              branchName: 'main',
-              projectId: cr.projectId,
-              attributes: {
-                create: et.attributes.map(a => ({
-                  name: a.name,
-                  dataType: a.dataType,
-                  required: a.required,
-                  temporal: a.temporal,
-                  branchName: 'main'
-                }))
-              }
-            }
-          });
-          oldToNewIdMap[et.id] = newEt.id;
+    // Manually add diff for branch UI
+    const updatedCr = await prisma.changeRequest.update({
+      where: { id: cr.id },
+      data: {
+        diff: {
+          added: branchTypes.filter(bt => !mainTypes.find(mt => mt.name === bt.name)).map(t => t.name),
+          modified: branchTypes.filter(bt => mainTypes.find(mt => mt.name === bt.name)).map(t => t.name)
         }
+      }
+    });
 
-        for (const rel of branchRels) {
-          await tx.relationshipDefinition.create({
-            data: {
-              name: rel.name,
-              branchName: 'main',
-              sourceEntityTypeId: oldToNewIdMap[rel.sourceEntityTypeId]!,
-              targetEntityTypeId: oldToNewIdMap[rel.targetEntityTypeId]!
-            }
-          });
-        }
+    return res.status(201).json(updatedCr);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
-        // 3. Mark approved
-        await tx.changeRequest.update({
-          where: { id: cr.id },
-          data: { status: 'APPROVED', reviewedBy: req.auth?.apiKeyName || 'system', reviewedAt: new Date() }
-        });
-      });
-    } else {
-      // Individual EntityType change - simpler logic
-      // ... handled per-type for now ...
-      await prisma.changeRequest.update({
-        where: { id: cr.id },
-        data: { status: 'APPROVED', reviewedBy: req.auth?.apiKeyName || 'system', reviewedAt: new Date() }
-      });
-    }
+app.post('/api/v1/ontology/rebuild', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
-    return res.json({ status: 'merged' });
+    const result = await rebuilder.rebuildProjectOntology(projectId);
+    return res.json(result);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
@@ -1992,6 +2167,22 @@ app.put('/entity-types/:id', async (req, res) => {
     if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
     if (!projectId) return res.status(400).json({ error: 'Project ID is required for version update' });
 
+    const isProduction = projectId.toLowerCase().includes('prod') || projectId === 'proj-production';
+    if (isProduction) {
+      const changeRequest = await governanceSvc.createChangeRequest({
+        projectId,
+        resourceType: 'EntityType',
+        resourceId: existing.id,
+        proposedChanges: { name: existing.name, attributes },
+        createdBy: req.auth?.apiKeyName || 'system',
+        branchName: 'main'
+      });
+      return res.status(202).json({
+        message: 'PLATFORM_GOVERNANCE_ENFORCED: Schema update requires approval in production.',
+        changeRequest
+      });
+    }
+
     // Insert-only versioning: create a new EntityType row + new AttributeDefinition rows.
     const createdVersion = await prisma.entityType.create({
       data: {
@@ -2213,6 +2404,24 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
       return res.status(400).json({ error: 'body must be an array of instances' });
     }
 
+    // ABAC Enforcement
+    const actor = {
+      apiKeyId: req.auth?.apiKeyId || 'anonymous',
+      apiKeyName: req.auth?.apiKeyName || 'anonymous',
+      role: req.auth?.role || 'VIEWER'
+    };
+
+    const evalResult = await abac.evaluate(actor, 'WRITE', {
+      type: 'EntityType',
+      id: req.params.id,
+      attributes: { ...entityType }
+    });
+
+    if (!evalResult.allowed) {
+      logger.warn({ actor, entityTypeId: req.params.id, reason: evalResult.reason }, "ABAC Deny on Bulk Ingestion");
+      return res.status(403).json({ error: 'Access Denied', reason: evalResult.reason });
+    }
+
     const items = req.body as Array<Record<string, unknown>>;
     const now = new Date();
     const metaFields = new Set(['logicalId', 'validFrom', 'validTo']);
@@ -2274,7 +2483,7 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
         createdInstances.push(newInstance);
 
         const idempotencyKey = `EntityBulkStateChanged:${logicalId}:${now.toISOString()}`;
-        await tx.domainEvent.create({
+        const domainEvent = await tx.domainEvent.create({
           data: {
             idempotencyKey,
             eventType: 'EntityStateChanged',
@@ -2287,6 +2496,22 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
               validFrom: now.toISOString(),
             } as unknown as Prisma.InputJsonValue,
           },
+        });
+
+        // 3. Enqueue Outbox Event for external synchronization
+        await OutboxService.enqueue(tx, {
+          projectId: (req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID) as string,
+          aggregateType: 'EntityType',
+          aggregateId: entityType.id,
+          eventType: 'EntityStateChanged',
+          targetSystem: 'WEBHOOK', // Default to webhook for now
+          payload: {
+            entityTypeId: entityType.id,
+            logicalId,
+            data: attrData,
+            timestamp: now.toISOString()
+          },
+          domainEventId: domainEvent.id
         });
 
         await tx.currentEntityState.upsert({
@@ -2340,7 +2565,31 @@ app.get('/entity-types/:id/instances', async (req, res) => {
       orderBy: { transactionTime: 'desc' },
     });
 
-    return res.json(instances);
+    // ABAC Enforcement
+    const actor = {
+      apiKeyId: req.auth?.apiKeyId || 'anonymous',
+      apiKeyName: req.auth?.apiKeyName || 'anonymous',
+      role: req.auth?.role || 'VIEWER'
+    };
+
+    const evalResult = await abac.evaluate(actor, 'READ', {
+      type: 'EntityType',
+      id: req.params.id,
+      attributes: { ...entityType }
+    });
+
+    if (!evalResult.allowed) {
+      logger.warn({ actor, entityTypeId: req.params.id, reason: evalResult.reason }, "ABAC Deny on Entity Instances list");
+      return res.status(403).json({ error: 'Access Denied', reason: evalResult.reason });
+    }
+
+    // Apply Masking
+    const securedInstances = instances.map(inst => ({
+      ...inst,
+      data: abac.mask(inst.data, evalResult.maskedFields)
+    }));
+
+    return res.json(securedInstances);
   } catch (error) {
     return res.status(500).json({
       error: 'failed to list entity instances',
@@ -2388,7 +2637,29 @@ app.get('/entity-types/:id/instances/:logicalId/history', async (req, res) => {
       return res.status(404).json({ error: 'no instances found for this logicalId' });
     }
 
-    return res.json(instances);
+    // ABAC Enforcement
+    const actor = {
+      apiKeyId: req.auth?.apiKeyId || 'anonymous',
+      apiKeyName: req.auth?.apiKeyName || 'anonymous',
+      role: req.auth?.role || 'VIEWER'
+    };
+
+    // We evaluate against the EntityType as the primary resource
+    const evalResult = await abac.evaluate(actor, 'READ', {
+      type: 'EntityType',
+      id: req.params.id
+    });
+
+    if (!evalResult.allowed) {
+      return res.status(403).json({ error: 'Access Denied', reason: evalResult.reason });
+    }
+
+    const securedInstances = instances.map(inst => ({
+      ...inst,
+      data: abac.mask(inst.data, evalResult.maskedFields)
+    }));
+
+    return res.json(securedInstances);
   } catch (error) {
     return res.status(500).json({
       error: 'failed to fetch entity history',
@@ -2412,6 +2683,22 @@ app.get('/events', async (req, res) => {
       where,
       orderBy: { occurredAt: 'desc' },
     });
+
+    // ABAC Enforcement
+    const actor = {
+      apiKeyId: req.auth?.apiKeyId || 'anonymous',
+      apiKeyName: req.auth?.apiKeyName || 'anonymous',
+      role: req.auth?.role || 'VIEWER'
+    };
+
+    const evalResult = await abac.evaluate(actor, 'READ', {
+      type: 'DomainEvent',
+      attributes: { entityTypeId }
+    });
+
+    if (!evalResult.allowed) {
+      return res.status(403).json({ error: 'Access Denied', reason: evalResult.reason });
+    }
 
     return res.json(events);
   } catch (error) {
@@ -3072,6 +3359,7 @@ app.post('/integration-jobs', async (req, res) => {
       targetType: 'EntityType',
       targetId: targetEntityTypeId,
       transformation: `IntegrationJob:${job.id}`,
+      projectId: job.projectId
     });
 
     return res.status(201).json(job);
@@ -3171,10 +3459,14 @@ app.post('/integration-jobs/:id/execute', enforceIdempotency(prisma), async (req
     const { data } = req.body ?? {};
     const idempotencyKey = req.header('x-idempotency-key') || `manual-sync-${req.params.id}-${Date.now()}`;
 
+    const jobDef = await prisma.integrationJob.findUnique({ where: { id: req.params.id as string } });
+    if (!jobDef) return res.status(404).json({ error: 'Integration job not found' });
+
     const job = await orchestrator.enqueue('INTEGRATION_SYNC', { data }, {
       idempotencyKey,
       integrationJobId: req.params.id as string,
-      priority: 10 // high priority for manual runs
+      priority: 10, // high priority for manual runs
+      projectId: jobDef.projectId
     });
 
     return res.status(202).json({
@@ -3231,6 +3523,45 @@ app.get('/integration-jobs/:id/executions', async (req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { explorer: true }));
 
 // ── Orchestration & Job Queue ──────────────────────────────────────
+
+app.get('/api/v1/telemetry/workers', async (req, res) => {
+  try {
+    const workers = await prisma.jobWorker.findMany({
+      orderBy: { lastHeartbeat: 'desc' },
+      take: 20
+    });
+    return res.json(workers);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/v1/telemetry/outbox', async (req, res) => {
+  try {
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const stats = await prisma.outboxEvent.groupBy({
+      by: ['status'],
+      where: { projectId },
+      _count: true
+    });
+
+    const recentEvents = await prisma.outboxEvent.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: { project: { select: { name: true } } }
+    });
+
+    return res.json({
+      stats: stats.reduce((acc, curr) => ({ ...acc, [curr.status]: curr._count }), {}),
+      recent: recentEvents
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
 
 app.get('/api/v1/orchestration/jobs', async (req, res) => {
   try {
@@ -4063,8 +4394,12 @@ app.post('/api/v1/identity/run-match', async (req, res) => {
     const { entityTypeId, threshold } = req.body;
     if (!entityTypeId) return res.status(400).json({ error: 'entityTypeId is required' });
 
+    const et = await prisma.entityType.findUnique({ where: { id: entityTypeId } });
+    if (!et) return res.status(404).json({ error: 'entityType not found' });
+
     const count = await IdentityService.runFuzzyMatchJob(entityTypeId, prisma as any, {
       threshold: threshold ?? 0.75,
+      projectId: et.projectId
     });
 
     return res.json({ success: true, newCandidatesCreated: count });
@@ -4076,8 +4411,16 @@ app.post('/api/v1/identity/run-match', async (req, res) => {
 // Merge two candidates (human review: approve merge)
 app.post('/api/v1/identity/candidates/:id/merge', async (req, res) => {
   try {
+    const candidate = await (prisma as any).matchCandidate.findUnique({ where: { id: req.params.id } });
+    if (!candidate) return res.status(404).json({ error: 'MatchCandidate not found' });
+
     const reviewerName = req.auth?.apiKeyName ?? 'system';
-    await IdentityService.mergeEntities(req.params.id, reviewerName, prisma as any);
+    await IdentityService.mergeEntities({
+      candidateId: req.params.id,
+      reviewerName,
+      projectId: candidate.projectId,
+      prisma: prisma as any
+    });
 
     // Audit log
     await (prisma as any).auditLog.create({
@@ -4088,6 +4431,7 @@ app.post('/api/v1/identity/candidates/:id/merge', async (req, res) => {
         resourceType: 'MatchCandidate',
         resourceId: req.params.id,
         metadata: { correlationId: req.correlationId },
+        projectId: candidate.projectId
       }
     });
 
@@ -4151,9 +4495,26 @@ app.post('/api/v1/identity/merge-batch', async (req, res) => {
     const reviewerName = req.auth?.apiKeyName ?? 'system';
     const results = [];
 
+    const candidates = await (prisma as any).matchCandidate.findMany({
+      where: { id: { in: candidateIds } }
+    });
+    const candidateMap = new Map(candidates.map((c: any) => [c.id, c]));
+
     for (const id of candidateIds) {
       try {
-        await IdentityService.mergeEntities(id, reviewerName, prisma as any);
+        const candidate = candidateMap.get(id);
+        if (!candidate) {
+          results.push({ id, status: 'error', error: 'MatchCandidate not found' });
+          continue;
+        }
+
+        const currentCandidate = candidate as any;
+        await IdentityService.mergeEntities({
+          candidateId: id,
+          reviewerName,
+          projectId: currentCandidate.projectId || 'default',
+          prisma: prisma as any
+        });
 
         await (prisma as any).auditLog.create({
           data: {
@@ -4163,6 +4524,7 @@ app.post('/api/v1/identity/merge-batch', async (req, res) => {
             resourceType: 'MatchCandidate',
             resourceId: id,
             metadata: { correlationId: req.correlationId, batch: true },
+            projectId: currentCandidate.projectId || 'default'
           }
         });
         results.push({ id, status: 'success' });
@@ -4734,7 +5096,7 @@ Task the ${asset.model || 'MQ-9 Reaper'} (${asset.callsign || 'REAPER-1'}) to en
 ### Course of Action 2: Ground Assault
 Deploy ${unit.vehicle || 'Stryker ICV'} ${unit.unit_size || 'Platoon'} to intercept.
 *   **Time to Target:** 45 minutes
-*   **Risk:** High 
+*   **Risk:** High
 *   **Action:** \`[Action: Deploy Ground Forces]\`
 
 ### Course of Action 3: Jamming & Anti-Armor (Recommended)
@@ -5458,278 +5820,7 @@ app.get('/api/metrics/summary', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 14: AIP Logic — Visual LLM Workflow Builder
 // ─────────────────────────────────────────────────────────────────────────────
-
-import OpenAI from 'openai';
-
-const _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
-
-/** Interpolate {{varName}} template tokens from a context map */
-function interpolate(template: string, ctx: Record<string, any>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const val = ctx[key];
-    return val !== undefined ? (typeof val === 'object' ? JSON.stringify(val) : String(val)) : `{{${key}}}`;
-  });
-}
-
-/** Execute a workflow by its DB id — walks the ReactFlow DAG in topological order */
-async function executeWorkflow(workflowId: string, runId: string, inputs: Record<string, any> = {}) {
-  const workflow = await prisma.aIWorkflow.findUnique({ where: { id: workflowId } });
-  if (!workflow) throw new Error('Workflow not found');
-
-  const nodes = (workflow.nodes as any[]) || [];
-  const edges = (workflow.edges as any[]) || [];
-  const logs: string[] = [];
-  const steps: any[] = [];
-
-  const log = async (msg: string) => {
-    const line = `[${new Date().toISOString()}] ${msg}`;
-    logs.push(line);
-    if (logs.length % 3 === 0 || msg.startsWith('✓') || msg.startsWith('✗')) {
-      await prisma.aIWorkflowRun.update({ where: { id: runId }, data: { logs } });
-    }
-    const bcast = (global as any).broadcastToTopics;
-    if (bcast) bcast([`workflow:${workflowId}`, 'workflows:*'], { type: 'workflow.progress', workflowId, runId, log: line, ts: Date.now() });
-  };
-
-  const updateStep = async (step: any) => {
-    const idx = steps.findIndex(s => s.stepId === step.stepId);
-    if (idx >= 0) steps[idx] = step; else steps.push(step);
-    await prisma.aIWorkflowRun.update({ where: { id: runId }, data: { steps } });
-  };
-
-  // ── Topological sort ──────────────────────────────────────────────────────
-  const adjOut = new Map<string, string[]>();
-  const indegree = new Map<string, number>();
-  nodes.forEach((n: any) => { adjOut.set(n.id, []); indegree.set(n.id, 0); });
-  edges.forEach((e: any) => {
-    adjOut.get(e.source)?.push(e.target);
-    indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-  });
-  const queue = nodes.filter((n: any) => (indegree.get(n.id) ?? 0) === 0).map((n: any) => n.id);
-  const order: string[] = [];
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
-    order.push(cur);
-    for (const next of (adjOut.get(cur) ?? [])) {
-      const deg = (indegree.get(next) ?? 0) - 1;
-      indegree.set(next, deg);
-      if (deg === 0) queue.push(next);
-    }
-  }
-
-  // ── Execution context: carries outputs between steps ──────────────────────
-  const nodeOutputs = new Map<string, any>(); // nodeId → output value
-  // Allow inputs to be referenced by name
-  const ctx: Record<string, any> = { ...inputs };
-
-  await log(`Starting workflow "${workflow.name}" — ${order.length} nodes`);
-
-  // ── Execute each node ─────────────────────────────────────────────────────
-  for (const nodeId of order) {
-    const node = nodes.find((n: any) => n.id === nodeId);
-    if (!node) continue;
-
-    const nodeType: string = node.type || node.data?.nodeType || 'unknown';
-    const nodeLabel: string = node.data?.label || nodeType;
-    const stepStart = Date.now();
-    const step: any = { stepId: nodeId, name: nodeLabel, type: nodeType, status: 'running', input: null, output: null, error: null, durationMs: 0 };
-    await updateStep(step);
-    await log(`→ [${nodeType}] "${nodeLabel}"`);
-
-    // Collect inputs from upstream nodes
-    const inEdges = edges.filter((e: any) => e.target === nodeId);
-    const upstreamOutputs: Record<string, any> = {};
-    for (const e of inEdges) {
-      const upOut = nodeOutputs.get(e.source);
-      if (upOut !== undefined) upstreamOutputs[e.source] = upOut;
-    }
-    // Also expose each upstream output by label for {{varName}} interpolation
-    for (const e of inEdges) {
-      const srcNode = nodes.find((n: any) => n.id === e.source);
-      if (srcNode) {
-        const srcLabel = (srcNode.data?.label || srcNode.id).replace(/\s+/g, '_').toLowerCase();
-        ctx[srcLabel] = nodeOutputs.get(e.source) ?? null;
-        ctx[`${srcNode.type || 'node'}_output`] = nodeOutputs.get(e.source) ?? null;
-      }
-    }
-    step.input = Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : inputs;
-
-    try {
-      let output: any = null;
-
-      switch (nodeType) {
-        // ── LLM Prompt ───────────────────────────────────────────────────────
-        case 'llmPrompt': {
-          const systemPrompt = interpolate(node.data?.systemPrompt || 'You are a helpful AI assistant.', ctx);
-          const userPrompt = interpolate(node.data?.userPrompt || node.data?.prompt || 'Hello', ctx);
-          const model = node.data?.model || 'gpt-4o-mini';
-          const temperature = parseFloat(node.data?.temperature ?? '0.7');
-
-          await log(`  Calling LLM (${model}) with ${userPrompt.length} char prompt`);
-
-          if (!process.env.OPENAI_API_KEY) {
-            output = `[MOCK LLM] Would call ${model} with: "${userPrompt.slice(0, 100)}"`;
-            await log('  ⚠ No OPENAI_API_KEY — returning mock response');
-          } else {
-            const completion = await _openai.chat.completions.create({
-              model, temperature,
-              messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-              ]
-            });
-            output = completion.choices[0]?.message?.content ?? '';
-            await log(`  ✓ LLM returned ${String(output).length} chars`);
-          }
-          ctx['llm_output'] = output;
-          break;
-        }
-
-        // ── Ontology Query ───────────────────────────────────────────────────
-        case 'ontologyQuery': {
-          const entityTypeName: string = node.data?.entityType || '';
-          const limitRaw = parseInt(node.data?.limit ?? '20', 10);
-          const limit = isNaN(limitRaw) ? 20 : Math.min(limitRaw, 200);
-
-          await log(`  Querying entity type "${entityTypeName}" (limit ${limit})`);
-          const entityType = await prisma.entityType.findFirst({ where: { name: entityTypeName } });
-          if (!entityType) {
-            await log(`  ⚠ Entity type "${entityTypeName}" not found`);
-            output = [];
-          } else {
-            const records = await prisma.currentEntityState.findMany({
-              where: { entityTypeId: entityType.id },
-              take: limit,
-              orderBy: { updatedAt: 'desc' }
-            });
-            output = records.map((r: any) => ({ logicalId: r.logicalId, ...r.data }));
-            await log(`  ✓ Retrieved ${output.length} records`);
-          }
-          ctx['ontology_output'] = output;
-          break;
-        }
-
-        // ── Function Call ────────────────────────────────────────────────────
-        case 'functionCall': {
-          const fnId: string = node.data?.functionId || '';
-          const fn = fnId ? await prisma.aIPFunction.findUnique({ where: { id: fnId } }) : null;
-          if (!fn) { output = { error: `Function ${fnId} not found` }; break; }
-
-          await log(`  Executing function "${fn.name}"`);
-          const rawMapping: Record<string, string> = node.data?.inputMapping || {};
-          const parsedArgs: Record<string, any> = {};
-          for (const [param, tpl] of Object.entries(rawMapping)) {
-            parsedArgs[param] = interpolate(tpl, ctx);
-          }
-
-          try {
-            const AsyncFn = Object.getPrototypeOf(async function () { }).constructor;
-            const execFn = new AsyncFn('parsedArgs', 'context', `"use strict";\n${fn.code}`);
-            output = await Promise.race([
-              execFn(parsedArgs, ctx),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('Function timeout (30s)')), 30_000))
-            ]);
-            await log(`  ✓ Function returned ${JSON.stringify(output).slice(0, 80)}`);
-          } catch (fnErr: any) {
-            output = { error: fnErr.message };
-            await log(`  ✗ Function error: ${fnErr.message}`);
-          }
-          ctx['function_output'] = output;
-          break;
-        }
-
-        // ── Action Trigger ───────────────────────────────────────────────────
-        case 'actionTrigger': {
-          const actionId: string = node.data?.actionId || '';
-          const action = actionId ? await prisma.aIPAction.findUnique({ where: { id: actionId } }) : null;
-          if (!action) { output = { error: `Action ${actionId} not found` }; break; }
-
-          await log(`  Triggering action "${action.name}"`);
-          const paramMapping: Record<string, string> = node.data?.paramMapping || {};
-          const resolvedParams: Record<string, any> = {};
-          for (const [k, v] of Object.entries(paramMapping)) resolvedParams[k] = interpolate(v, ctx);
-
-          try {
-            const AsyncFn = Object.getPrototypeOf(async function () { }).constructor;
-            const execFn = new AsyncFn('params', 'prisma', 'context', `"use strict";\n${(action as any).code || 'return {ok:true};'}`);
-            output = await Promise.race([
-              execFn(resolvedParams, prisma, ctx),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('Action timeout (30s)')), 30_000))
-            ]);
-            await log(`  ✓ Action triggered, result: ${JSON.stringify(output).slice(0, 80)}`);
-          } catch (actErr: any) {
-            output = { error: actErr.message };
-          }
-          ctx['action_output'] = output;
-          break;
-        }
-
-        // ── Condition ────────────────────────────────────────────────────────
-        case 'condition': {
-          const expression = interpolate(node.data?.expression || 'true', ctx);
-          await log(`  Evaluating condition: ${expression.slice(0, 80)}`);
-          try {
-            const fn = new Function('ctx', `"use strict"; with(ctx) { return !!(${expression}); }`);
-            const result = fn(ctx);
-            output = { result, branch: result ? 'true' : 'false' };
-            ctx['condition_result'] = result;
-            await log(`  ✓ Condition → ${result ? 'TRUE branch' : 'FALSE branch'}`);
-          } catch (condErr: any) {
-            output = { result: false, error: condErr.message };
-            await log(`  ✗ Condition error: ${condErr.message}`);
-          }
-          break;
-        }
-
-        // ── Output ───────────────────────────────────────────────────────────
-        case 'output': {
-          const label = node.data?.label || 'Output';
-          const valueTemplate = node.data?.valueTemplate || '{{llm_output}}';
-          output = interpolate(valueTemplate, ctx);
-          await log(`  ✓ Output "${label}": ${String(output).slice(0, 100)}`);
-
-          // Optional: write back to Ontology
-          if (node.data?.writeToOntology && node.data?.entityType) {
-            const etName: string = node.data.entityType;
-            const logicalId: string = interpolate(node.data?.logicalId || `workflow-${workflowId}-${Date.now()}`, ctx);
-            const et = await prisma.entityType.findFirst({ where: { name: etName } });
-            if (et) {
-              const projectId = (global as any).DEFAULT_PROJECT_ID || '';
-              await prisma.currentEntityState.upsert({
-                where: { logicalId },
-                create: { entityTypeId: et.id, logicalId, data: { value: output, generatedAt: new Date().toISOString() }, updatedAt: new Date() },
-                update: { data: { value: output, generatedAt: new Date().toISOString() }, updatedAt: new Date() }
-              });
-              await log(`  ✓ Wrote output to Ontology entity ${etName}/${logicalId}`);
-            }
-          }
-          ctx['final_output'] = output;
-          break;
-        }
-
-        default:
-          output = Object.values(upstreamOutputs)[0] ?? null;
-          await log(`  Unknown node type "${nodeType}" — passing through`);
-      }
-
-      nodeOutputs.set(nodeId, output);
-      step.status = 'success';
-      step.output = output;
-      step.durationMs = Date.now() - stepStart;
-      await updateStep(step);
-    } catch (err: any) {
-      step.status = 'failed';
-      step.error = String(err?.message ?? err);
-      step.durationMs = Date.now() - stepStart;
-      await updateStep(step);
-      await log(`  ✗ "${nodeLabel}" failed: ${step.error}`);
-    }
-  }
-
-  await log(`Workflow complete`);
-  const finalOutput = ctx['final_output'] ?? ctx['llm_output'] ?? null;
-  return { status: 'success', summary: { finalOutput, context: ctx }, steps, logs };
-}
+// executeWorkflow body moved to workflow-engine.ts
 
 // ── Workflow REST Routes ──────────────────────────────────────────────────────
 
@@ -5789,20 +5880,14 @@ app.post('/api/workflows/:id/run', async (req, res) => {
     const run = await prisma.aIWorkflowRun.create({
       data: { workflowId: wf.id, projectId: projectId || '', status: 'running', trigger: req.body?.trigger || 'manual', inputs: req.body?.inputs || {} }
     });
-    res.status(202).json({ runId: run.id, workflowId: wf.id, status: 'running' });
+    // Enqueue to background worker for distributed execution
+    await orchestrator.enqueue('AI_WORKFLOW', {
+      workflowId: wf.id,
+      runId: run.id,
+      inputs: req.body?.inputs || {}
+    });
 
-    executeWorkflow(wf.id, run.id, req.body?.inputs || {})
-      .then(async (result) => {
-        await prisma.aIWorkflowRun.update({
-          where: { id: run.id },
-          data: { status: result.status, steps: result.steps, logs: result.logs, summary: result.summary, finishedAt: new Date(), duration: Date.now() - run.startedAt.getTime() }
-        });
-        const bcast = (global as any).broadcastToTopics;
-        if (bcast) bcast([`workflow:${wf.id}`, 'workflows:*'], { type: 'workflow.complete', workflowId: wf.id, runId: run.id, status: result.status, ts: Date.now() });
-      })
-      .catch(async (err) => {
-        await prisma.aIWorkflowRun.update({ where: { id: run.id }, data: { status: 'failed', finishedAt: new Date(), logs: [String(err)] } });
-      });
+    res.status(202).json({ runId: run.id, workflowId: wf.id, status: 'running' });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
@@ -5827,203 +5912,7 @@ app.get('/api/workflows/:id/runs/:runId', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PHASE 13: Data Pipeline Real Execution Engine
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Execute a pipeline by its DB id — walks the ReactFlow DAG in topo order */
-async function executePipeline(pipelineId: string, runId: string, trigger = 'manual') {
-  const pipeline = await prisma.pipeline.findUnique({ where: { id: pipelineId } });
-  if (!pipeline) throw new Error('Pipeline not found');
-
-  const nodes = (pipeline.nodes as any[]) || [];
-  const edges = (pipeline.edges as any[]) || [];
-
-  const logs: string[] = [];
-  const steps: any[] = [];
-  let totalIn = 0, totalOut = 0, errorCount = 0;
-
-  const log = async (msg: string) => {
-    const line = `[${new Date().toISOString()}] ${msg}`;
-    logs.push(line);
-    if (logs.length % 5 === 0 || msg.startsWith('✓') || msg.startsWith('✗')) {
-      await prisma.pipelineRun.update({ where: { id: runId }, data: { logs } });
-    }
-    // Broadcast progress via WS
-    const broadcast = (global as any).broadcastToTopics;
-    if (broadcast) {
-      broadcast([`pipeline:${pipelineId}`, 'pipelines:*'], {
-        type: 'pipeline.progress', pipelineId, runId, log: line, ts: Date.now()
-      });
-    }
-  };
-
-  const updateStep = async (step: any) => {
-    const idx = steps.findIndex(s => s.stepId === step.stepId);
-    if (idx >= 0) steps[idx] = step; else steps.push(step);
-    await prisma.pipelineRun.update({ where: { id: runId }, data: { steps } });
-  };
-
-  // ── Build topological order ──────────────────────────────────────────────
-  const adjOut = new Map<string, string[]>();
-  const indegree = new Map<string, number>();
-  nodes.forEach((n: any) => { adjOut.set(n.id, []); indegree.set(n.id, 0); });
-  edges.forEach((e: any) => {
-    adjOut.get(e.source)?.push(e.target);
-    indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1);
-  });
-  const queue = nodes.filter((n: any) => (indegree.get(n.id) ?? 0) === 0).map((n: any) => n.id);
-  const order: string[] = [];
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
-    order.push(cur);
-    for (const next of (adjOut.get(cur) ?? [])) {
-      const deg = (indegree.get(next) ?? 0) - 1;
-      indegree.set(next, deg);
-      if (deg === 0) queue.push(next);
-    }
-  }
-
-  // ── Node data map (carry outputs between steps) ──────────────────────────
-  const nodeData = new Map<string, any[]>(); // nodeId → output records
-
-  await log(`Starting pipeline "${pipeline.name}" — ${order.length} nodes`);
-
-  // ── Execute each node in DAG order ──────────────────────────────────────
-  for (const nodeId of order) {
-    const node = nodes.find((n: any) => n.id === nodeId);
-    if (!node) continue;
-
-    const nodeType: string = node.type || node.data?.type || 'unknown';
-    const nodeLabel: string = node.data?.label || nodeId;
-    const stepStart = Date.now();
-    const step = { stepId: nodeId, name: nodeLabel, type: nodeType, status: 'running', recordsIn: 0, recordsOut: 0, error: null as string | null, durationMs: 0 };
-    await updateStep(step);
-    await log(`→ Step [${nodeType}] "${nodeLabel}"`);
-
-    try {
-      // Collect input from upstream nodes
-      const inEdges = edges.filter((e: any) => e.target === nodeId);
-      const inputRecords: any[] = inEdges.flatMap((e: any) => nodeData.get(e.source) ?? []);
-      step.recordsIn = inputRecords.length;
-      totalIn += inputRecords.length;
-
-      let output: any[] = [];
-
-      if (nodeType === 'dataSource' || nodeType === 'DataSourceNode') {
-        // Use existing integration job / data source fetch
-        const jobId = node.data?.jobId || node.data?.integrationJobId;
-        if (jobId) {
-          await log(`  Executing IntegrationJob ${jobId}`);
-          const result = await executeJob(jobId, prisma);
-          output = [{ status: result.status, recordsProcessed: result.recordsProcessed }];
-          totalOut += result.recordsProcessed;
-          await log(`  ✓ Job done: ${result.recordsProcessed} records processed`);
-        } else if (node.data?.url || node.data?.connectionConfig?.url) {
-          // Direct fetch
-          const url = node.data?.url || node.data?.connectionConfig?.url;
-          await log(`  Fetching ${url}`);
-          const resp = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-          const raw = await resp.json();
-          output = Array.isArray(raw) ? raw : [raw];
-          await log(`  ✓ Fetched ${output.length} records`);
-          totalOut += output.length;
-        } else {
-          output = [];
-          await log(`  No job or URL — empty source`);
-        }
-      } else if (nodeType === 'transform' || nodeType === 'TransformNode') {
-        // JS transform using eval
-        const code = node.data?.code || node.data?.transformCode || '';
-        await log(`  Running JS transform (${code.length} chars)`);
-        if (code && inputRecords.length > 0) {
-          const AsyncFn = Object.getPrototypeOf(async function () { }).constructor;
-          const fn = new AsyncFn('records', `"use strict";\n${code}`);
-          const result = await Promise.race([
-            fn(inputRecords),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('Transform timeout (30s)')), 30_000))
-          ]);
-          output = Array.isArray(result) ? result : [result];
-          await log(`  ✓ Transform: ${inputRecords.length} → ${output.length} records`);
-        } else {
-          output = inputRecords;
-          await log(`  No code or no input — passing through`);
-        }
-        totalOut += output.length;
-      } else if (nodeType === 'sqlQuery' || nodeType === 'SQLNode') {
-        // Execute raw SQL against Postgres and produce records
-        const sql = node.data?.sql || node.data?.query || '';
-        await log(`  Running SQL: ${sql.slice(0, 80)}...`);
-        if (sql) {
-          const res = await pool.query(sql);
-          output = res.rows;
-          await log(`  ✓ SQL returned ${output.length} rows`);
-          totalOut += output.length;
-        } else {
-          output = inputRecords;
-          await log(`  No SQL — passing through`);
-        }
-      } else if (nodeType === 'filter' || nodeType === 'FilterNode') {
-        // Inline filter using a JS predicate
-        const predicate = node.data?.predicate || node.data?.condition || 'return true';
-        await log(`  Filtering ${inputRecords.length} records`);
-        const fn = new Function('record', `"use strict"; ${predicate}`);
-        output = inputRecords.filter((r: any) => { try { return fn(r); } catch { return false; } });
-        await log(`  ✓ Filter: ${inputRecords.length} → ${output.length} records`);
-        totalOut += output.length;
-      } else if (nodeType === 'entityTarget' || nodeType === 'EntityTargetNode') {
-        // Write records to CurrentEntityState
-        const entityTypeName: string = node.data?.entityType || node.data?.label || '';
-        const logicalIdField: string = node.data?.logicalIdField || 'id';
-        await log(`  Writing ${inputRecords.length} records to entity type "${entityTypeName}"`);
-        let written = 0;
-        const entityType = await prisma.entityType.findFirst({ where: { name: entityTypeName } });
-        if (entityType) {
-          for (const rec of inputRecords) {
-            const logicalId = String(rec[logicalIdField] ?? rec.id ?? `gen-${Date.now()}-${written}`);
-            const projectId = (global as any).DEFAULT_PROJECT_ID;
-            try {
-              await prisma.currentEntityState.upsert({
-                where: { logicalId },
-                create: { entityTypeId: entityType.id, logicalId, data: rec, updatedAt: new Date() },
-                update: { data: rec, updatedAt: new Date() },
-              });
-              // Broadcast entity change
-              const bcast = (global as any).broadcastEntityChange;
-              if (bcast) bcast(entityTypeName, logicalId, rec, 'updated');
-              written++;
-            } catch { errorCount++; }
-          }
-          await log(`  ✓ Wrote ${written}/${inputRecords.length} entities`);
-          totalOut += written;
-        } else {
-          await log(`  ⚠ Entity type "${entityTypeName}" not found — skipping write`);
-        }
-        output = inputRecords;
-      } else {
-        // Unknown node type — pass through
-        output = inputRecords;
-        await log(`  Unknown node type "${nodeType}" — passing through`);
-      }
-
-      nodeData.set(nodeId, output);
-      step.status = 'success';
-      step.recordsOut = output.length;
-      step.durationMs = Date.now() - stepStart;
-      await updateStep(step);
-      await log(`  ✓ "${nodeLabel}" done in ${step.durationMs}ms`);
-    } catch (err: any) {
-      errorCount++;
-      step.status = 'failed';
-      step.error = String(err?.message ?? err);
-      step.durationMs = Date.now() - stepStart;
-      await updateStep(step);
-      await log(`  ✗ "${nodeLabel}" failed: ${step.error}`);
-    }
-  }
-
-  const runStatus = errorCount > 0 && totalOut === 0 ? 'failed' : 'success';
-  await log(`Pipeline complete — ${totalOut} records output, ${errorCount} errors`);
-
-  return { status: runStatus, recordsIn: totalIn, recordsOut: totalOut, errorCount, logs, steps };
-}
+// executePipeline body moved to pipeline-engine.ts
 
 // ── REST routes ───────────────────────────────────────────────────────────────
 
@@ -6091,37 +5980,15 @@ app.post('/api/pipelines/:id/run', async (req, res) => {
       data: { pipelineId: pipeline.id, projectId: projectId || '', status: 'running', trigger: req.body?.trigger || 'manual' }
     });
 
+    // Enqueue to background worker for distributed execution
+    await orchestrator.enqueue('PIPELINE_RUN', {
+      pipelineId: pipeline.id,
+      runId: run.id,
+      trigger: req.body?.trigger || 'manual'
+    });
+
     // Respond immediately with runId so client can poll
     res.status(202).json({ runId: run.id, pipelineId: pipeline.id, status: 'running' });
-
-    // Execute asynchronously
-    executePipeline(pipeline.id, run.id, req.body?.trigger || 'manual')
-      .then(async (result) => {
-        await prisma.pipelineRun.update({
-          where: { id: run.id },
-          data: {
-            status: result.status, recordsIn: result.recordsIn,
-            recordsOut: result.recordsOut, errorCount: result.errorCount,
-            logs: result.logs, steps: result.steps,
-            finishedAt: new Date(), duration: Date.now() - run.startedAt.getTime(),
-            summary: { recordsIn: result.recordsIn, recordsOut: result.recordsOut, errorCount: result.errorCount }
-          }
-        });
-        // Final WS broadcast
-        const broadcast = (global as any).broadcastToTopics;
-        if (broadcast) {
-          broadcast([`pipeline:${pipeline.id}`, 'pipelines:*'], {
-            type: 'pipeline.complete', pipelineId: pipeline.id, runId: run.id,
-            status: result.status, recordsIn: result.recordsIn, recordsOut: result.recordsOut, ts: Date.now()
-          });
-        }
-      })
-      .catch(async (err) => {
-        await prisma.pipelineRun.update({
-          where: { id: run.id },
-          data: { status: 'failed', finishedAt: new Date(), logs: [String(err)] }
-        });
-      });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
@@ -7351,6 +7218,13 @@ app.post('/api/spark/jobs/:id/run', async (req, res) => {
       }
     };
     const run = await sparkService.executeJob(req.params.id, "manual", req.body.inputData, broadcastFn);
+
+    // Enqueue to background worker
+    await orchestrator.enqueue('SPARK_JOB', {
+      jobId: req.params.id,
+      runId: run.id
+    });
+
     return res.status(202).json(run);
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
@@ -7374,8 +7248,16 @@ app.get('/api/spark/jobs/:id/runs', async (req, res) => {
 app.post('/api/provenance/record', async (req, res) => {
   try {
     const { entityId, entityType, operationType, sourceSystem, operatorId, fields } = req.body;
+    const provProjectId = req.body.projectId || req.header('X-Project-Id') || 'default';
     const chains = await ProvenanceService.recordCryptoProvenance(
-      entityId, entityType, operationType || 'write', sourceSystem, operatorId || 'system', fields, prisma
+      entityId,
+      entityType,
+      operationType || 'write',
+      sourceSystem,
+      operatorId || 'system',
+      fields,
+      provProjectId,
+      prisma as any
     );
     return res.status(201).json({ status: 'ok', records: chains.length });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
@@ -7383,8 +7265,13 @@ app.post('/api/provenance/record', async (req, res) => {
 
 app.post('/api/provenance/seal/:entityId', async (req, res) => {
   try {
+    const sealProjectId = req.body.projectId || req.header('X-Project-Id') || 'default';
     const seal = await ProvenanceService.createIntegritySeal(
-      req.params.entityId, req.body.entityType || 'Unknown', req.body.sealedBy || 'system', prisma
+      req.params.entityId,
+      req.body.entityType || 'Unknown',
+      req.body.sealedBy || 'system',
+      sealProjectId,
+      prisma as any
     );
     return res.status(201).json(seal);
   } catch (err) { return res.status(500).json({ error: String(err) }); }

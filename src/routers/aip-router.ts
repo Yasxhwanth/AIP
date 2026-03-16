@@ -1,32 +1,44 @@
 import { Router } from 'express';
 import { AIPExecutor } from '../aip-executor';
 import { PrismaClient } from '../generated/prisma';
-import { defaultToolRegistry } from '../aip-tools';
+import { defaultToolRegistry, zodToGeminiSchema } from '../aip-tools';
 import { getLlmClient } from '../lib/llm-factory';
+import { LlmMessage } from '../lib/llm-client';
+import { GovernanceService } from '../governance-service';
+
+// ── Safety Tiers ──────────────────────────────────────────────────
+// Tools classified as WRITE require human approval for READ_ONLY agents.
+const WRITE_TOOLS = new Set(['propose_change', 'run_pipeline', 'create_change_request']);
+const READ_ONLY_SAFETY_TIER = 'READ_ONLY';
 
 export function createAipRouter(prisma: PrismaClient) {
     const router = Router();
     const executor = new AIPExecutor(prisma, defaultToolRegistry);
     const llm = getLlmClient();
+    const governanceSvc = new GovernanceService(prisma);
 
     /**
-     * Discovery: List available tools
+     * Discovery: List available tools with safety tier metadata
      */
     router.get('/tools', async (req, res) => {
         try {
             const tools = await executor.listTools();
-            res.json(tools);
+            const enriched = tools.map((t: any) => ({
+                ...t,
+                safetyTier: WRITE_TOOLS.has(t.name) ? 'WRITE' : 'READ'
+            }));
+            res.json(enriched);
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }
     });
 
     /**
-     * Execution: Run a tool
+     * Execution: Run a tool directly
      */
     router.post('/execute', async (req, res) => {
         const { toolName, parameters } = req.body;
-        const projectId = (req as any).projectId;
+        const projectId = (req as any).projectId || req.body.projectId;
 
         if (!projectId) {
             return res.status(401).json({ error: 'Tenant context (projectId) missing' });
@@ -36,7 +48,13 @@ export function createAipRouter(prisma: PrismaClient) {
             const result = await executor.execute({
                 toolName,
                 parameters,
-                projectId
+                projectId,
+                actor: (req as any).auth?.apiKeyName || 'system',
+                actorMetadata: {
+                    role: (req as any).auth?.role,
+                    correlationId: (req as any).correlationId,
+                    ip: req.ip
+                }
             });
 
             if (result.success) {
@@ -50,75 +68,210 @@ export function createAipRouter(prisma: PrismaClient) {
     });
 
     /**
+     * Propose Action: Create a ChangeRequest for write-tool calls that need approval
+     */
+    router.post('/propose-action', async (req, res) => {
+        const { toolName, parameters, agentId } = req.body;
+        const projectId = (req as any).projectId || req.body.projectId || 'proj-demo';
+        const actor = (req as any).auth?.apiKeyName || 'aip-agent';
+
+        if (!toolName) {
+            return res.status(400).json({ error: 'toolName is required' });
+        }
+
+        try {
+            const cr = await governanceSvc.createChangeRequest({
+                projectId,
+                resourceType: 'AGENT_ACTION',
+                resourceId: agentId,
+                proposedChanges: { toolName, parameters },
+                createdBy: actor,
+                branchName: 'main'
+            });
+
+            return res.status(202).json({
+                proposalId: cr.id,
+                status: cr.status,
+                message: `Action '${toolName}' requires administrator approval before execution.`
+            });
+        } catch (err: any) {
+            return res.status(500).json({ error: err.message });
+        }
+    });
+
+    /**
      * Assist: Natural language interaction with Gemini-backed abstraction
      */
     router.post('/assist', async (req, res) => {
-        const { message, page, vars, projectId: reqProjectId } = req.body;
+        const { message, page, vars, projectId: reqProjectId, agentId } = req.body;
         const projectId = (req as any).projectId || reqProjectId || 'proj-demo';
+        const actor = (req as any).auth?.apiKeyName || 'system';
 
         try {
-            // 1. Define page-specific system guidance
+            // 1. Look up agent safety tier if agentId provided
+            let agentSafetyTier = READ_ONLY_SAFETY_TIER; // default: conservative
+            if (agentId) {
+                const agent = await (prisma as any).aIPAgent?.findUnique({ where: { id: agentId } });
+                if (agent?.allowedTools) {
+                    // Infer safety tier: if agent has any write tools, it's WRITE_CAPABLE
+                    const agentWriteTools = agent.allowedTools.filter((t: string) => WRITE_TOOLS.has(t));
+                    if (agentWriteTools.length > 0) agentSafetyTier = 'WRITE_CAPABLE';
+                }
+            }
+
+            // 2. Prepare tool definitions for Gemini (filtered by agent tier)
+            const allTools = defaultToolRegistry.getTools();
+            const allowedToolDefs = allTools
+                .filter(tool => agentSafetyTier !== READ_ONLY_SAFETY_TIER || !WRITE_TOOLS.has(tool.name))
+                .map(tool => ({
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: zodToGeminiSchema(tool.parameters)
+                }));
+
+            // 3. Page-specific system guidance
             const pageGuidance: Record<string, string> = {
                 ontology: "Focus on object definitions, relationships, and property metadata.",
                 integrations: "Focus on data sources, pipelines, and ingestion health.",
                 telemetry: "Focus on signal analysis, KPI trends, and sensor health.",
-                maven: "Focus on high-level strategic overview and mission-critical alerts."
+                maven: "Focus on high-level strategic overview and mission-critical alerts.",
+                sre: "Focus on job health, outbox reliability, and diagnostic analysis of failures.",
+                'agent-studio': "You are being tested. Showcase your tools and capabilities."
             };
 
             const systemPrompt = `You are the Maven Tactical Assistant for the AIP (backed by Gemini). 
             CURRENT WORKSPACE: ${page?.toUpperCase() || 'GENERAL'}
+            SAFETY TIER: ${agentSafetyTier}
             SELECTION CONTEXT: ${JSON.stringify(vars || {})}
-            APPLICATION STATE: ${JSON.stringify(vars?.vars || {})}
             
             GUIDANCE: ${pageGuidance[page] || "Provide general platform support."}
             
-            Be precise, technical, and high-density. Avoid fluff. Never use emojis.`;
+            When providing answers, try to identify relevant entities (logicalId) or jobs (jobId) and refer to them.
+            Be precise, technical, and high-density. Avoid fluff.`;
 
-            // 2. Initial Inference using the unified LlmClient
-            const response = await llm.chat({
+            const messages: LlmMessage[] = [
+                { role: 'user', content: message }
+            ];
+
+            // 4. Inference Pass 1: Get Initial Response / Tool Calls
+            let response = await llm.chat({
                 systemPrompt,
-                messages: [
-                    { role: 'user', content: message }
-                ],
-                // Tools will be re-added once Gemini tool-calling is formalized
+                messages,
+                tools: allowedToolDefs
             });
 
-            const finalAnswer = response.answer;
-            const usedTools: string[] = []; // Gemini tool execution to be enhanced
-            const assistantMessage = { tool_calls: [] }; // Stub for now
-
-            // 5. Formulate AipAssistResponse
-            // Note: In a production environment, links would be extracted from the LLM response or tool results.
-            // For now, we stub them based on selection or content matches.
+            const usedTools: string[] = [];
+            const trace: any[] = [];
             const links: any[] = [];
-            if (vars?.logicalId) {
-                links.push({
-                    type: page === 'ontology' ? 'ontology' : 'telemetry',
-                    label: `Inspect ${vars.logicalId}`,
-                    logicalId: vars.logicalId,
-                    entityTypeId: vars.entityTypeId
+            const actions: any[] = [];
+            let requiresApproval = false;
+            let proposalId: string | null = null;
+
+            // 5. Multi-turn loop: Execute tools if requested
+            if (response.toolCalls && response.toolCalls.length > 0) {
+                const toolResults: any[] = [];
+
+                for (const tc of response.toolCalls) {
+                    usedTools.push(tc.name);
+
+                    // Safety gate: block WRITE tools for READ_ONLY agents
+                    if (WRITE_TOOLS.has(tc.name) && agentSafetyTier === READ_ONLY_SAFETY_TIER) {
+                        // Create a ChangeRequest for human approval instead of executing
+                        const cr = await governanceSvc.createChangeRequest({
+                            projectId,
+                            resourceType: 'AGENT_ACTION',
+                            resourceId: agentId,
+                            proposedChanges: { toolName: tc.name, parameters: tc.arguments },
+                            createdBy: actor,
+                            branchName: 'main'
+                        });
+                        requiresApproval = true;
+                        proposalId = cr.id;
+
+                        trace.push({
+                            tool: tc.name,
+                            status: 'BLOCKED_PENDING_APPROVAL',
+                            proposalId: cr.id,
+                            message: 'Write action requires administrator approval.'
+                        });
+                        toolResults.push({
+                            tool: tc.name,
+                            result: { blocked: true, proposalId: cr.id }
+                        });
+                        continue;
+                    }
+
+                    const executionResult = await executor.execute({
+                        toolName: tc.name,
+                        parameters: tc.arguments,
+                        projectId,
+                        actor,
+                        actorMetadata: {
+                            role: (req as any).auth?.role,
+                            correlationId: (req as any).correlationId,
+                            ip: req.ip
+                        }
+                    });
+
+                    trace.push(executionResult);
+                    toolResults.push({
+                        tool: tc.name,
+                        result: executionResult
+                    });
+
+                    // Extract heuristic links
+                    if (tc.name === 'get_entity' && executionResult.success) {
+                        links.push({
+                            type: 'ontology',
+                            label: `View Entity: ${tc.arguments.logicalId}`,
+                            logicalId: tc.arguments.logicalId
+                        });
+                    }
+                    if (tc.name === 'list_jobs' && executionResult.success) {
+                        const firstFailed = (executionResult.result as any).jobs?.find((j: any) => j.status === 'FAILED');
+                        if (firstFailed) {
+                            links.push({
+                                type: 'job',
+                                label: `Failed Job: ${firstFailed.name || firstFailed.id}`,
+                                jobId: firstFailed.id
+                            });
+                        }
+                    }
+                }
+
+                // 6. Inference Pass 2: Synthesize final answer with tool results
+                messages.push({
+                    role: 'assistant',
+                    content: `I executed tools: ${usedTools.join(', ')}. Results: ${JSON.stringify(toolResults)}`
+                });
+
+                response = await llm.chat({
+                    systemPrompt,
+                    messages,
+                    tools: allowedToolDefs
                 });
             }
 
-            const actions: any[] = [];
-            // Reactivity: If user mentions "tab", suggest an update to the 'tab' variable
-            if (message.toLowerCase().includes('tab')) {
-                actions.push({
-                    type: 'updateVar',
-                    target: 'activeTab',
-                    payload: 'history'
-                });
+            // 7. Post-process response for actions
+            if (response.answer.toLowerCase().includes('change tab to')) {
+                const match = response.answer.match(/change tab to (\w+)/i);
+                if (match) {
+                    actions.push({
+                        type: 'updateVar',
+                        target: 'activeTab',
+                        payload: match[1]
+                    });
+                }
             }
 
             res.json({
-                answer: finalAnswer,
+                answer: response.answer,
                 usedTools,
                 links,
-                actions: actions.length > 0 ? actions : [],
-                trace: (assistantMessage.tool_calls as any[])?.map(tc => ({
-                    tool: tc.function.name,
-                    args: JSON.parse(tc.function.arguments)
-                })) || []
+                actions,
+                trace,
+                requiresApproval,
+                ...(proposalId ? { proposalId } : {})
             });
 
         } catch (err: any) {

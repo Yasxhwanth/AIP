@@ -22,6 +22,10 @@ export class AuditService {
         const { actor, action, resourceType, resourceId, projectId, before, after, metadata } = options;
 
         try {
+            // Apply PII masking to before/after payloads
+            const maskedBefore = before ? this.maskPII(before) : null;
+            const maskedAfter = after ? this.maskPII(after) : null;
+
             const entry = await (this.prisma as any).auditLog.create({
                 data: {
                     actor,
@@ -30,8 +34,8 @@ export class AuditService {
                     resourceType,
                     resourceId,
                     projectId,
-                    before: before ? JSON.parse(JSON.stringify(before)) : null,
-                    after: after ? JSON.parse(JSON.stringify(after)) : null,
+                    before: maskedBefore ? JSON.parse(JSON.stringify(maskedBefore)) : null,
+                    after: maskedAfter ? JSON.parse(JSON.stringify(maskedAfter)) : null,
                     metadata: {
                         ...metadata,
                         ip: metadata?.ip || '0.0.0.0',
@@ -66,5 +70,33 @@ export class AuditService {
             }
         }
         return Object.keys(diff).length > 0 ? diff : null;
+    }
+
+    private static readonly SENSITIVE_FIELDS = new Set([
+        'email', 'password', 'token', 'apiKey', 'ssn', 'phone', 'secret',
+        'address', 'creditCard', 'cvv', 'birthDate'
+    ]);
+
+    /**
+     * Recursively masks sensitive fields in an object.
+     */
+    private maskPII(obj: any): any {
+        if (!obj || typeof obj !== 'object') return obj;
+
+        if (Array.isArray(obj)) {
+            return obj.map(item => this.maskPII(item));
+        }
+
+        const maskedObj: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+            if (AuditService.SENSITIVE_FIELDS.has(key.toLowerCase())) {
+                maskedObj[key] = '[REDACTED]';
+            } else if (typeof value === 'object' && value !== null) {
+                maskedObj[key] = this.maskPII(value);
+            } else {
+                maskedObj[key] = value;
+            }
+        }
+        return maskedObj;
     }
 }

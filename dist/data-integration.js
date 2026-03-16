@@ -1,5 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.schedulerTelemetry = void 0;
 exports.upsertEntityInstance = upsertEntityInstance;
 exports.executeJob = executeJob;
 exports.dryRunJob = dryRunJob;
@@ -8,6 +12,8 @@ const policy_engine_1 = require("./policy-engine");
 const identity_service_1 = require("./identity-service");
 const provenance_service_1 = require("./provenance-service");
 const ontology_reasoner_1 = require("./ontology-reasoner");
+const domain_events_1 = require("./domain-events");
+const crypto_1 = __importDefault(require("crypto"));
 const connectors = {
     /**
      * REST_API — Fetch records from an HTTP endpoint.
@@ -113,7 +119,8 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
                     validFrom: now,
                     validTo: null,
                     confidenceScore: options?.confidence ?? 1.0,
-                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED' // Low confidence requires review
+                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED', // Low confidence requires review
+                    projectId: entityType.projectId
                 },
             });
             // Record Provenance
@@ -123,21 +130,32 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
                 tx);
             }
             // Emit domain event
-            const idempotencyKey = `EntityStateChanged:${logicalId}:${now.toISOString()}`;
-            const domainEvent = await tx.domainEvent.create({
-                data: {
-                    idempotencyKey,
-                    eventType: 'EntityStateChanged',
-                    entityTypeId: entityType.id,
-                    logicalId,
-                    entityVersion: entityType.version,
-                    payload: {
-                        previousState: current?.data ?? null,
-                        newState: attrData,
-                        validFrom: now.toISOString(),
-                    },
+            const hash = crypto_1.default.createHash('sha256').update(JSON.stringify(attrData)).digest('hex');
+            const idempotencyKey = options?.sourceRecordId
+                ? `EntityStateChanged:${options.sourceSystem}:${options.sourceRecordId}`
+                : `EntityStateChanged:${logicalId}:${hash}`;
+            const domainEventPayload = {
+                prisma: tx,
+                entityTypeId: entityType.id,
+                logicalId,
+                entityVersion: entityType.version,
+                eventType: 'EntityStateChanged',
+                idempotencyKey,
+                payload: {
+                    previousState: current?.data ?? null,
+                    newState: attrData,
+                    validFrom: now.toISOString(),
                 },
-            });
+                projectId: entityType.projectId ?? 'default'
+            };
+            if (options?.generateOutbox) {
+                domainEventPayload.outbox = {
+                    projectId: entityType.projectId ?? 'default',
+                    aggregateType: 'EntityInstance',
+                    targetSystem: options.generateOutbox.targetSystem
+                };
+            }
+            const domainEvent = await (0, domain_events_1.recordDomainEvent)(domainEventPayload);
             // CQRS: Upsert read model projection
             await tx.currentEntityState.upsert({
                 where: { logicalId },
@@ -146,10 +164,12 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
                     entityTypeId: entityType.id,
                     data: attrData,
                     updatedAt: now,
+                    projectId: entityType.projectId
                 },
                 update: {
                     data: attrData,
                     updatedAt: now,
+                    projectId: entityType.projectId
                 },
             });
             return {
@@ -172,7 +192,7 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
             },
         }, prisma);
         // Fire-and-forget: trigger semantic reasoner to derive ontology properties natively 
-        (0, ontology_reasoner_1.runReasonerForEntity)(logicalId, entityType.projectId, prisma).catch(err => {
+        (0, ontology_reasoner_1.runReasonerForEntity)(logicalId, entityType.projectId ?? 'default', prisma).catch(err => {
             console.error(`[Semantic Reasoner Error] Failed to reason for entity ${logicalId}:`, err);
         });
         return { success: true, instanceId };
@@ -190,7 +210,7 @@ async function upsertEntityInstance(entityType, logicalId, attrData, prisma, opt
  * 4. Upserts each record as an entity instance
  * 5. Updates the JobExecution with results
  */
-async function executeJob(jobId, prisma, queueId, inlineData) {
+async function executeJob(jobId, prisma, queueId, inlineData, options) {
     // Load the job with its data source and target entity type
     const job = await prisma.integrationJob.findUnique({
         where: { id: jobId },
@@ -229,6 +249,9 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             // Data Contract Validation
             if (dataContract) {
                 let contractFailed = false;
+                // Allow defining a custom threshold in the contract, default to 5%
+                const contractObj = dataContract;
+                const threshold = typeof contractObj.threshold === 'number' ? contractObj.threshold : 0.05;
                 if (dataContract.required) {
                     for (const reqField of dataContract.required) {
                         if (raw[reqField] === undefined || raw[reqField] === null) {
@@ -248,6 +271,22 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
                 if (contractFailed) {
                     recordsDropped++;
                     console.warn(`[DataIntegration] Record dropped due to data contract violation:`, raw);
+                    // Persist rejected record for quarantine/analysis
+                    try {
+                        await prisma.rejectedRecord.create({
+                            data: {
+                                projectId: job.targetEntityType.projectId ?? global.DEFAULT_PROJECT_ID,
+                                dataSourceId: job.dataSourceId,
+                                jobId: job.id,
+                                rawRecord: raw,
+                                errors: dataContract,
+                            },
+                        });
+                    }
+                    catch (err) {
+                        // eslint-disable-next-line no-console
+                        console.warn('[DataIntegration] Failed to persist RejectedRecord:', err);
+                    }
                     continue;
                 }
             }
@@ -274,7 +313,8 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
             const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma, {
                 sourceSystem: job.dataSource.name,
                 sourceRecordId: externalId, // Using externalId as sourceRecordId for simplicity
-                confidence
+                confidence,
+                ...(options?.generateOutbox ? { generateOutbox: { targetSystem: 'WEBHOOK' } } : {})
             });
             if (result.success) {
                 recordsProcessed++;
@@ -283,6 +323,15 @@ async function executeJob(jobId, prisma, queueId, inlineData) {
                 recordsFailed++;
                 // eslint-disable-next-line no-console
                 console.warn(`[DataIntegration] Failed to ingest record ${logicalId}:`, result.error);
+            }
+        }
+        const totalProcessed = recordsProcessed + recordsFailed + recordsDropped;
+        if (dataContract && totalProcessed > 0) {
+            const contractObj = dataContract;
+            const threshold = typeof contractObj.threshold === 'number' ? contractObj.threshold : 0.05;
+            const dropRatio = recordsDropped / totalProcessed;
+            if (dropRatio > threshold) {
+                throw new Error(`Data Quality Violation: Dropped record ratio (${(dropRatio * 100).toFixed(1)}%) exceeds threshold (${(threshold * 100).toFixed(1)}%). Job aborted to prevent data corruption.`);
             }
         }
         // Orchestrator handles marking completion on the JobQueue object.
@@ -353,6 +402,18 @@ async function dryRunJob(jobId, prisma, inlineData) {
 }
 // ── Simple Scheduler (Upgraded to enqueue jobs instead of run) ────
 /**
+ * Live telemetry for the job scheduler — consumed by the deep health endpoint.
+ * All fields are null until the scheduler has started and run at least one tick.
+ */
+exports.schedulerTelemetry = {
+    jobScheduler: {
+        startedAt: null,
+        lastTickAt: null,
+        lastError: null,
+        tickIntervalMs: 60000, // expected tick interval
+    },
+};
+/**
  * A lightweight interval-based scheduler.
  * Checks every 60 seconds for jobs with a `schedule` field.
  * Supports simple interval patterns: "every:Xs", "every:Xm", "every:Xh"
@@ -374,6 +435,8 @@ function parseScheduleMs(schedule) {
 }
 function startScheduler(prisma) {
     const TICK_INTERVAL = 60000; // check every 60 seconds
+    exports.schedulerTelemetry.jobScheduler.startedAt = new Date();
+    exports.schedulerTelemetry.jobScheduler.tickIntervalMs = TICK_INTERVAL;
     setInterval(async () => {
         try {
             const jobs = await prisma.integrationJob.findMany({
@@ -406,16 +469,22 @@ function startScheduler(prisma) {
                             integrationJobId: job.id,
                             payload: { autoScheduled: true },
                             priority: 5, // normal priority for scheduled runs
+                            projectId: job.projectId
                         }
                     }).catch((err) => {
                         console.error(`[Scheduler] Job enqueue failed:`, err);
                     });
                 }
             }
+            // Record successful tick
+            exports.schedulerTelemetry.jobScheduler.lastTickAt = new Date();
+            exports.schedulerTelemetry.jobScheduler.lastError = null;
         }
         catch (error) {
             // eslint-disable-next-line no-console
             console.error('[Scheduler] Tick error:', error);
+            exports.schedulerTelemetry.jobScheduler.lastError = String(error);
+            exports.schedulerTelemetry.jobScheduler.lastTickAt = new Date();
         }
     }, TICK_INTERVAL);
     // eslint-disable-next-line no-console

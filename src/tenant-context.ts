@@ -21,7 +21,7 @@ export function getTenantPrisma(prisma: PrismaClient) {
 
                     // Use a transaction to ensure SET LOCAL + Query run on the same connection
                     return prisma.$transaction(async (tx) => {
-                        await tx.$executeRawUnsafe(`SET LOCAL aip.tenant_id = '${projectId}'`);
+                        await tx.$executeRaw`SELECT set_config('aip.tenant_id', ${projectId}, true)`;
                         return query(args);
                     });
                 },

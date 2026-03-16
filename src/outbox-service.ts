@@ -79,11 +79,19 @@ export class OutboxService {
                 data: { status: 'PROCESSING' }
             });
 
-            // Route to connector
-            if (event.targetSystem === 'WEBHOOK') {
-                await this.sendWebhook(event);
-            } else {
-                throw new Error(`Unknown target system: ${event.targetSystem}`);
+            // Route to connector based on target system
+            switch (event.targetSystem) {
+                case 'WEBHOOK':
+                    await this.sendWebhook(event);
+                    break;
+                case 'ERP_SAP':
+                    await this.syncToSap(event);
+                    break;
+                case 'CRM_SALESFORCE':
+                    await this.syncToCrm(event);
+                    break;
+                default:
+                    throw new Error(`Unsupported target system: ${event.targetSystem}`);
             }
 
             // Mark as sent
@@ -116,9 +124,29 @@ export class OutboxService {
         }
     }
 
+    private async syncToSap(event: any) {
+        logger.info({ eventId: event.id, projectId: event.projectId }, '🔄 Syncing to SAP ERP via S/4HANA OData API (Mock)');
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 800));
+        // In reality, this would use a dedicated SAP client or direct axios call
+        if (event.payload.logicalId?.includes('fail-sap')) throw new Error('SAP Connection Refused: 401 Unauthorized');
+    }
+
+    private async syncToCrm(event: any) {
+        logger.info({ eventId: event.id, projectId: event.projectId }, '🔄 Syncing to Salesforce CRM via REST API (Mock)');
+        await new Promise(resolve => setTimeout(resolve, 600));
+        if (event.payload.logicalId?.includes('fail-crm')) throw new Error('Salesforce Limit Exceeded: Daily API Request Limit');
+    }
+
     private async sendWebhook(event: any) {
-        const { url, method = 'POST' } = event.payload as any;
-        if (!url) throw new Error('Webhook URL missing in payload');
+        const payload = event.payload as any;
+        const url = payload.url || process.env.DEFAULT_WEBHOOK_URL;
+        const method = payload.method || 'POST';
+
+        if (!url) {
+            logger.warn({ eventId: event.id }, '⚠️ Webhook URL missing in payload and no default configured. Skipping.');
+            return;
+        }
 
         logger.info({ url, eventId: event.id }, 'Sending outbox webhook');
 

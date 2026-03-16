@@ -88,6 +88,29 @@ class LineageService {
         return trace;
     }
     /**
+     * Full DAG traversal downwards (impact analysis)
+     */
+    async getFullDownstreamTrace(sourceType, sourceId, maxDepth = 5) {
+        const trace = [];
+        const queue = [{ type: sourceType, id: sourceId, depth: 0 }];
+        const visited = new Set();
+        while (queue.length > 0) {
+            const current = queue.shift();
+            if (current.depth >= maxDepth)
+                continue;
+            const key = `${current.type}:${current.id}`;
+            if (visited.has(key))
+                continue;
+            visited.add(key);
+            const directDownstreams = await this.getDownstream(current.type, current.id);
+            for (const edge of directDownstreams) {
+                trace.push(edge);
+                queue.push({ type: edge.targetType, id: edge.targetId, depth: current.depth + 1 });
+            }
+        }
+        return trace;
+    }
+    /**
      * Identify breaking changes before deleting/changing a column or entity
      */
     async simulateBreakingChange(targetType, targetId) {

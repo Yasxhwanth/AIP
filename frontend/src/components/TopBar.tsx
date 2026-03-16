@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useBuilderStore } from "@/store/builderStore";
-import { Layers, CheckCircle2, AlertTriangle, AlertCircle, Wrench, Rocket } from "lucide-react";
+import { Layers, CheckCircle2, AlertTriangle, AlertCircle, Wrench, Rocket, ChevronDown } from "lucide-react";
 
 export default function TopBar() {
     const pathname = usePathname();
     const router = useRouter();
-    const { activeProjectName } = useWorkspaceStore();
+    const { activeProjectName, activeProjectId, activeProjectClassification } = useWorkspaceStore();
     const { validateSystem, version } = useBuilderStore();
 
     if (pathname === '/projects') return null;
@@ -38,7 +38,24 @@ export default function TopBar() {
                     <span className="font-bold text-sm text-white font-sans tracking-tight">AIP</span>
                 </div>
                 <div className="w-px h-4 bg-white/15" />
-                <span className="text-xs font-semibold text-slate-300 font-sans">{activeProjectName || 'Loading Project...'}</span>
+                <button
+                    onClick={() => router.push('/projects')}
+                    className="flex items-center gap-2 hover:bg-white/5 px-2 py-1 rounded transition-colors group">
+                    <div className="flex flex-col items-start text-left">
+                        <span className="text-xs font-semibold text-slate-300 font-sans leading-tight group-hover:text-blue-400">{activeProjectName || 'Loading Project...'}</span>
+                        <div className="flex items-center gap-2">
+                            {activeProjectId && (
+                                <span className="text-[9px] font-mono text-slate-500 uppercase tracking-tighter tabular-nums">ID: {activeProjectId.split('-')[0]}...</span>
+                            )}
+                            {activeProjectClassification && (
+                                <span className={`text-[8px] font-black px-1 rounded-sm ${activeProjectClassification.includes('SECRET') ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-slate-500/10 text-slate-500 border border-slate-500/20'}`}>
+                                    {activeProjectClassification}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <ChevronDown className="w-3 h-3 text-slate-500 group-hover:text-blue-400" />
+                </button>
             </div>
 
             {/* Center: Mode Switcher */}

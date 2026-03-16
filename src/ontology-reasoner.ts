@@ -130,6 +130,7 @@ async function upsertDerivedRelationship(
     sourceLogicalId: string,
     targetLogicalId: string,
     pathConfidence: number,
+    projectId: string,
     prisma: PrismaClient,
 ): Promise<{ isNew: boolean }> {
     const derivedConfidence = Math.min(
@@ -171,6 +172,7 @@ async function upsertDerivedRelationship(
                 baseConfidence: derivedConfidence,
                 decayRate: rule.consequent.decayRate ?? 0.0,
                 lastObservedAt: new Date(),
+                projectId,
             },
         });
         return { isNew: true };
@@ -209,7 +211,7 @@ export async function runReasonerForEntity(
 
         for (const { targetLogicalId, pathConfidence } of targets) {
             const { isNew } = await upsertDerivedRelationship(
-                ruleData, logicalId, targetLogicalId, pathConfidence, prisma,
+                ruleData, logicalId, targetLogicalId, pathConfidence, projectId, prisma,
             );
             derived.push({
                 ruleId: rule.id,

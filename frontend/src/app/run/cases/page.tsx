@@ -91,7 +91,7 @@ export default function CasesPage() {
                                         </td>
                                         <td className="px-6 py-5 text-right">
                                             <Link href={`/run/entity/${c.entityType}/${c.boundEntity}`}
-                                                className="h-8 px-4 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-pt-bg-panel border border-pt-border rounded-lg text-pt-text hover:text-pt-bg hover:bg-pt-intent-primary hover:border-pt-intent-primary transition-all active:scale-95 group-hover:shadow-[0_0_15px_rgba(var(--pt-intent-primary),0.3)]">
+                                                className="h-8 px-4 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-pt-bg-panel border border-pt-border rounded-lg text-pt-text hover:text-pt-bg hover:bg-pt-intent-primary hover:border-pt-intent-primary transition-all active:scale-95 group-hover:shadow-[0_0_15px_rgb(var(--pt-intent-primary) / 0.3)]">
                                                 Intervene <ArrowRight className="w-3 h-3" />
                                             </Link>
                                         </td>

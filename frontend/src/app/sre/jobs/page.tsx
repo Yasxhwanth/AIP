@@ -24,6 +24,20 @@ import { Card } from '@/components/ui/Card';
 import { SeverityChip } from '@/components/ui/SeverityChip';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { useIntelligenceStore } from '@/store/intelligenceStore';
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    Cell,
+    LineChart,
+    Line,
+    AreaChart,
+    Area
+} from 'recharts';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Job {
@@ -43,6 +57,11 @@ interface Job {
     };
 }
 
+interface OutboxTelemetry {
+    stats: Record<string, number>;
+    recent: any[];
+}
+
 interface Telemetry {
     summary: Record<string, number>;
     activeWorkers: number;
@@ -52,6 +71,8 @@ interface Telemetry {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function SREJobsPage() {
     const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
+    const [outbox, setOutbox] = useState<OutboxTelemetry | null>(null);
+    const [apiStats, setApiStats] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -59,13 +80,21 @@ export default function SREJobsPage() {
 
     const fetchTelemetry = async () => {
         try {
-            const data = await ApiClient.get<Telemetry>('/api/v1/telemetry/jobs');
-            setTelemetry(data);
+            const [jobsData, outboxData, apiData] = await Promise.all([
+                ApiClient.get<Telemetry>('/api/v1/telemetry/jobs'),
+                ApiClient.get<OutboxTelemetry>('/api/v1/telemetry/outbox'),
+                ApiClient.get<any>('/api/v1/telemetry/api-latency')
+            ]);
+
+            setTelemetry(jobsData);
+            setOutbox(outboxData);
+            setApiStats(apiData.buckets || []);
             setError(null);
 
             // Sync context with AI Assistant
             setContext('sre', {
-                jobId: data.recentJobs[0]?.id,
+                jobId: jobsData.recentJobs[0]?.id,
+                apiHealth: apiData.buckets?.[apiData.buckets.length - 1],
                 filters: { status: 'ALL' }
             });
         } catch (err) {
@@ -174,10 +203,82 @@ export default function SREJobsPage() {
                     })}
                 </div>
 
+                {/* Execution Health & Throughput Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card title="Execution Health Trends" pill="LIVE_FLOW" className="h-[300px]">
+                        <div className="h-full w-full pb-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={telemetry?.recentJobs.slice(0, 20).reverse().map((j, i) => ({
+                                    name: i,
+                                    processed: j.recordsProcessed,
+                                    failed: j.recordsFailed
+                                })) || []}>
+                                    <defs>
+                                        <linearGradient id="colorProc" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#106ba3" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#106ba3" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                                    <XAxis dataKey="name" hide />
+                                    <YAxis fontSize={10} stroke="#444" axisLine={false} tickLine={false} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#111', border: '1px solid #333', fontSize: '10px' }} />
+                                    <Area type="monotone" dataKey="processed" stroke="#106ba3" fillOpacity={1} fill="url(#colorProc)" strokeWidth={2} />
+                                    <Area type="monotone" dataKey="failed" stroke="#eb5a46" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </Card>
+
+                    <Card title="Latency Distribution" pill="JOB_RUNTIME_MS" className="h-[300px]">
+                        <div className="h-full w-full pb-4">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={telemetry?.recentJobs.slice(0, 15).map(j => ({
+                                    name: j.integrationJob?.name?.slice(0, 8) || j.id.slice(0, 8),
+                                    latency: j.completedAt && j.startedAt ? new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime() : 0
+                                })) || []}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                                    <XAxis dataKey="name" fontSize={9} stroke="#444" axisLine={false} tickLine={false} />
+                                    <YAxis fontSize={10} stroke="#444" axisLine={false} tickLine={false} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#111', border: '1px solid #333', fontSize: '10px' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                                    <Bar dataKey="latency" fill="#106ba3" radius={[2, 2, 0, 0]} barSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </Card>
+                </div>
+
+                {/* API Health Matrix */}
+                <Card title="API Operational Health" pill="LAST_60M" className="h-[300px]">
+                    <div className="h-full w-full pb-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={apiStats}>
+                                <defs>
+                                    <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#106ba3" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#106ba3" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorError" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#eb5a46" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#eb5a46" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                                <XAxis dataKey="label" fontSize={9} stroke="#444" axisLine={false} tickLine={false} />
+                                <YAxis yAxisId="left" fontSize={10} stroke="#444" axisLine={false} tickLine={false} label={{ value: 'ms', angle: -90, position: 'insideLeft', style: { fill: '#444', fontSize: '10px' } }} />
+                                <YAxis yAxisId="right" orientation="right" fontSize={10} stroke="#444" axisLine={false} tickLine={false} label={{ value: '%', angle: 90, position: 'insideRight', style: { fill: '#444', fontSize: '10px' } }} />
+                                <Tooltip contentStyle={{ backgroundColor: '#111', border: '1px solid #333', fontSize: '10px' }} />
+                                <Area yAxisId="left" type="monotone" dataKey="avgLatency" name="Latency (ms)" stroke="#106ba3" fillOpacity={1} fill="url(#colorLatency)" strokeWidth={2} />
+                                <Area yAxisId="right" type="monotone" dataKey="errorRate" name="Error Rate (%)" stroke="#eb5a46" fillOpacity={1} fill="url(#colorError)" strokeWidth={2} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </Card>
+
                 {/* Execution Timeline Matrix */}
                 <Card
                     title="Global Execution Matrix"
-                    pill={`ACTIVE_JOBS: ${telemetry?.summary['RUNNING'] || 0}`}
+                    pill={`ACTIVE_JOBS: ${telemetry?.summary['RUNNING'] || 0} | WORKERS: ${telemetry?.activeWorkers || 0}`}
                     className="min-h-[500px]"
                 >
                     <div className="overflow-x-auto">
@@ -245,6 +346,75 @@ export default function SREJobsPage() {
                         </table>
                     </div>
                 </Card>
+
+                {/* Operational Outbox Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    <Card
+                        title="Operational Outbox"
+                        pill="SYNC_SERVICE"
+                        className="lg:col-span-1"
+                    >
+                        <div className="space-y-4">
+                            {[
+                                { key: 'PENDING', label: 'Queued', color: 'text-pt-text-muted', bg: 'bg-pt-bg' },
+                                { key: 'SENT', label: 'Delivered', color: 'text-pt-intent-success', bg: 'bg-pt-intent-success/10' },
+                                { key: 'FAILED', label: 'Retrying', color: 'text-pt-intent-warning', bg: 'bg-pt-intent-warning/10' },
+                                { key: 'DEAD_LETTER', label: 'Dropped', color: 'text-pt-intent-danger', bg: 'bg-pt-intent-danger/10' }
+                            ].map(item => (
+                                <div key={item.key} className="flex items-center justify-between p-2 rounded bg-pt-bg-panel/40 border border-pt-border/50">
+                                    <span className="text-[10px] font-black uppercase text-pt-text-muted">{item.label}</span>
+                                    <span className={`text-xs font-black ${item.color}`}>{outbox?.stats?.[item.key] || 0}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+
+                    <Card
+                        title="Outbox Event Log"
+                        pill="WEBHOOK_DISPATCH"
+                        className="lg:col-span-3"
+                    >
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-pt-bg text-pt-text-muted text-[8px] font-black uppercase tracking-[0.2em] border-b border-pt-border">
+                                        <th className="px-6 py-2">Event</th>
+                                        <th className="px-6 py-2">Target</th>
+                                        <th className="px-6 py-2">Status</th>
+                                        <th className="px-6 py-2 text-right">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-pt-border/30">
+                                    {outbox?.recent.map((ev: any) => (
+                                        <tr key={ev.id} className="text-[10px]">
+                                            <td className="px-6 py-2 font-bold text-pt-text uppercase tracking-tight">{ev.aggregateType}:{ev.eventType}</td>
+                                            <td className="px-6 py-2 font-mono text-pt-text-muted opacity-60">{ev.targetSystem}</td>
+                                            <td className="px-6 py-2">
+                                                <div className={`px-1.5 py-0.5 rounded-sm text-[8px] font-black uppercase inline-block ${ev.status === 'SENT' ? 'bg-pt-intent-success/10 text-pt-intent-success' :
+                                                    ev.status === 'FAILED' ? 'bg-pt-intent-warning/10 text-pt-intent-warning' :
+                                                        ev.status === 'DEAD_LETTER' ? 'bg-pt-intent-danger/10 text-pt-intent-danger' :
+                                                            'bg-pt-bg text-pt-text-muted'
+                                                    }`}>
+                                                    {ev.status}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-2 text-right text-pt-text-muted opacity-50">
+                                                {formatDistanceToNow(new Date(ev.createdAt), { addSuffix: true })}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {(!outbox || outbox.recent.length === 0) && (
+                                        <tr>
+                                            <td colSpan={4} className="px-6 py-12 text-center opacity-10 text-[10px] uppercase font-black tracking-widest">
+                                                No outbound traffic detected
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+                </div>
             </main>
         </div>
     );

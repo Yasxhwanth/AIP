@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import {
     Folder, Database, Zap, BrainCircuit, LayoutTemplate,
@@ -35,7 +35,7 @@ const RESOURCE_LABELS = {
 
 export default function WorkspaceExplorer({ params }: { params: Promise<{ projectId: string }> }) {
     const { projectId } = use(params);
-    const { projects, resources, createResource, deleteResource } = useWorkspaceStore();
+    const { projects, resources, createResource, deleteResource, setActiveProject, clearActiveProject } = useWorkspaceStore();
     const router = useRouter();
 
     const [currentFolder, setCurrentFolder] = useState<string | null>(null);
@@ -44,6 +44,13 @@ export default function WorkspaceExplorer({ params }: { params: Promise<{ projec
     const [newName, setNewName] = useState("");
 
     const project = projects.find(p => p.id === projectId);
+
+    useEffect(() => {
+        if (project) {
+            setActiveProject(project.id, project.name, project.classification);
+        }
+        return () => clearActiveProject();
+    }, [project, setActiveProject, clearActiveProject, projectId]);
     if (!project) return notFound();
 
     // Filter resources by current folder AND search

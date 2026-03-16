@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.rollupTelemetry = void 0;
 exports.computeRollups = computeRollups;
 exports.computeAllRecentRollups = computeAllRecentRollups;
 exports.startRollupScheduler = startRollupScheduler;
@@ -108,12 +109,25 @@ async function computeAllRecentRollups(windowSize, lookbackMs, prisma) {
     return { totalBuckets, combinationsProcessed: combos.length };
 }
 /**
+ * Live telemetry for the rollup scheduler — consumed by the deep health endpoint.
+ */
+exports.rollupTelemetry = {
+    rollupScheduler: {
+        startedAt: null,
+        lastTickAt: null,
+        lastError: null,
+        tickIntervalMs: 5 * 60 * 1000, // expected tick interval
+    },
+};
+/**
  * Start a background scheduler that periodically computes rollups.
  * Runs every 5 minutes and rolls up the last 10 minutes of data into 5m buckets.
  */
 function startRollupScheduler(prisma) {
     const INTERVAL = 5 * 60 * 1000; // every 5 minutes
     const LOOKBACK = 10 * 60 * 1000; // look back 10 minutes
+    exports.rollupTelemetry.rollupScheduler.startedAt = new Date();
+    exports.rollupTelemetry.rollupScheduler.tickIntervalMs = INTERVAL;
     setInterval(() => {
         const idempotencyKey = `TELEMETRY_ROLLUP_${Math.floor(Date.now() / INTERVAL)}`;
         prisma.jobQueue.upsert({
@@ -125,8 +139,13 @@ function startRollupScheduler(prisma) {
                 priority: 1, // lower priority than data ingest
             },
             update: {} // do nothing if it already exists
+        }).then(() => {
+            exports.rollupTelemetry.rollupScheduler.lastTickAt = new Date();
+            exports.rollupTelemetry.rollupScheduler.lastError = null;
         }).catch((err) => {
             console.error('[RollupScheduler] Failed to enqueue rollup job:', err);
+            exports.rollupTelemetry.rollupScheduler.lastError = String(err);
+            exports.rollupTelemetry.rollupScheduler.lastTickAt = new Date();
         });
     }, INTERVAL);
     console.log(`[RollupScheduler] Started — enqueueing 5m rollup jobs every ${INTERVAL / 1000}s`);

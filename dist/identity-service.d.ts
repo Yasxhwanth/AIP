@@ -32,9 +32,10 @@ export declare class IdentityService {
     static registerAlias(sourceSystem: string, externalId: string, targetLogicalId: string, confidence: number, prisma: PrismaClient): Promise<{
         id: string;
         createdAt: Date;
+        projectId: string | null;
+        targetLogicalId: string;
         externalId: string;
         sourceSystem: string;
-        targetLogicalId: string;
         confidence: number;
         isPrimary: boolean;
     }>;

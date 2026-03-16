@@ -14,15 +14,16 @@ export class ProvenanceService {
         sourceRecordId: string,
         sourceTimestamp: Date,
         attributeNames: string[] | null,
+        projectId: string,
         prisma: any
     ) {
         if (!attributeNames) {
             return prisma.provenanceRecord.create({
-                data: { entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: null }
+                data: { entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: null, projectId }
             });
         }
         const records = attributeNames.map(attr => ({
-            entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: attr
+            entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: attr, projectId
         }));
         return prisma.provenanceRecord.createMany({ data: records });
     }
@@ -44,6 +45,7 @@ export class ProvenanceService {
         sourceSystem: string,
         operatorId: string,
         fields: Record<string, any>,
+        projectId: string,
         prisma: PrismaClient
     ) {
         const chains = [];
@@ -69,7 +71,8 @@ export class ProvenanceService {
                     sourceSystem,
                     operationType,
                     operatorId,
-                    previousHash: previous?.valueHash || null
+                    previousHash: previous?.valueHash || null,
+                    projectId,
                 }
             });
             chains.push(entry);
@@ -82,7 +85,7 @@ export class ProvenanceService {
      * Creates an HMAC-SHA256 integrity seal for an entity at the current point in time.
      * This proves mathematically that the database row hasn't been tampered with since sealing.
      */
-    static async createIntegritySeal(entityId: string, entityType: string, sealedBy: string, prisma: PrismaClient) {
+    static async createIntegritySeal(entityId: string, entityType: string, sealedBy: string, projectId: string, prisma: PrismaClient) {
         // 1. Get the LATEST hash for every field for this entity
         const chains = await prisma.cryptoProvenanceChain.findMany({
             where: { entityId },
@@ -114,7 +117,8 @@ export class ProvenanceService {
                 sealHmac: hmac,
                 fieldCount: fieldKeys.length,
                 fieldHashes: latestHashes,
-                sealedBy
+                sealedBy,
+                projectId,
             }
         });
     }

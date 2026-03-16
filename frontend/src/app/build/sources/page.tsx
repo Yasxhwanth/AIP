@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Database, Globe, FileText, CheckCircle2, XCircle, Loader2, ArrowRight } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 type DataSourceClass = "REST_API" | "POSTGRES" | "CSV";
 

@@ -16,7 +16,6 @@ class AbacEngine {
      */
     async evaluate(actor, action, resource) {
         // Fetch all relevant policies
-        // We look for policies that match the action OR "*" and resourceType OR "*"
         const policies = await this.prisma.abacPolicy.findMany({
             where: {
                 OR: [
@@ -43,6 +42,7 @@ class AbacEngine {
         let isAllowed = false;
         const matchedAllow = [];
         const matchedDeny = [];
+        const maskedFields = new Set();
         for (const policy of policies) {
             const matches = this.evaluateCondition(policy.condition, actor, resource);
             if (matches) {
@@ -52,6 +52,11 @@ class AbacEngine {
                 else if (policy.effect === 'ALLOW') {
                     matchedAllow.push(policy.name);
                     isAllowed = true;
+                    // Collect masked fields from policy metadata if present
+                    const metadata = policy.metadata;
+                    if (metadata?.maskedFields) {
+                        metadata.maskedFields.forEach(f => maskedFields.add(f));
+                    }
                 }
             }
         }
@@ -67,7 +72,8 @@ class AbacEngine {
             return {
                 allowed: true,
                 reason: `Explicit Allow: Policy [${matchedAllow.join(', ')}] evaluated to ALLOW.`,
-                matchedPolicies: matchedAllow
+                matchedPolicies: matchedAllow,
+                maskedFields: Array.from(maskedFields)
             };
         }
         return {
@@ -75,6 +81,41 @@ class AbacEngine {
             reason: 'Implicit Deny: No ALLOW policies condition matched.',
             matchedPolicies: []
         };
+    }
+    /**
+     * Redact sensitive fields from a data object based on the evaluation result.
+     */
+    mask(data, maskedFields) {
+        if (!maskedFields || maskedFields.length === 0 || !data) {
+            return data;
+        }
+        const deepClone = JSON.parse(JSON.stringify(data));
+        const maskValue = (val) => {
+            if (typeof val === 'string')
+                return '[REDACTED]';
+            if (typeof val === 'number')
+                return 0;
+            if (typeof val === 'boolean')
+                return false;
+            return null;
+        };
+        maskedFields.forEach(field => {
+            const parts = field.split('.');
+            let current = deepClone;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (current[parts[i]]) {
+                    current = current[parts[i]];
+                }
+                else {
+                    return;
+                }
+            }
+            const lastPart = parts[parts.length - 1];
+            if (current && lastPart in current) {
+                current[lastPart] = maskValue(current[lastPart]);
+            }
+        });
+        return deepClone;
     }
     /**
      * Evaluates the JSON condition tree against the request context.

@@ -12,26 +12,14 @@ export declare class ProvenanceService {
      * Records field-level cryptographic provenance.
      * Hashes each field value using SHA-256 to create an immutable log.
      */
-    static recordCryptoProvenance(entityId: string, entityType: string, operationType: string, sourceSystem: string, operatorId: string, fields: Record<string, any>, prisma: PrismaClient): Promise<{
-        id: string;
-        entityType: string;
-        sourceSystem: string;
-        field: string;
-        entityId: string;
-        valueHash: string;
-        rawValue: string | null;
-        sourceRecordId: string | null;
-        operationType: string;
-        operatorId: string | null;
-        previousHash: string | null;
-        recordedAt: Date;
-    }[]>;
+    static recordCryptoProvenance(entityId: string, entityType: string, operationType: string, sourceSystem: string, operatorId: string, fields: Record<string, any>, prisma: PrismaClient): Promise<any[]>;
     /**
      * Creates an HMAC-SHA256 integrity seal for an entity at the current point in time.
      * This proves mathematically that the database row hasn't been tampered with since sealing.
      */
     static createIntegritySeal(entityId: string, entityType: string, sealedBy: string, prisma: PrismaClient): Promise<{
         id: string;
+        projectId: string | null;
         entityType: string;
         entityId: string;
         sealHmac: string;
@@ -51,7 +39,7 @@ export declare class ProvenanceService {
         valid: boolean;
         sealId: string;
         sealedAt: Date;
-        tamperedFields: string[] | null;
+        tamperedFields: string[];
     }>;
 }
 //# sourceMappingURL=provenance-service.d.ts.map

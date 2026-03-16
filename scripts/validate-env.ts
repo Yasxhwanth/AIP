@@ -32,7 +32,7 @@ async function validateEnv() {
 
     try {
         await client.connect();
-        const res = await client.query('SELECT NOW()');
+        await client.query('SELECT NOW()');
         console.log('✅ Database connected successfully.');
     } catch (error: any) {
         console.error(`\n❌ Failed to connect to the database.`);

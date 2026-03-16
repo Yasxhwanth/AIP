@@ -1,10 +1,6 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
-
-@theme {
+:root {
   /* Palantir Foundry / mission-command design tokens */
   --color-pt-bg: #050709;
   --color-pt-bg-panel: #0D1117;
@@ -25,135 +21,7 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", "Roboto Mono", monospace;
 
-  /* Legacy ctOS backwards compatibility */
-  --ctos-cyan: var(--color-aip-cyan);
-  --ctos-red: var(--color-pt-intent-danger);
-  --ctos-bg: var(--color-pt-bg);
-}
-
-html,
-body {
-  height: 100vh;
-  width: 100vw;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  background-color: var(--color-pt-bg);
-  color: var(--color-pt-text);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  /* Standard data density */
-  line-height: 1.4;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Custom Selection Highlight */
-::selection {
-  background: rgba(16, 107, 163, 0.3);
-}
-
-.box-glow {
-  box-shadow: 0 0 15px var(--color-aip-cyan-glow);
-}
-
-.panel-bg {
-  background: var(--color-pt-bg-panel);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--color-pt-border);
-}
-
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* ── ctOS Visual Effects ─────────────────────────────────────────────────── */
-
-.ctos-text-glitch {
-  text-shadow: 2px 0 var(--color-pt-intent-danger), -2px 0 var(--color-aip-cyan);
-  animation: ctos-jitter 3s infinite;
-}
-
-@keyframes ctos-jitter {
-  0% {
-    transform: translate(0);
-  }
-
-  1% {
-    transform: translate(-1px, 1px);
-  }
-
-  2% {
-    transform: translate(1px, -1px);
-  }
-
-  3% {
-    transform: translate(0);
-  }
-
-  100% {
-    transform: translate(0);
-  }
-}
-
-.ctos-scanline {
-  position: relative;
-  overflow: hidden;
-}
-
-.ctos-scanline::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: var(--color-aip-cyan-glow);
-  opacity: 0.5;
-  animation: scanline 4s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes scanline {
-  0% {
-    transform: translateY(-100%);
-  }
-
-  100% {
-    transform: translateY(1000%);
-  }
-}
-
-.ctos-vignette {
-  box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.9);
-}
-
-/* ── Sidebar smooth width transition ─────────────────────────────────────── */
-.transition-\[width\] {
-  transition-property: width;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.duration-250 {
-  transition-duration: 250ms;
-}
-
-:root {
+  /* shadcn compatible variables */
   --background: #050709;
   --foreground: #F5F8FA;
   --card: #0D1117;
@@ -173,19 +41,28 @@ body {
   --input: rgba(255, 255, 255, 0.05);
   --ring: #106BA3;
   --radius: 2px;
-  /* Non-rounded corners */
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
+html,
+body {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--color-pt-bg);
+  color: var(--color-pt-text);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
 
-  body {
-    @apply bg-background text-foreground;
-  }
+* {
+  border-color: var(--border);
+}
 
-  html {
-    @apply font-sans;
-  }
+body {
+  background-color: var(--background);
+  color: var(--foreground);
 }

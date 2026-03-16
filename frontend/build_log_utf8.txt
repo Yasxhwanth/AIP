@@ -1,0 +1,152 @@
+﻿
+> frontend@0.1.0 build
+> next build
+
+node.exe : ΓÜá Warning: 
+Next.js inferred your 
+workspace root, but it may 
+not be correct.
+At 
+C:\nvm4w\nodejs\npm.ps1:16 
+char:5
++     & "$basedir/node$exe" 
+ "$basedir/node_modules/npm/
+bin/npm-cli.js" ...
++     ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (ΓÜá W  
+  arning: Ne...not be cor   
+ rect.:String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+ We detected multiple 
+lockfiles and selected the 
+directory of C:\Users\YASHWA
+NTH\Projects\AIP\package-loc
+k.json as the root 
+directory.
+ To silence this warning, 
+set `turbopack.root` in 
+your Next.js config, or 
+consider removing one of 
+the lockfiles if it's not 
+needed.
+   See https://nextjs.org/do
+cs/app/api-reference/config/
+next-config-js/turbopack#roo
+t-directory for more 
+information.
+ Detected additional 
+lockfiles: 
+   * C:\Users\YASHWANTH\Proj
+ects\AIP\frontend\package-lo
+ck.json
+
+Γû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+ΓÜá The "middleware" file 
+convention is deprecated. 
+Please use "proxy" instead. 
+Learn more: https://nextjs.o
+rg/docs/messages/middleware-
+to-proxy
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 25.3s
+  Running TypeScript ...
+Failed to compile.
+
+./src/app/apps/page.tsx:386:
+37
+Type error: No overload 
+matches this call.
+  Overload 1 of 2, '(props: 
+WithWidthProps<LegacyRespons
+iveReactGridLayoutProps<stri
+ng>>, context?: any): 
+string | number | bigint | 
+... 6 more ... | 
+undefined', gave the 
+following error.
+    Type '(layout: any[]) 
+=> void' is not assignable 
+to type '(layout: Layout, 
+layouts: 
+Partial<Record<string, 
+Layout>>) => void'.
+      Types of parameters 
+'layout' and 'layout' are 
+incompatible.
+        The type 'Layout' 
+is 'readonly' and cannot be 
+assigned to the mutable 
+type 'any[]'.
+  Overload 2 of 2, '(props: 
+WithWidthProps<LegacyRespons
+iveReactGridLayoutProps<stri
+ng>>): string | number | 
+bigint | boolean | 
+ReactElement<unknown, 
+string | 
+JSXElementConstructor<...>> 
+| ... 4 more ... | 
+undefined', gave the 
+following error.
+    Type '(layout: any[]) 
+=> void' is not assignable 
+to type '(layout: Layout, 
+layouts: 
+Partial<Record<string, 
+Layout>>) => void'.
+      Types of parameters 
+'layout' and 'layout' are 
+incompatible.
+        The type 'Layout' 
+is 'readonly' and cannot be 
+assigned to the mutable 
+type 'any[]'.
+
+[0m [90m 384 |[39m       
+                            
+  cols[33m=[39m{{ 
+lg[33m:[39m 
+[35m12[39m[33m,[39m 
+md[33m:[39m 
+[35m10[39m[33m,[39m 
+sm[33m:[39m 
+[35m6[39m[33m,[39m 
+xs[33m:[39m 
+[35m4[39m[33m,[39m 
+xxs[33m:[39m [35m2[39m 
+}}
+ [90m 385 |[39m           
+                          ro
+wHeight[33m=[39m{[35m60[
+39m}
+[31m[1m>[22m[39m[90m 
+386 |[39m                  
+                   onLayoutC
+hange[33m=[39m{onLayoutCha
+nge}
+ [90m     |[39m           
+                          
+[31m[1m^[22m[39m
+ [90m 387 |[39m           
+                          dr
+aggableHandle[33m=[39m[32
+m".widget-drag-handle"[39m
+ [90m 388 |[39m           
+                      
+[33m>[39m
+ [90m 389 |[39m           
+                          {a
+ctiveDash[33m.[39mwidgets
+[33m.[39mmap(w 
+[33m=>[39m {[0m
+Next.js build worker exited 
+with code: 1 and signal: 
+null

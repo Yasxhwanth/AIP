@@ -15,7 +15,7 @@ import {
     Undo2
 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 interface MatchCandidate {
     id: string;

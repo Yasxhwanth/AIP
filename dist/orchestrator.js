@@ -5,8 +5,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Orchestrator = void 0;
 const data_integration_1 = require("./data-integration");
+const workflow_engine_1 = require("./workflow-engine");
+const pipeline_engine_1 = require("./pipeline-engine");
+const spark_engine_1 = require("./spark-engine");
 const rollup_engine_1 = require("./rollup-engine");
 const relationship_derivation_service_1 = require("./relationship-derivation-service");
+const tenant_context_1 = require("./tenant-context");
 const os_1 = __importDefault(require("os"));
 /**
  * Enterprise Job Queue & Orchestrator
@@ -24,6 +28,7 @@ class Orchestrator {
         // Concurrency
         this.activeJobs = 0;
         this.MAX_CONCURRENT_JOBS = 5;
+        this.heartbeatTimer = null;
         this.prisma = prisma;
     }
     /**
@@ -33,18 +38,27 @@ class Orchestrator {
         if (this.isRunning)
             return;
         this.isRunning = true;
-        // Register worker
-        const worker = await this.prisma.jobWorker.create({
-            data: {
-                hostname: HOSTNAME,
-                pid: PID,
-                status: 'ACTIVE',
-            }
-        });
-        this.workerId = worker.id;
-        console.log(`[Orchestrator] Worker started: ${this.workerId} (${HOSTNAME}:${PID})`);
-        this.startHeartbeat();
-        this.pollForJobs();
+        try {
+            // Register worker
+            const worker = await this.prisma.jobWorker.create({
+                data: {
+                    hostname: HOSTNAME,
+                    pid: PID,
+                    status: 'ACTIVE',
+                    lastHeartbeat: new Date(),
+                }
+            });
+            this.workerId = worker.id;
+            console.log(`[Orchestrator] Worker started: ${this.workerId} (${HOSTNAME}:${PID})`);
+            this.startHeartbeat();
+            // Start polling as a background loop
+            this.pollForJobs();
+        }
+        catch (err) {
+            this.isRunning = false;
+            console.error('[Orchestrator] Failed to start worker:', err);
+            throw err;
+        }
     }
     /**
      * Stop the worker gracefully (drain)
@@ -52,17 +66,27 @@ class Orchestrator {
     async stopWorker() {
         this.isRunning = false;
         if (this.workerId) {
-            await this.prisma.jobWorker.update({
-                where: { id: this.workerId },
-                data: { status: 'OFFLINE' }
-            });
-            console.log(`[Orchestrator] Worker ${this.workerId} stopped gracefully.`);
+            try {
+                await this.prisma.jobWorker.update({
+                    where: { id: this.workerId },
+                    data: { status: 'OFFLINE' }
+                });
+                console.log(`[Orchestrator] Worker ${this.workerId} stopped gracefully.`);
+            }
+            catch (err) {
+                console.error('[Orchestrator] Failed to update worker status on stop:', err);
+            }
         }
     }
     startHeartbeat() {
-        setInterval(async () => {
-            if (!this.isRunning || !this.workerId)
+        if (this.heartbeatTimer)
+            clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = setInterval(async () => {
+            if (!this.isRunning || !this.workerId) {
+                if (this.heartbeatTimer)
+                    clearInterval(this.heartbeatTimer);
                 return;
+            }
             try {
                 await this.prisma.jobWorker.update({
                     where: { id: this.workerId },
@@ -157,11 +181,23 @@ class Orchestrator {
                     // If we successfully locked it, process it!
                     if (lockedJob.count > 0) {
                         this.activeJobs++;
-                        this.processJob(candidate).catch(err => {
-                            console.error('[Orchestrator] Unhandled process error:', err);
-                        }).finally(() => {
-                            this.activeJobs--;
-                        });
+                        // Wrap execution in Tenant Context if projectId is available
+                        if (candidate.projectId) {
+                            tenant_context_1.tenantStorage.run({ projectId: candidate.projectId }, () => {
+                                this.processJob(candidate).catch(err => {
+                                    console.error('[Orchestrator] Unhandled process error:', err);
+                                }).finally(() => {
+                                    this.activeJobs--;
+                                });
+                            });
+                        }
+                        else {
+                            this.processJob(candidate).catch(err => {
+                                console.error('[Orchestrator] Unhandled process error:', err);
+                            }).finally(() => {
+                                this.activeJobs--;
+                            });
+                        }
                         // Loop immediately to grab more jobs without waiting for interval
                         continue;
                     }
@@ -201,6 +237,49 @@ class Orchestrator {
                         recordsDropped: result.recordsDropped,
                     }
                 });
+            }
+            else if (job.jobType === 'AI_WORKFLOW') {
+                const { workflowId, runId, inputs } = job.payload;
+                if (!workflowId || !runId)
+                    throw new Error("Missing workflowId or runId in AI_WORKFLOW payload");
+                const result = await (0, workflow_engine_1.executeWorkflow)(workflowId, runId, this.prisma, inputs || {});
+                // Update run record in case it finished successfully
+                await this.prisma.aIWorkflowRun.update({
+                    where: { id: runId },
+                    data: {
+                        status: result.status,
+                        steps: result.steps,
+                        logs: result.logs,
+                        summary: result.summary,
+                        finishedAt: new Date(),
+                        duration: Date.now() - startTime
+                    }
+                });
+            }
+            else if (job.jobType === 'PIPELINE_RUN') {
+                const { pipelineId, runId, trigger } = job.payload;
+                if (!pipelineId || !runId)
+                    throw new Error("Missing pipelineId or runId in PIPELINE_RUN payload");
+                const result = await (0, pipeline_engine_1.executePipeline)(pipelineId, runId, this.prisma, trigger || 'manual');
+                await this.prisma.pipelineRun.update({
+                    where: { id: runId },
+                    data: {
+                        status: result.status,
+                        steps: result.steps,
+                        logs: result.logs,
+                        recordsIn: result.recordsIn,
+                        recordsOut: result.recordsOut,
+                        errorCount: result.errorCount,
+                        finishedAt: new Date(),
+                        duration: Date.now() - startTime
+                    }
+                });
+            }
+            else if (job.jobType === 'SPARK_JOB') {
+                const { jobId, runId } = job.payload;
+                if (!jobId || !runId)
+                    throw new Error("Missing jobId or runId in SPARK_JOB payload");
+                await (0, spark_engine_1.executeSparkJob)(jobId, runId, this.prisma);
             }
             else if (job.jobType === 'TELEMETRY_ROLLUP_TRIGGER') {
                 const payload = job.payload;

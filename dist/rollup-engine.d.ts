@@ -15,6 +15,17 @@ export declare function computeAllRecentRollups(windowSize: string, lookbackMs: 
     combinationsProcessed: number;
 }>;
 /**
+ * Live telemetry for the rollup scheduler — consumed by the deep health endpoint.
+ */
+export declare const rollupTelemetry: {
+    rollupScheduler: {
+        startedAt: Date | null;
+        lastTickAt: Date | null;
+        lastError: string | null;
+        tickIntervalMs: number;
+    };
+};
+/**
  * Start a background scheduler that periodically computes rollups.
  * Runs every 5 minutes and rolls up the last 10 minutes of data into 5m buckets.
  */

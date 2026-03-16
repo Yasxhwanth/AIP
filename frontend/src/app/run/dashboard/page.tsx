@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { useRuntimeStore } from "@/store/runtimeStore";
 import {
@@ -85,7 +87,7 @@ export default function RuntimeDashboard() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
-                    <div className="px-2 py-0.5 border border-pt-intent-success/30 bg-pt-intent-success/5 text-pt-intent-success rounded text-[9px] font-black uppercase tracking-tighter shadow-[0_0_10px_rgba(var(--pt-intent-success),0.2)]">Uplink Nominal</div>
+                    <div className="px-2 py-0.5 border border-pt-intent-success/30 bg-pt-intent-success/5 text-pt-intent-success rounded text-[9px] font-black uppercase tracking-tighter shadow-[0_0_10px_rgb(var(--pt-intent-success)/0.2)]">Uplink Nominal</div>
                 </div>
             </Toolbar>
 
@@ -139,7 +141,7 @@ export default function RuntimeDashboard() {
                                             >
                                                 <td className="px-6 py-3">
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`w-1 h-3 rounded-full ${isSelected ? 'bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.5)]' : 'bg-pt-border opacity-20'}`} />
+                                                        <div className={`w-1 h-3 rounded-full ${isSelected ? 'bg-pt-intent-primary shadow-[0_0_8px_rgb(var(--pt-intent-primary)/0.5)]' : 'bg-pt-border opacity-20'}`} />
                                                         <span className={`text-[10px] font-black ${isSelected ? 'text-pt-text' : 'text-pt-text-muted'}`}>{drone.id}</span>
                                                     </div>
                                                 </td>

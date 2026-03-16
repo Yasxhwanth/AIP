@@ -41,12 +41,12 @@ async function main() {
         await orchestrator.startWorker();
         logger.info('✅ Worker is active and polling for jobs.');
     } catch (err: any) {
-        logger.error('Failed to start worker:', err);
+        logger.error(err, 'Failed to start worker');
         process.exit(1);
     }
 }
 
 main().catch((err: any) => {
-    logger.error('Unhandled Worker Error:', err);
+    logger.error(err, 'Unhandled Worker Error');
     process.exit(1);
 });

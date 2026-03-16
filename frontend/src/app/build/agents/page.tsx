@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Database, Cpu, MessageSquare, Settings, Save, Trash2, Edit2, Play, Hash, Key, Loader2, Sparkles, ServerCrash, Bot, User, Code2 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface AIPAgent {

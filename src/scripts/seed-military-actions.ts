@@ -54,7 +54,7 @@ async function main() {
     for (const act of actionsParams) {
         let action = await prisma.actionDefinition.findUnique({ where: { name: act.name } });
         if (!action) {
-            action = await prisma.actionDefinition.create({ data: act });
+            action = await prisma.actionDefinition.create({ data: { ...act, projectId: project.id } });
             console.log(`Created Action: ${act.name}`);
         } else {
             console.log(`Found Action: ${act.name}`);
@@ -86,7 +86,8 @@ async function main() {
             data: {
                 decisionRuleId: rule.id,
                 actionDefinitionId: actionMap['Initiate Jamming & Ground Assault'] as string,
-                stepOrder: 1
+                stepOrder: 1,
+                projectId: project.id
             }
         });
     }
@@ -110,7 +111,8 @@ async function main() {
             conditionResults: {
                 passed: true,
                 evaluations: ['type == Main Battle Tank']
-            }
+            },
+            projectId: project.id
         }
     });
     console.log('📬 Staged Course of Action 3 into Commander Inbox.');

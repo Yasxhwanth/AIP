@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from './generated/prisma';
+import { AuditService } from './audit-service';
 
 export interface AbacActor {
     apiKeyId: string;
@@ -17,6 +18,7 @@ export interface PolicyEvaluationResult {
     allowed: boolean;
     reason: string;
     matchedPolicies: string[];
+    maskedFields?: string[]; // Fields that should be redacted/hidden
 }
 
 /**
@@ -24,7 +26,11 @@ export interface PolicyEvaluationResult {
  * Evaluates a request against stored AbacPolicy definitions.
  */
 export class AbacEngine {
-    constructor(private prisma: PrismaClient) { }
+    private audit: AuditService;
+
+    constructor(private prisma: PrismaClient) {
+        this.audit = new AuditService(prisma);
+    }
 
     /**
      * Main evaluation function.
@@ -37,7 +43,6 @@ export class AbacEngine {
         resource: AbacResource
     ): Promise<PolicyEvaluationResult> {
         // Fetch all relevant policies
-        // We look for policies that match the action OR "*" and resourceType OR "*"
         const policies = await this.prisma.abacPolicy.findMany({
             where: {
                 OR: [
@@ -66,6 +71,7 @@ export class AbacEngine {
         let isAllowed = false;
         const matchedAllow: string[] = [];
         const matchedDeny: string[] = [];
+        const maskedFields = new Set<string>();
 
         for (const policy of policies) {
             const matches = this.evaluateCondition(policy.condition as Record<string, any>, actor, resource);
@@ -75,32 +81,108 @@ export class AbacEngine {
                 } else if (policy.effect === 'ALLOW') {
                     matchedAllow.push(policy.name);
                     isAllowed = true;
+
+                    // Collect masked fields from policy metadata if present
+                    const metadata = policy.metadata as any;
+                    if (metadata?.maskedFields) {
+                        (metadata.maskedFields as string[]).forEach(f => maskedFields.add(f));
+                    }
                 }
             }
         }
 
         // Explicit DENY always overrides ALLOW
         if (matchedDeny.length > 0) {
-            return {
+            const result = {
                 allowed: false,
                 reason: `Explicit Deny: Policy [${matchedDeny.join(', ')}] evaluated to DENY.`,
                 matchedPolicies: matchedDeny
             };
+
+            // ── AUDIT LOG: Security Denial ─────────────────────────────────────
+            await this.audit.logAction({
+                actor: actor.apiKeyName,
+                action: 'SECURITY_DENIAL',
+                resourceType: resource.type,
+                resourceId: resource.id,
+                metadata: {
+                    role: actor.role,
+                    action,
+                    reason: result.reason,
+                    matchedPolicies: matchedDeny,
+                    status: 'DENIED'
+                }
+            });
+
+            return result;
         }
 
         if (isAllowed) {
             return {
                 allowed: true,
                 reason: `Explicit Allow: Policy [${matchedAllow.join(', ')}] evaluated to ALLOW.`,
-                matchedPolicies: matchedAllow
+                matchedPolicies: matchedAllow,
+                maskedFields: Array.from(maskedFields)
             };
         }
 
-        return {
+        const implicitResult = {
             allowed: false,
             reason: 'Implicit Deny: No ALLOW policies condition matched.',
             matchedPolicies: []
         };
+
+        // ── AUDIT LOG: Security Denial (Implicit) ───────────────────────────
+        await this.audit.logAction({
+            actor: actor.apiKeyName,
+            action: 'SECURITY_DENIAL',
+            resourceType: resource.type,
+            resourceId: resource.id,
+            metadata: {
+                role: actor.role,
+                action,
+                reason: implicitResult.reason,
+                status: 'DENIED'
+            }
+        });
+
+        return implicitResult;
+    }
+
+    /**
+     * Redact sensitive fields from a data object based on the evaluation result.
+     */
+    mask(data: any, maskedFields?: string[]): any {
+        if (!maskedFields || maskedFields.length === 0 || !data) {
+            return data;
+        }
+
+        const deepClone = JSON.parse(JSON.stringify(data));
+
+        const maskValue = (val: any) => {
+            if (typeof val === 'string') return '[REDACTED]';
+            if (typeof val === 'number') return 0;
+            if (typeof val === 'boolean') return false;
+            return null;
+        };
+
+        maskedFields.forEach(field => {
+            const parts = field.split('.');
+            let current = deepClone;
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (current[parts[i]]) {
+                    current = current[parts[i]];
+                } else {
+                    return;
+                }
+            }
+            const lastPart = parts[parts.length - 1];
+            if (current && lastPart in current) {
+                current[lastPart] = maskValue(current[lastPart]);
+            }
+        });
+
+        return deepClone;
     }
 
     /**

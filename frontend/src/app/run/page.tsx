@@ -75,7 +75,7 @@ export default function RuntimeDashboard() {
                     <div className="col-span-2 bg-pt-bg-panel/50 border border-pt-border rounded-xl flex flex-col overflow-hidden shadow-2xl">
                         <div className="px-6 py-4 border-b border-pt-border flex justify-between items-center bg-pt-bg-panel">
                             <div className="flex items-center gap-3">
-                                <div className="w-2 h-2 rounded-full bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.5)]" />
+                                <div className="w-2 h-2 rounded-full bg-pt-intent-primary shadow-[0_0_8px_rgb(var(--pt-intent-primary)/0.5)]" />
                                 <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-pt-text">Strategic Entity Monitor</h2>
                             </div>
                             <Link href="/run/entity/ent-drone" className="text-[10px] font-black text-pt-intent-primary hover:text-pt-intent-primary-hover uppercase tracking-[0.1em] transition-colors flex items-center gap-2">
@@ -104,8 +104,8 @@ export default function RuntimeDashboard() {
                                                 <td className="px-6 py-4 text-pt-text-muted font-bold uppercase">{typeName}</td>
                                                 <td className="px-6 py-4">
                                                     <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border ${isCritical ? 'bg-pt-intent-danger/10 text-pt-intent-danger border-pt-intent-danger/30' :
-                                                            isWarning ? 'bg-pt-intent-warning/10 text-pt-intent-warning border-pt-intent-warning/30' :
-                                                                'bg-pt-intent-success/10 text-pt-intent-success border-pt-intent-success/30'
+                                                        isWarning ? 'bg-pt-intent-warning/10 text-pt-intent-warning border-pt-intent-warning/30' :
+                                                            'bg-pt-intent-success/10 text-pt-intent-success border-pt-intent-success/30'
                                                         }`}>
                                                         {inst.properties.status}
                                                     </span>
@@ -139,9 +139,9 @@ export default function RuntimeDashboard() {
                                         <div className="absolute left-[9px] top-6 bottom-[-32px] w-px bg-pt-border" />
                                     )}
                                     <div className={`absolute left-0 top-1.5 w-[18px] h-[18px] rounded-full border-2 border-pt-bg-panel flex items-center justify-center shadow-lg ${act.type === 'ai_triggered' ? 'bg-pt-intent-primary' :
-                                            act.type === 'action_executed' ? 'bg-pt-intent-success' :
-                                                act.type === 'case_created' ? 'bg-pt-intent-warning' :
-                                                    'bg-pt-text-muted'
+                                        act.type === 'action_executed' ? 'bg-pt-intent-success' :
+                                            act.type === 'case_created' ? 'bg-pt-intent-warning' :
+                                                'bg-pt-text-muted'
                                         }`}>
                                         <div className="w-1.5 h-1.5 bg-pt-bg-panel rounded-full" />
                                     </div>

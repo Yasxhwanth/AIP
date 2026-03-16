@@ -8,15 +8,19 @@ exports.requestLogger = requestLogger;
 exports.hashApiKey = hashApiKey;
 exports.generateJwt = generateJwt;
 exports.apiKeyAuth = apiKeyAuth;
+exports.tenantContext = tenantContext;
 exports.requireRole = requireRole;
 exports.createRateLimiter = createRateLimiter;
 exports.validate = validate;
+exports.enforceIdempotency = enforceIdempotency;
+exports.auditMiddleware = auditMiddleware;
 exports.errorHandler = errorHandler;
 const crypto_1 = require("crypto");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
 const logger_1 = __importDefault(require("./logger"));
+const tenant_context_1 = require("./tenant-context");
 // ── Correlation ID ───────────────────────────────────────────────
 function correlationId() {
     return (req, res, next) => {
@@ -92,6 +96,11 @@ function apiKeyAuth(prisma) {
                 res.status(401).json({ error: 'Invalid or disabled API key' });
                 return;
             }
+            if (!apiKey.projectId && req.path !== '/projects' && req.method !== 'POST') {
+                // Allow project creation without a projectId, otherwise require it
+                res.status(401).json({ error: 'API key is not associated with a project' });
+                return;
+            }
             // Update last used
             await prisma.apiKey.update({
                 where: { id: apiKey.id },
@@ -110,6 +119,10 @@ function apiKeyAuth(prisma) {
             try {
                 const token = authHeader.slice(7);
                 const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+                if (!decoded.projectId && req.path !== '/projects' && req.method !== 'POST') {
+                    res.status(401).json({ error: 'Token is missing tenant context (projectId)' });
+                    return;
+                }
                 req.auth = decoded;
                 next();
             }
@@ -119,6 +132,18 @@ function apiKeyAuth(prisma) {
             return;
         }
         res.status(401).json({ error: 'Authentication required. Provide X-API-Key or Bearer token.' });
+    };
+}
+// ── Tenant Context ───────────────────────────────────────────────
+function tenantContext() {
+    return (req, _res, next) => {
+        const projectId = req.auth?.projectId;
+        if (projectId) {
+            tenant_context_1.tenantStorage.run({ projectId }, () => next());
+        }
+        else {
+            next();
+        }
     };
 }
 // ── Role Guard ───────────────────────────────────────────────────
@@ -157,6 +182,7 @@ function createRateLimiter(windowMs = 60000, max = 100) {
     });
 }
 // ── Zod Validation ───────────────────────────────────────────────
+// ── Zod Validation ───────────────────────────────────────────────
 function validate(schema) {
     return (req, res, next) => {
         try {
@@ -177,6 +203,92 @@ function validate(schema) {
                 next(error);
             }
         }
+    };
+}
+// ── Idempotency Middleware ───────────────────────────────────────
+/**
+ * Ensures that a request with a given X-Idempotency-Key header is only processed once.
+ * Creates a stub DomainEvent to hold the idempotency key lock.
+ */
+function enforceIdempotency(prisma) {
+    return async (req, res, next) => {
+        const idempotencyKey = req.headers['x-idempotency-key'];
+        if (!idempotencyKey) {
+            // If they don't provide a key, let the downstream handler deal with it (or ignore)
+            return next();
+        }
+        try {
+            await prisma.domainEvent.create({
+                data: {
+                    idempotencyKey,
+                    eventType: 'IdempotencyLock',
+                    entityTypeId: 'System',
+                    logicalId: 'System',
+                    entityVersion: 1,
+                    payload: { path: req.path, method: req.method },
+                }
+            });
+            next();
+        }
+        catch (error) {
+            if (error?.code === 'P2002') {
+                res.status(409).json({
+                    error: 'Conflict: This request has already been processed (duplicate X-Idempotency-Key)',
+                    idempotencyKey
+                });
+            }
+            else {
+                next(error);
+            }
+        }
+    };
+}
+// ── Audit Middleware ───────────────────────────────────────────────
+/**
+ * Automatically logs all mutating API calls (POST, PUT, DELETE, PATCH)
+ * for security and compliance.
+ */
+function auditMiddleware(prisma) {
+    return (req, res, next) => {
+        const mutations = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+        if (!mutations.has(req.method)) {
+            return next();
+        }
+        console.log(`[AuditMiddleware] Intercepted ${req.method} ${req.path}`);
+        res.on('finish', async () => {
+            // We want to log successes and specific security denials (403).
+            // Skip 404s, 400s, etc. to avoid noise, but keep 403 and 500.
+            const shouldLog = res.statusCode === 200 || res.statusCode === 201 || res.statusCode === 403 || res.statusCode === 500;
+            if (!shouldLog)
+                return;
+            const status = res.statusCode >= 400 ? (res.statusCode === 403 ? 'DENIED' : 'FAILED') : 'SUCCESS';
+            try {
+                const log = await prisma.auditLog.create({
+                    data: {
+                        actor: req.auth?.apiKeyName || 'anonymous',
+                        actorRole: req.auth?.role || 'user',
+                        action: `API_${req.method}_${req.path.split('/').filter(Boolean).join('_').toUpperCase()}`,
+                        resourceType: 'API_ENDPOINT',
+                        resourceId: req.path,
+                        status: status,
+                        metadata: {
+                            ip: req.ip,
+                            correlationId: req.correlationId,
+                            method: req.method,
+                            statusCode: res.statusCode,
+                            body: req.method !== 'GET' ? req.body : undefined
+                        },
+                        projectId: req.auth?.projectId
+                    }
+                });
+                console.log(`[AuditMiddleware] AuditLog created: ${log.id} [${status}]`);
+            }
+            catch (err) {
+                console.error(`[AuditMiddleware] Failed to write audit log: ${err.message}`);
+                logger_1.default.error({ err }, 'Failed to write global audit log');
+            }
+        });
+        next();
     };
 }
 // ── Error Handler ────────────────────────────────────────────────

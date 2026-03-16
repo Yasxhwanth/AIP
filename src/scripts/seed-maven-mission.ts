@@ -137,8 +137,8 @@ async function main() {
             name: 'Logistics Maven',
             description: 'Mission command assistant for fleet operations and supply chain resilience.',
             systemPrompt: 'You are MAVEN, an AI mission command assistant designed for Palantir AIP. Your goal is to monitor global logistics readiness and provide actionable, data-driven recommendations to maintain throughput. You have real-time access to Port, Convoy, and SupplyHub data. When suggesting actions, be decisive and professional. Suggest rerouting or resource deployment based on congestion and inventory levels.',
-            modelConfig: { provider: 'openai', model: 'gpt-4o' },
-            ontologyAccess: Object.values(entityTypeMap)
+            model: 'gpt-4o',
+            allowedTools: []
         },
         create: {
             id: 'agent-logistics-maven',
@@ -146,8 +146,8 @@ async function main() {
             name: 'Logistics Maven',
             description: 'Mission command assistant for fleet operations and supply chain resilience.',
             systemPrompt: 'You are MAVEN, an AI mission command assistant designed for Palantir AIP. Your goal is to monitor global logistics readiness and provide actionable, data-driven recommendations to maintain throughput. You have real-time access to Port, Convoy, and SupplyHub data. When suggesting actions, be decisive and professional. Suggest rerouting or resource deployment based on congestion and inventory levels.',
-            modelConfig: { provider: 'openai', model: 'gpt-4o' },
-            ontologyAccess: Object.values(entityTypeMap)
+            model: 'gpt-4o',
+            allowedTools: []
         }
     });
     console.log(`Seeded Maven Agent: ${agent.name}`);

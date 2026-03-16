@@ -57,7 +57,7 @@ function EntityCardNode({ data, selected }: NodeProps) {
     const d = data as any;
     const color = d.color ?? "var(--pt-intent-primary)";
     return (
-        <div className={`bg-pt-bg-panel text-[11px] shadow-2xl rounded-lg overflow-hidden transition-all select-none border border-pt-border ${selected ? "ring-2 ring-pt-intent-primary border-transparent shadow-[0_0_15px_rgba(var(--pt-intent-primary),0.3)]" : "hover:border-pt-border-hover"}`}
+        <div className={`bg-pt-bg-panel text-[11px] shadow-2xl rounded-lg overflow-hidden transition-all select-none border border-pt-border ${selected ? "ring-2 ring-pt-intent-primary border-transparent shadow-[0_0_15px_rgb(var(--pt-intent-primary) / 0.3)]" : "hover:border-pt-border-hover"}`}
             style={{ minWidth: 220 }}>
             <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 border-2 border-pt-bg-panel" style={{ background: color, left: -5 }} />
             {/* Header */}
@@ -105,7 +105,7 @@ function RelEdge({ id, sourceX, sourceY, targetX, targetY, label, data, markerEn
             {label && (
                 <EdgeLabelRenderer>
                     <div style={{ position: "absolute", transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)`, pointerEvents: "all" }}
-                        className={`bg-pt-bg-panel border text-[9px] font-black uppercase tracking-[0.1em] px-2 py-1 rounded transition-all shadow-xl ${hov ? "border-pt-intent-success text-pt-intent-success shadow-[0_0_10px_rgba(var(--pt-intent-success),0.2)]" : "border-pt-border text-pt-text-muted"}`}
+                        className={`bg-pt-bg-panel border text-[9px] font-black uppercase tracking-[0.1em] px-2 py-1 rounded transition-all shadow-xl ${hov ? "border-pt-intent-success text-pt-intent-success shadow-[0_0_10px_rgb(var(--pt-intent-success) / 0.2)]" : "border-pt-border text-pt-text-muted"}`}
                         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
                         {isDerived ? "⚡ " : ""}{label}
                     </div>
@@ -439,7 +439,7 @@ export default function NoCodeOntologyBuilder() {
                                 {selectedId === et.id && (
                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-pt-intent-primary" />
                                 )}
-                                <span className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.3)]" style={{ background: COLORS[i % COLORS.length] }} />
+                                <span className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_rgb(var(--pt-intent-primary) / 0.3)]" style={{ background: COLORS[i % COLORS.length] }} />
                                 <span className="font-bold uppercase tracking-tight truncate flex-1 text-left">{et.name}</span>
                                 <span className="text-[9px] font-mono text-pt-text-muted px-1 border border-pt-border rounded opacity-40 group-hover:opacity-100 transition-opacity">{et.attributes.length}P</span>
                             </button>
@@ -609,7 +609,7 @@ export default function NoCodeOntologyBuilder() {
                                     <div className="px-3 py-2 text-[9px] font-black text-pt-text-muted uppercase tracking-[0.2em] opacity-40">Inputs & Schema</div>
                                     {selectedEntity.attributes.map(a => (
                                         <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent hover:bg-pt-bg hover:border-pt-border group transition-all">
-                                            {a.required ? <Key className="w-3.5 h-3.5 text-pt-intent-primary shrink-0 drop-shadow-[0_0_5px_rgba(var(--pt-intent-primary),0.4)]" /> : <Hash className="w-3.5 h-3.5 text-pt-text-muted shrink-0 opacity-30" />}
+                                            {a.required ? <Key className="w-3.5 h-3.5 text-pt-intent-primary shrink-0 drop-shadow-[0_0_5px_rgb(var(--pt-intent-primary) / 0.4)]" /> : <Hash className="w-3.5 h-3.5 text-pt-text-muted shrink-0 opacity-30" />}
                                             <div className="flex-1 min-w-0">
                                                 <div className="text-[11px] text-pt-text font-bold truncate font-mono tracking-tight uppercase">{a.name}</div>
                                                 <div className="text-[8px] text-pt-text-muted font-black tracking-widest opacity-50">{a.dataType}</div>
@@ -662,7 +662,7 @@ export default function NoCodeOntologyBuilder() {
                                             <div className="text-[9px] font-black text-pt-intent-success uppercase tracking-[0.2em] opacity-60 mb-3 px-1">Outgoing Projections</div>
                                             {selectedEntity.outgoingRelationships.map(rel => (
                                                 <div key={rel.id} className="flex items-center gap-3 px-4 py-3 bg-pt-bg border border-pt-border rounded-xl group hover:border-pt-intent-success/50 transition-all">
-                                                    <div className="shrink-0 w-1.5 h-1.5 rounded-full bg-pt-intent-success shadow-[0_0_8px_rgba(var(--pt-intent-success),0.5)]" />
+                                                    <div className="shrink-0 w-1.5 h-1.5 rounded-full bg-pt-intent-success shadow-[0_0_8px_rgb(var(--pt-intent-success) / 0.5)]" />
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-[10px] font-black text-pt-intent-success uppercase tracking-widest truncate">{rel.name}</div>
                                                         <div className="text-[11px] font-bold text-pt-text leading-none mt-1 uppercase tracking-tight truncate">{rel.targetEntityType.name}</div>
@@ -680,7 +680,7 @@ export default function NoCodeOntologyBuilder() {
                                             <div className="text-[9px] font-black text-pt-intent-primary uppercase tracking-[0.2em] opacity-60 mb-3 px-1">Incoming Dependencies</div>
                                             {selectedEntity.incomingRelationships.map(rel => (
                                                 <div key={rel.id} className="flex items-center gap-3 px-4 py-3 bg-pt-bg border border-pt-border rounded-xl group hover:border-pt-intent-primary/50 transition-all opacity-80">
-                                                    <div className="shrink-0 w-1.5 h-1.5 rounded-full bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.5)]" />
+                                                    <div className="shrink-0 w-1.5 h-1.5 rounded-full bg-pt-intent-primary shadow-[0_0_8px_rgb(var(--pt-intent-primary) / 0.5)]" />
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-[10px] font-black text-pt-intent-primary uppercase tracking-widest truncate">{rel.name}</div>
                                                         <div className="text-[11px] font-bold text-pt-text leading-none mt-1 uppercase tracking-tight truncate">{rel.sourceEntityType.name}</div>

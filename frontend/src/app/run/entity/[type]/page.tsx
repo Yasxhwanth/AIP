@@ -74,7 +74,7 @@ export default function EntityListView({ params }: { params: Promise<{ type: str
                                 {currentInstances.map(inst => (
                                     <tr key={inst.id} className="hover:bg-pt-bg transition-colors group">
                                         <td className="px-6 py-5 font-mono text-pt-intent-primary text-[10px] font-black flex items-center gap-3">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-pt-border group-hover:bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.2)] transition-all" />
+                                            <div className="w-1.5 h-1.5 rounded-full bg-pt-border group-hover:bg-pt-intent-primary shadow-[0_0_8px_rgb(var(--pt-intent-primary) / 0.2)] transition-all" />
                                             {inst.id}
                                         </td>
 
@@ -114,7 +114,7 @@ export default function EntityListView({ params }: { params: Promise<{ type: str
 
                                         <td className="px-6 py-5 text-right">
                                             <Link href={`/run/entity/${type}/${inst.id}`}
-                                                className="h-8 px-4 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-pt-bg-panel border border-pt-border rounded-lg text-pt-text hover:text-pt-bg hover:bg-pt-intent-primary hover:border-pt-intent-primary transition-all active:scale-95 group-hover:shadow-[0_0_15px_rgba(var(--pt-intent-primary),0.3)]">
+                                                className="h-8 px-4 inline-flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-pt-bg-panel border border-pt-border rounded-lg text-pt-text hover:text-pt-bg hover:bg-pt-intent-primary hover:border-pt-intent-primary transition-all active:scale-95 group-hover:shadow-[0_0_15px_rgb(var(--pt-intent-primary) / 0.3)]">
                                                 Analyze <ArrowRight size={12} />
                                             </Link>
                                         </td>

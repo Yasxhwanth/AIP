@@ -6,6 +6,7 @@ import { ZodSchema, ZodError } from 'zod';
 import { PrismaClient } from './generated/prisma';
 import logger from './logger';
 import { tenantStorage } from './tenant-context';
+import { AbacEngine } from './abac-engine';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -119,6 +120,12 @@ export function apiKeyAuth(prisma: PrismaClient) {
                 return;
             }
 
+            if (!apiKey.projectId && req.path !== '/projects' && req.method !== 'POST') {
+                // Allow project creation without a projectId, otherwise require it
+                res.status(401).json({ error: 'API key is not associated with a project' });
+                return;
+            }
+
             // Update last used
             await prisma.apiKey.update({
                 where: { id: apiKey.id },
@@ -139,6 +146,12 @@ export function apiKeyAuth(prisma: PrismaClient) {
             try {
                 const token = authHeader.slice(7);
                 const decoded = jwt.verify(token, JWT_SECRET as string) as unknown as AuthContext;
+
+                if (!decoded.projectId && req.path !== '/projects' && req.method !== 'POST') {
+                    res.status(401).json({ error: 'Token is missing tenant context (projectId)' });
+                    return;
+                }
+
                 req.auth = decoded;
                 next();
             } catch {
@@ -159,6 +172,56 @@ export function tenantContext() {
         if (projectId) {
             tenantStorage.run({ projectId }, () => next());
         } else {
+            next();
+        }
+    };
+}
+
+// ── Security Guard (ABAC) ────────────────────────────────────────
+
+export function securityGuard(abac: AbacEngine) {
+    return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+        if (!req.auth) {
+            res.status(401).json({ error: 'Not authenticated' });
+            return;
+        }
+
+        // Simple resource inference for demonstration
+        let resourceType = '*';
+        const path = req.path;
+        if (path.includes('/entity-types')) resourceType = 'EntityType';
+        if (path.includes('/change-requests')) resourceType = 'ChangeRequest';
+        if (path.includes('/pipelines')) resourceType = 'Pipeline';
+        if (path.includes('/data-sources')) resourceType = 'DataSource';
+
+        const actionMapping: Record<string, string> = {
+            'GET': 'READ',
+            'POST': 'WRITE',
+            'PUT': 'WRITE',
+            'PATCH': 'WRITE',
+            'DELETE': 'DELETE'
+        };
+        const action = actionMapping[req.method] || 'READ';
+
+        try {
+            const result = await abac.evaluate(req.auth as any, action, {
+                type: resourceType,
+                id: req.params.id as string,
+                attributes: req.body
+            });
+
+            if (!result.allowed) {
+                res.status(403).json({
+                    error: 'Forbidden: ABAC Policy Denial',
+                    reason: result.reason,
+                    correlationId: req.correlationId
+                });
+                return;
+            }
+
+            next();
+        } catch (err) {
+            req.log.error({ err }, 'ABAC evaluation failed');
             next();
         }
     };
@@ -252,6 +315,7 @@ export function enforceIdempotency(prisma: PrismaClient) {
                     logicalId: 'System',
                     entityVersion: 1,
                     payload: { path: req.path, method: req.method },
+                    projectId: req.auth?.projectId || 'system',
                 }
             });
             next();
@@ -284,8 +348,12 @@ export function auditMiddleware(prisma: PrismaClient) {
         console.log(`[AuditMiddleware] Intercepted ${req.method} ${req.path}`);
 
         res.on('finish', async () => {
-            console.log(`[AuditMiddleware] Request finished with status ${res.statusCode}`);
-            if (res.statusCode >= 400) return;
+            // We want to log successes and specific security denials (403).
+            // Skip 404s, 400s, etc. to avoid noise, but keep 403 and 500.
+            const shouldLog = res.statusCode === 200 || res.statusCode === 201 || res.statusCode === 403 || res.statusCode === 500;
+            if (!shouldLog) return;
+
+            const status = res.statusCode >= 400 ? (res.statusCode === 403 ? 'DENIED' : 'FAILED') : 'SUCCESS';
 
             try {
                 const log = await (prisma as any).auditLog.create({
@@ -295,16 +363,18 @@ export function auditMiddleware(prisma: PrismaClient) {
                         action: `API_${req.method}_${req.path.split('/').filter(Boolean).join('_').toUpperCase()}`,
                         resourceType: 'API_ENDPOINT',
                         resourceId: req.path,
+                        status: status,
                         metadata: {
                             ip: req.ip,
                             correlationId: req.correlationId,
                             method: req.method,
+                            statusCode: res.statusCode,
                             body: req.method !== 'GET' ? req.body : undefined
                         },
                         projectId: req.auth?.projectId
                     }
                 });
-                console.log(`[AuditMiddleware] AuditLog created: ${log.id}`);
+                console.log(`[AuditMiddleware] AuditLog created: ${log.id} [${status}]`);
             } catch (err: any) {
                 console.error(`[AuditMiddleware] Failed to write audit log: ${err.message}`);
                 logger.error({ err }, 'Failed to write global audit log');

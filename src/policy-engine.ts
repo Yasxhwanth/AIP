@@ -117,6 +117,7 @@ export async function evaluatePolicies(
                             previousState: event.payload.previousState,
                             validFrom: event.payload.validFrom,
                         } as unknown as Prisma.InputJsonValue,
+                        projectId: policy.projectId,
                     },
                 });
 

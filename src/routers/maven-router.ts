@@ -2,9 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '../generated/prisma';
 import { AIPExecutor } from '../aip-executor';
 import { defaultToolRegistry } from '../aip-tools';
-import { OpenAI } from 'openai';
-
-const openai = new OpenAI();
+import { getLlmClient } from '../lib/llm-factory';
 
 export function createMavenRouter(prisma: PrismaClient) {
     const router = Router();
@@ -97,41 +95,34 @@ export function createMavenRouter(prisma: PrismaClient) {
             };
 
             // 3. Inference
-            const response = await openai.chat.completions.create({
-                model: (agent.modelConfig as any).model || "gpt-4o",
-                messages: [
-                    { role: "system", content: agent.systemPrompt as string },
-                    { role: "system", content: `CURRENT MISSION CONTEXT: ${JSON.stringify(context)}` },
-                    { role: "user", content: message }
-                ],
+            const llm = getLlmClient();
+            const response = await llm.chat({
+                model: (agent as any).modelConfig?.model || "gemini-2.0-flash",
+                systemPrompt: (agent.systemPrompt as string) + `\n\nCURRENT MISSION CONTEXT: ${JSON.stringify(context)}`,
+                messages: [{ role: "user", content: message }],
                 tools: [
                     {
-                        type: "function",
-                        function: {
-                            name: "suggest_reroute",
-                            description: "Propose a reroute for a convoy to avoid port congestion.",
-                            parameters: {
-                                type: "object",
-                                properties: {
-                                    convoyId: { type: "string" },
-                                    reason: { type: "string" },
-                                    recommendedPort: { type: "string" }
-                                },
-                                required: ["convoyId", "reason", "recommendedPort"]
-                            }
+                        name: "suggest_reroute",
+                        description: "Propose a reroute for a convoy to avoid port congestion.",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                convoyId: { type: "string" },
+                                reason: { type: "string" },
+                                recommendedPort: { type: "string" }
+                            },
+                            required: ["convoyId", "reason", "recommendedPort"]
                         }
                     }
                 ]
             });
 
-            const choice = response.choices[0].message;
-            if (choice.tool_calls) {
-                // If the model suggests a tool, we return the "recommendation" to the UI
-                const toolCall = choice.tool_calls[0];
-                const args = JSON.parse(toolCall.function.arguments);
+            if (response.toolCalls && response.toolCalls.length > 0) {
+                const toolCall = response.toolCalls[0];
+                const args = toolCall.arguments as any;
 
                 return res.json({
-                    message: choice.content || "I have analyzed the congestion and prepared a reroute recommendation.",
+                    message: response.answer || "I have analyzed the congestion and prepared a reroute recommendation.",
                     recommendation: {
                         type: 'REROUTE',
                         title: `Reroute ${args.convoyId} to ${args.recommendedPort}`,
@@ -142,7 +133,7 @@ export function createMavenRouter(prisma: PrismaClient) {
                 });
             }
 
-            res.json({ message: choice.content });
+            res.json({ message: response.answer });
         } catch (err: any) {
             res.status(500).json({ error: err.message });
         }

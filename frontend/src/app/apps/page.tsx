@@ -2,13 +2,11 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Plus, LayoutGrid, TerminalSquare, AlertTriangle, Play, Save, Settings, LineChart, Table, MessageSquare, Bot, Trash2 } from "lucide-react";
-import GridLayout from "react-grid-layout";
-const { WidthProvider, Responsive } = GridLayout as any;
-import { Layout } from "react-grid-layout";
+import { Responsive, WidthProvider, Layout } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { ApiClient } from "@/lib/apiClient";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -26,7 +24,7 @@ type Dashboard = {
     id: string;
     name: string;
     widgets: Widget[];
-    layout: any[]; // Holds x, y, w, h
+    layout: Layout;
     updatedAt: string;
 };
 
@@ -107,8 +105,18 @@ const AIPChatWidget = ({ agentId }: { agentId: string }) => {
         setLoading(true);
 
         try {
-            const res = await ApiClient.post<ChatMessage>(`/api/agents/${agentId}/chat`, { message: msg });
-            setMessages(prev => [...prev, { ...res, id: (Date.now() + 1).toString() }]);
+            const res = await ApiClient.post<any>(`/api/v1/aip/assist`, {
+                message: msg,
+                page: 'workshop',
+                projectId: 'proj-demo',
+                agentId: agentId,
+                vars: { vars: {} }
+            });
+            setMessages(prev => [...prev, {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: res.answer
+            }]);
         } catch (e: any) {
             setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: `[Error: ${e.message}]` }]);
         } finally {
@@ -164,6 +172,11 @@ export default function WorkshopAppsPage() {
     const { activeProjectId } = useWorkspaceStore();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     // Core Data
     const [dashboards, setDashboards] = useState<Dashboard[]>([]);
@@ -255,7 +268,7 @@ export default function WorkshopAppsPage() {
         if (selectedWidgetId === id) setSelectedWidgetId(null);
     };
 
-    const onLayoutChange = (layout: any[]) => {
+    const onLayoutChange = (layout: Layout) => {
         if (!activeDash) return;
         setActiveDash(prev => prev ? { ...prev, layout } : null);
     };
@@ -269,6 +282,7 @@ export default function WorkshopAppsPage() {
     };
 
     // ── Views ─────────────────────────────────────────────────────────────
+    if (!isMounted) return <div className="h-full w-full bg-[#182026]" />;
     if (loading) return <div className="h-full w-full bg-[#F5F8FA] text-[#182026] p-8">Loading Workshop Builder...</div>;
 
     const selectedWidget = activeDash?.widgets.find(w => w.id === selectedWidgetId);
@@ -286,9 +300,19 @@ export default function WorkshopAppsPage() {
             {/* ── LEFT NAV (App Chrome) ── */}
             <div className="w-14 bg-[#10161A] border-r border-[#293742] flex flex-col items-center py-3 shrink-0 z-20">
                 <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center font-bold mb-6">AIP</div>
-                <button className="w-10 h-10 flex flex-col items-center justify-center text-[#137CBD] group relative bg-[#182026]">
+                <button
+                    onClick={() => window.location.href = '/apps'}
+                    className={`w-10 h-10 flex flex-col items-center justify-center group relative mb-2 ${window.location.pathname === '/apps' ? 'text-[#137CBD] bg-[#182026]' : 'text-[#5C7080] hover:text-white'}`}
+                >
                     <LayoutGrid className="w-5 h-5 mb-1" />
                     <span className="text-[9px] font-bold">Workshop</span>
+                </button>
+                <button
+                    onClick={() => window.location.href = '/apps/agent-studio'}
+                    className={`w-10 h-10 flex flex-col items-center justify-center group relative ${window.location.pathname === '/apps/agent-studio' ? 'text-[#137CBD] bg-[#182026]' : 'text-[#5C7080] hover:text-white'}`}
+                >
+                    <Bot className="w-5 h-5 mb-1" />
+                    <span className="text-[9px] font-bold">Studio</span>
                 </button>
             </div>
 

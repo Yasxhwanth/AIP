@@ -4,7 +4,9 @@ require("dotenv/config");
 const pg_1 = require("pg");
 const adapter_pg_1 = require("@prisma/adapter-pg");
 const prisma_1 = require("../generated/prisma");
-const pool = new pg_1.Pool({ connectionString: process.env.DATABASE_URL });
+const baseUrl = process.env.DATABASE_URL || '';
+const databaseUrl = baseUrl.replace('aip_app:aip_password', 'aip_user:aip_password');
+const pool = new pg_1.Pool({ connectionString: databaseUrl });
 const adapter = new adapter_pg_1.PrismaPg(pool);
 const prisma = new prisma_1.PrismaClient({ adapter });
 async function main() {
@@ -37,7 +39,7 @@ async function main() {
     for (const etData of entityTypesData) {
         let et = await prisma.entityType.findUnique({
             where: {
-                projectId_name_version: { projectId, name: etData.name, version: etData.version }
+                projectId_name_version_branchName: { projectId, name: etData.name, version: etData.version, branchName: 'main' }
             }
         });
         if (!et) {
@@ -128,21 +130,32 @@ async function main() {
         }
     ];
     for (const entity of entitiesToSeed) {
-        await prisma.currentEntityState.upsert({
-            where: { logicalId: entity.logicalId },
-            update: {
-                data: entity.data,
-                updatedAt: entity.updatedAt
-            },
-            create: {
-                logicalId: entity.logicalId,
-                entityTypeId: entity.entityTypeId,
-                data: entity.data,
-                updatedAt: entity.updatedAt,
-                legalHold: entity.legalHold
-            }
-        });
-        console.log(`Upserted Entity State: ${entity.logicalId}`);
+        const existing = await prisma.currentEntityState.findUnique({ where: { logicalId: entity.logicalId } });
+        const creationData = {
+            logicalId: entity.logicalId,
+            entityTypeId: entity.entityTypeId,
+            data: entity.data,
+            updatedAt: entity.updatedAt,
+            legalHold: entity.legalHold,
+            projectId
+        };
+        if (!existing) {
+            await prisma.currentEntityState.create({
+                data: creationData
+            });
+            console.log(`Seeded entity state: ${entity.logicalId}`);
+        }
+        else {
+            await prisma.currentEntityState.update({
+                where: { logicalId: entity.logicalId },
+                data: {
+                    data: entity.data,
+                    updatedAt: entity.updatedAt,
+                    projectId
+                }
+            });
+            console.log(`Updated entity state: ${entity.logicalId}`);
+        }
     }
     console.log('✅ Military Data Seed Complete!');
 }

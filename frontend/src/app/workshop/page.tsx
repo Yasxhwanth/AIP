@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, ExternalLink, Clock, Database, Globe, Loader2 } from "lucide-react";
 import { ApiClient } from "@/lib/apiClient";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 import { LineageGraphView } from "@/components/LineageGraphView";
 
 interface SearchResult {

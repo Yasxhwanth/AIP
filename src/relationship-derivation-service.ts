@@ -17,6 +17,7 @@ export function startConfidenceDecayScheduler(prisma: PrismaClient): void {
                 payload: {},
                 idempotencyKey,
                 priority: 0, // low priority background task
+                projectId: (global as any).DEFAULT_PROJECT_ID || 'system',
             },
             update: {}
         }).catch((err: any) => {
@@ -32,6 +33,7 @@ export function startConfidenceDecayScheduler(prisma: PrismaClient): void {
                 payload: {},
                 idempotencyKey: `RELATIONSHIP_DECAY_STARTUP_${Date.now()}`,
                 priority: 0,
+                projectId: (global as any).DEFAULT_PROJECT_ID || 'system',
             }
         }).catch(() => { }); // ignore if idempotency conflict
     }, 10000);
@@ -85,7 +87,8 @@ export class RelationshipDerivationService {
                         sourceLogicalId: s.logicalId,
                         targetLogicalId: t.logicalId,
                         properties: { distanceKm: dist, derived: true },
-                        validFrom: new Date()
+                        validFrom: new Date(),
+                        projectId: s.projectId
                     });
                 }
             }
@@ -110,7 +113,8 @@ export class RelationshipDerivationService {
                         relationshipName: 'derived_proximity',
                         sourceLogicalId: link.sourceLogicalId,
                         targetLogicalId: link.targetLogicalId,
-                        properties: link.properties as any
+                        properties: link.properties as any,
+                        projectId: link.projectId,
                     },
                     update: {
                         properties: link.properties as any

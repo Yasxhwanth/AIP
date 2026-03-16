@@ -1,7 +1,7 @@
 "use client";
 
 import { useRuntimeStore } from "@/store/runtimeStore";
-import { History, Clock, FileJson, Cpu, ShieldAlert, Zap, User, ArrowRight } from "lucide-react";
+import { History, Clock, FileJson, Cpu, ShieldAlert, Zap, User, ArrowRight, Activity } from "lucide-react";
 
 export default function ActivityLogPage() {
     const { activity } = useRuntimeStore();
@@ -44,7 +44,7 @@ export default function ActivityLogPage() {
                                     )}
 
                                     {/* Timeline Marker */}
-                                    <div className={`absolute left-0 top-1 w-8 h-8 rounded-lg flex items-center justify-center border border-pt-border bg-pt-bg-panel shadow-lg group-hover:border-pt-intent-primary group-hover:shadow-[0_0_10px_rgba(var(--pt-intent-primary),0.2)] transition-all z-10`}>
+                                    <div className={`absolute left-0 top-1 w-8 h-8 rounded-lg flex items-center justify-center border border-pt-border bg-pt-bg-panel shadow-lg group-hover:border-pt-intent-primary group-hover:shadow-[0_0_10px_rgb(var(--pt-intent-primary) / 0.2)] transition-all z-10`}>
                                         <Icon className={`w-3.5 h-3.5 ${typeCfg.color}`} />
                                     </div>
 

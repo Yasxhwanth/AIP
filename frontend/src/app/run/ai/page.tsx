@@ -6,7 +6,8 @@ import { useBuilderStore } from "@/store/builderStore";
 import {
     BrainCircuit, Send, User, ChevronRight, Database,
     Zap, AlertTriangle, CheckCircle2, ShieldAlert, Cpu,
-    Terminal, MoreHorizontal, Command, Sparkles, AlertCircle
+    Terminal, MoreHorizontal, Command, Sparkles, AlertCircle,
+    Settings, RefreshCcw
 } from "lucide-react";
 
 interface ChatMessage {
@@ -274,7 +275,7 @@ export default function RuntimeAiConsole() {
             {/* HIGH-LEVEL INTERVENTION AUTHORIZATION MODAL */}
             {execProposal && (
                 <div className="fixed inset-0 bg-pt-bg/95 backdrop-blur-md flex items-center justify-center p-8 z-[100] animate-in fade-in duration-300">
-                    <div className="bg-pt-bg-panel border border-pt-intent-primary/30 rounded-2xl w-full max-w-xl shadow-[0_0_100px_rgba(var(--pt-intent-primary),0.2)] p-8 relative overflow-hidden">
+                    <div className="bg-pt-bg-panel border border-pt-intent-primary/30 rounded-2xl w-full max-w-xl shadow-[0_0_100px_rgb(var(--pt-intent-primary) / 0.2)] p-8 relative overflow-hidden">
                         {/* Background warning pattern */}
                         <div className="absolute top-0 right-0 p-8 opacity-5">
                             <ShieldAlert size={120} className="text-pt-intent-primary" />

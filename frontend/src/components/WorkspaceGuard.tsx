@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useWorkspaceStore } from '@/store/workspace';
+import { useWorkspaceStore } from '@/store/workspaceStore';
 
 export default function WorkspaceGuard({ children }: { children: React.ReactNode }) {
     const { activeProjectId } = useWorkspaceStore();

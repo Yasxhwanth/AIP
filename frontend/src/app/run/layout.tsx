@@ -26,7 +26,7 @@ export default function RunLayout({ children }: { children: React.ReactNode }) {
                         <Link href="/run/dashboard" className="h-[48px] px-5 flex items-center gap-2.5 text-pt-text transition-all relative group bg-pt-bg/30">
                             <LayoutDashboard className="w-3.5 h-3.5 text-pt-intent-primary" />
                             <span className="font-black uppercase tracking-widest text-[10px]">Command Center</span>
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pt-intent-primary shadow-[0_0_8px_rgba(var(--pt-intent-primary),0.5)]" />
+                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pt-intent-primary shadow-[0_0_8px_rgb(var(--pt-intent-primary)/0.5)]" />
                         </Link>
 
                         <Link href="/run/map" className="h-[48px] px-5 flex items-center gap-2.5 text-pt-text-muted hover:text-pt-text hover:bg-pt-bg/20 transition-all group">

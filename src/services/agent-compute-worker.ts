@@ -1,6 +1,6 @@
 import amqp from 'amqplib';
 import { PrismaClient } from '../generated/prisma';
-import OpenAI from 'openai';
+import { getLlmClient } from '../lib/llm-factory';
 
 // @ts-ignore: dynamic type matching
 const prisma = new PrismaClient() as any;
@@ -8,9 +8,7 @@ const RBMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
 const QUEUE_NAME = 'agent_compute_queue';
 
 // The compute worker utilizes the LLM processing directly
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || 'MISSING_KEY',
-});
+const llm = getLlmClient();
 
 async function connectQueue(retries = 5, delay = 5000): Promise<any> {
     for (let i = 0; i < retries; i++) {
@@ -94,73 +92,15 @@ async function startAgentWorker() {
                             }
                         }
 
-                        // ── First Inference Pass ──
-                        const payload: any = {
-                            model: (agent.modelConfig as any)?.model || 'gpt-4o',
-                            messages: llmMessages,
-                        };
+                        // ── Inference Pass (Gemini handles tool calling via Unified Interface) ──
+                        const llmResponse = await llm.chat({
+                            model: (agent as any).modelConfig?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+                            systemPrompt: `${agent.systemPrompt || 'You are an AI assistant.'}\n\nYou have access to the following live Ontology Data from the platform database:\n${contextData}`,
+                            messages: [{ role: 'user', content: message }],
+                            tools: openAITools // The LlmClient interface handles the mapping
+                        });
 
-                        if (openAITools) {
-                            payload.tools = openAITools;
-                            payload.tool_choice = "auto";
-                        }
-
-                        const completion = await openai.chat.completions.create(payload);
-
-                        const responseMessage = completion.choices[0]?.message;
-
-                        // ── Execute Tool Calling (AIP Logic Sandbox) ──
-                        if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
-                            llmMessages.push(responseMessage); // Add assistant's attempt to call a function
-
-                            for (const rawToolCall of responseMessage.tool_calls) {
-                                const toolCall = rawToolCall as any;
-                                const fnName = toolCall.function.name;
-                                const parsedArgs = JSON.parse(toolCall.function.arguments);
-                                console.log(`[Compute Worker] ⚡ LLM invoked function: ${fnName}`, parsedArgs);
-
-                                const dbFn = availableFunctions.find(f => f.name === fnName);
-                                let functionResult = "Error: Function not found in database.";
-
-                                if (dbFn) {
-                                    try {
-                                        // Fallback to basic Javascript evaluation for Docker Alpine compatibility
-                                        const runner = new Function('parsedArgs', `
-                                            try {
-                                                ${dbFn.code}
-                                            } catch(e) {
-                                                throw e;
-                                            }
-                                        `);
-
-                                        const result = runner(parsedArgs);
-                                        functionResult = JSON.stringify(result) || result || "Execution Success (void)";
-
-                                    } catch (e: any) {
-                                        console.error(`JS Execution Error in ${fnName}:`, e.message);
-                                        functionResult = `Execution Error: ${e.message}`;
-                                    }
-                                }
-
-                                llmMessages.push({
-                                    tool_call_id: toolCall.id,
-                                    role: "tool",
-                                    name: fnName,
-                                    content: functionResult,
-                                });
-                            }
-
-                            // ── Second Inference Pass (Summarizing Tool OUTPUT) ──
-                            const finalCompletion = await openai.chat.completions.create({
-                                model: (agent.modelConfig as any)?.model || 'gpt-4o',
-                                messages: llmMessages,
-                            });
-                            finalResponse = finalCompletion.choices[0]?.message?.content || 'No response after tools.';
-
-                        } else {
-                            // Standard response
-                            finalResponse = responseMessage?.content || 'No response generated.';
-                        }
+                        finalResponse = llmResponse.answer || 'No response generated.';
 
                     } else {
                         // Mock fallback

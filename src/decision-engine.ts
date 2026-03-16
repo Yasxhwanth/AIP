@@ -166,6 +166,7 @@ const actionExecutors: Record<string, ActionExecutor> = {
                     payload: { source: 'decision-engine', triggerData: context.triggerData } as Prisma.InputJsonValue,
                     evaluationTrace: context.triggerData as Prisma.InputJsonValue,
                     acknowledged: false,
+                    projectId: config.projectId as string ?? 'system',
                 },
             });
 
@@ -274,6 +275,7 @@ export async function executeDecision(
             conditionResults: conditionResults as unknown as Prisma.InputJsonValue,
             decision,
             status,
+            projectId: rule.projectId,
         },
     });
 
@@ -282,7 +284,7 @@ export async function executeDecision(
     // 2. Execute Actions & Create Trace (only if decision is EXECUTE or SIMULATED)
     if (decision === 'EXECUTE' || decision === 'SIMULATED') {
         const trace = await prisma.executionTrace.create({
-            data: { decisionLogId: log.id, status: 'RUNNING' }
+            data: { decisionLogId: log.id, status: 'RUNNING', projectId: rule.projectId }
         });
         executionTraceId = trace.id;
 
@@ -296,7 +298,8 @@ export async function executeDecision(
                     stepOrder: plan.stepOrder,
                     status: 'RUNNING',
                     startedAt: new Date(),
-                    inputPayload: { logicalId, triggerData: triggerData as Record<string, unknown>, simulated: simulate } as Prisma.InputJsonValue
+                    inputPayload: { logicalId, triggerData: triggerData as Record<string, unknown>, simulated: simulate } as Prisma.InputJsonValue,
+                    projectId: rule.projectId,
                 }
             });
 

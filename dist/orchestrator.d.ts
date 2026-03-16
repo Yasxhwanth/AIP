@@ -16,6 +16,7 @@ export declare class Orchestrator {
      * Stop the worker gracefully (drain)
      */
     stopWorker(): Promise<void>;
+    private heartbeatTimer;
     private startHeartbeat;
     /**
      * Enqueue a new job
@@ -29,22 +30,23 @@ export declare class Orchestrator {
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        payload: Prisma.JsonValue;
+        projectId: string | null;
         status: string;
-        startedAt: Date | null;
-        completedAt: Date | null;
+        attempts: number;
         idempotencyKey: string | null;
+        payload: Prisma.JsonValue;
+        lastError: string | null;
+        startedAt: Date | null;
+        jobType: string;
+        priority: number;
+        completedAt: Date | null;
+        lockedAt: Date | null;
+        lockedByWorkerId: string | null;
+        maxAttempts: number;
+        nextAttemptAt: Date | null;
         recordsProcessed: number;
         recordsFailed: number;
         recordsDropped: number;
-        jobType: string;
-        priority: number;
-        lockedAt: Date | null;
-        lockedByWorkerId: string | null;
-        attempts: number;
-        maxAttempts: number;
-        nextAttemptAt: Date | null;
-        lastError: string | null;
         integrationJobId: string | null;
         parentJobId: string | null;
     }>;

@@ -16,6 +16,7 @@ export class LineageService {
         targetType: string;
         targetId: string;
         transformation?: string | null;
+        projectId: string;
     }) {
         return await this.prisma.lineageEdge.upsert({
             where: {
@@ -28,6 +29,7 @@ export class LineageService {
             },
             update: {
                 ...(params.transformation !== undefined && { transformation: params.transformation }),
+                projectId: params.projectId,
             },
             create: {
                 sourceType: params.sourceType,
@@ -35,6 +37,7 @@ export class LineageService {
                 targetType: params.targetType,
                 targetId: params.targetId,
                 ...(params.transformation !== undefined && { transformation: params.transformation }),
+                projectId: params.projectId,
             }
         });
     }

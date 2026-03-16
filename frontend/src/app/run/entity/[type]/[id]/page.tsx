@@ -144,7 +144,7 @@ export default function EntityDetailView({ params }: { params: Promise<{ type: s
                                             <div className="absolute left-[13px] top-8 bottom-[-40px] w-0.5 bg-pt-border/30 group-hover:bg-pt-intent-primary/20 transition-all" />
                                         )}
                                         <div className={`absolute left-0 top-1.5 w-[28px] h-[28px] rounded-lg flex items-center justify-center border border-pt-border bg-pt-bg shadow-xl group-hover:border-pt-intent-primary transition-all z-10`}>
-                                            <div className={`w-2 h-2 rounded-full ${act.type === 'action_executed' ? 'bg-pt-intent-success shadow-[0_0_8px_rgba(var(--pt-intent-success),0.5)]' : 'bg-pt-text-muted'}`} />
+                                            <div className={`w-2 h-2 rounded-full ${act.type === 'action_executed' ? 'bg-pt-intent-success shadow-[0_0_8px_rgb(var(--pt-intent-success) / 0.5)]' : 'bg-pt-text-muted'}`} />
                                         </div>
 
                                         <div className="flex justify-between items-center mb-2">
@@ -181,7 +181,7 @@ export default function EntityDetailView({ params }: { params: Promise<{ type: s
                                     <Zap className="w-5 h-5 animate-pulse" /> Mission Overrides
                                 </h2>
                             </div>
-                            <div className="p-6 space-y-4 bg-[linear-gradient(180deg,_transparent_0%,_rgba(var(--pt-intent-primary),0.02)_100%)]">
+                            <div className="p-6 space-y-4 bg-[linear-gradient(180deg,_transparent_0%,_rgb(var(--pt-intent-primary) / 0.02)_100%)]">
                                 {instanceActions.map(act => (
                                     <button key={act.id} onClick={() => setExecAction(act.id)}
                                         className="w-full flex justify-between items-center p-5 rounded-xl bg-pt-bg border border-pt-border hover:border-pt-intent-primary/50 hover:bg-pt-bg-panel transition-all text-left group shadow-lg active:scale-95">
@@ -215,7 +215,7 @@ export default function EntityDetailView({ params }: { params: Promise<{ type: s
             {/* HIGH-LEVEL INTERVENTION AUTHORIZATION MODAL */}
             {execAction && (
                 <div className="fixed inset-0 bg-pt-bg/95 backdrop-blur-md flex items-center justify-center p-8 z-[100] animate-in fade-in duration-300">
-                    <div className="bg-pt-bg-panel border border-pt-intent-primary/30 rounded-2xl w-full max-w-xl shadow-[0_0_100px_rgba(var(--pt-intent-primary),0.2)] p-8 relative overflow-hidden">
+                    <div className="bg-pt-bg-panel border border-pt-intent-primary/30 rounded-2xl w-full max-w-xl shadow-[0_0_100px_rgb(var(--pt-intent-primary) / 0.2)] p-8 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-5">
                             <Zap size={120} className="text-pt-intent-primary" />
                         </div>

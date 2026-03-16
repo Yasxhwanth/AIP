@@ -8,14 +8,15 @@ export declare class SparkService {
     executeJob(jobId: string, trigger: string, inputData?: any, broadcastFn?: (eventUrl: string, payload: any) => void): Promise<{
         error: string | null;
         id: string;
+        projectId: string | null;
         status: string;
-        startedAt: Date;
-        trigger: string;
-        inputData: import("./generated/prisma/runtime/client").JsonValue | null;
-        summary: import("./generated/prisma/runtime/client").JsonValue | null;
-        finishedAt: Date | null;
-        durationMs: number | null;
         jobId: string;
+        trigger: string;
+        summary: import("./generated/prisma/runtime/client").JsonValue | null;
+        startedAt: Date;
+        finishedAt: Date | null;
+        inputData: import("./generated/prisma/runtime/client").JsonValue | null;
+        durationMs: number | null;
     }>;
     private processDag;
 }

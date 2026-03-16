@@ -7,6 +7,7 @@ export interface Project {
     id: string;
     name: string;
     description: string;
+    classification: string;
     createdAt: string;
 }
 
@@ -25,8 +26,13 @@ export interface Resource {
 interface WorkspaceState {
     projects: Project[];
     resources: Resource[];
+    activeProjectId: string | null;
+    activeProjectName: string | null;
+    activeProjectClassification: string | null;
 
     // Actions
+    setActiveProject: (id: string, name: string, classification: string) => void;
+    clearActiveProject: () => void;
     createProject: (name: string, description: string) => Project;
     deleteProject: (id: string) => void;
 
@@ -45,6 +51,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                     id: DEMO_PROJECT_ID,
                     name: 'Drone Fleet Intelligence',
                     description: 'Global logistics and tactical drone operation workspace.',
+                    classification: 'SECRET // NOFORN',
                     createdAt: new Date().toISOString()
                 }
             ],
@@ -93,12 +100,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
                     definition: { layout: [] }
                 }
             ],
+            activeProjectId: null,
+            activeProjectName: null,
+            activeProjectClassification: null,
+
+            setActiveProject: (id, name, classification) => set({
+                activeProjectId: id,
+                activeProjectName: name,
+                activeProjectClassification: classification
+            }),
+            clearActiveProject: () => set({
+                activeProjectId: null,
+                activeProjectName: null,
+                activeProjectClassification: null
+            }),
 
             createProject: (name, description) => {
                 const newProject: Project = {
                     id: `proj-${Date.now()}`,
                     name,
                     description,
+                    classification: 'UNCLASSIFIED',
                     createdAt: new Date().toISOString()
                 };
                 set(state => ({ projects: [...state.projects, newProject] }));

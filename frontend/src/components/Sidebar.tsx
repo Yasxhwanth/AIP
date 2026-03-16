@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useWorkspaceStore } from "@/store/workspace";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 // ─── lucide-react icon imports ────────────────────────────────────────────────
 import {
     Home, Search, Bell, FolderOpen,
     Globe, HelpCircle, AlignJustify, ChevronDown,
-    ArrowLeftRight, User, Activity, AlertTriangle, XCircle
+    ArrowLeftRight, User, Activity, AlertTriangle, XCircle, ShieldCheck
 } from "lucide-react";
 import { useWorkspaceHealth } from "@/store/workspace-health";
 
@@ -267,6 +267,11 @@ export default function Sidebar() {
                         active={pathname === app.href || (app.href !== "/" && pathname.startsWith(app.href))}
                     />
                 ))}
+
+                {/* SRE Section */}
+                <SectionLabel text="SRE & Compliance" />
+                <Item href="/sre/governance" icon={ShieldCheck} label="Governance" active={pathname === "/sre/governance"} />
+                <Item href="/sre/jobs" icon={Activity} label="Job Monitor" active={pathname === "/sre/jobs"} />
 
                 <div style={{ flex: 1 }} />
             </div>

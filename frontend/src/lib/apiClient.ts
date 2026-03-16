@@ -123,4 +123,22 @@ export class ApiClient {
 
         return response.json() as Promise<T>;
     }
+    static async patch<T>(endpoint: string, data: any): Promise<T> {
+        const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+        const headers = await getHeaders();
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify(data),
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`API Error [PATCH ${endpoint}]: ${response.status} - ${errText}`);
+        }
+
+        return response.json() as Promise<T>;
+    }
 }

@@ -14,6 +14,7 @@ export declare class LineageService {
     }): Promise<{
         id: string;
         createdAt: Date;
+        projectId: string | null;
         sourceType: string;
         sourceId: string;
         targetType: string;
@@ -30,6 +31,7 @@ export declare class LineageService {
     getDownstream(sourceType: string, sourceId: string): Promise<{
         id: string;
         createdAt: Date;
+        projectId: string | null;
         sourceType: string;
         sourceId: string;
         targetType: string;
@@ -42,6 +44,7 @@ export declare class LineageService {
     getUpstream(targetType: string, targetId: string): Promise<{
         id: string;
         createdAt: Date;
+        projectId: string | null;
         sourceType: string;
         sourceId: string;
         targetType: string;
@@ -53,6 +56,10 @@ export declare class LineageService {
      */
     getFullUpstreamTrace(targetType: string, targetId: string): Promise<any[]>;
     /**
+     * Full DAG traversal downwards (impact analysis)
+     */
+    getFullDownstreamTrace(sourceType: string, sourceId: string, maxDepth?: number): Promise<any[]>;
+    /**
      * Identify breaking changes before deleting/changing a column or entity
      */
     simulateBreakingChange(targetType: string, targetId: string): Promise<{
@@ -60,6 +67,7 @@ export declare class LineageService {
         impactedConsumers: {
             id: string;
             createdAt: Date;
+            projectId: string | null;
             sourceType: string;
             sourceId: string;
             targetType: string;

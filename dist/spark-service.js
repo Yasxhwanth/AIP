@@ -36,8 +36,7 @@ class SparkService {
         }
         if (broadcastFn)
             broadcastFn(`spark:job:${jobId}`, { type: "job.started", runId: run.id });
-        // Run the DAG async
-        this.processDag(job, run, stages, broadcastFn).catch(err => console.error("DAG Error", err));
+        // Offload to background worker instead of in-process processDag
         return run;
     }
     async processDag(job, run, stages, broadcastFn) {

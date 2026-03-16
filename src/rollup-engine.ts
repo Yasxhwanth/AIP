@@ -100,6 +100,7 @@ export async function computeRollups(
                 max,
                 sum,
                 count,
+                projectId: rawPoints[0].projectId,
             },
             update: { avg, min, max, sum, count },
         });
@@ -172,6 +173,7 @@ export function startRollupScheduler(prisma: PrismaClient): void {
                 payload: { windowSize: '5m', lookbackMs: LOOKBACK },
                 idempotencyKey,
                 priority: 1, // lower priority than data ingest
+                projectId: (global as any).DEFAULT_PROJECT_ID || 'system',
             },
             update: {} // do nothing if it already exists
         }).then(() => {

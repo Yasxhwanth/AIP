@@ -9,11 +9,14 @@ export declare function upsertEntityInstance(entityType: {
     id: string;
     version: number;
     name: string;
-    projectId: string;
+    projectId: string | null;
 }, logicalId: string, attrData: Record<string, unknown>, prisma: PrismaClient, options?: {
     sourceSystem: string;
     sourceRecordId: string;
     confidence?: number;
+    generateOutbox?: {
+        targetSystem: string;
+    };
 }): Promise<{
     success: boolean;
     instanceId?: string;
@@ -27,7 +30,9 @@ export declare function upsertEntityInstance(entityType: {
  * 4. Upserts each record as an entity instance
  * 5. Updates the JobExecution with results
  */
-export declare function executeJob(jobId: string, prisma: PrismaClient, queueId?: string, inlineData?: unknown[]): Promise<{
+export declare function executeJob(jobId: string, prisma: PrismaClient, queueId?: string, inlineData?: unknown[], options?: {
+    generateOutbox?: boolean;
+}): Promise<{
     status: string;
     recordsProcessed: number;
     recordsFailed: number;
@@ -48,5 +53,17 @@ export declare function dryRunJob(jobId: string, prisma: PrismaClient, inlineDat
     }>;
     error?: string;
 }>;
+/**
+ * Live telemetry for the job scheduler — consumed by the deep health endpoint.
+ * All fields are null until the scheduler has started and run at least one tick.
+ */
+export declare const schedulerTelemetry: {
+    jobScheduler: {
+        startedAt: Date | null;
+        lastTickAt: Date | null;
+        lastError: string | null;
+        tickIntervalMs: number;
+    };
+};
 export declare function startScheduler(prisma: PrismaClient): void;
 //# sourceMappingURL=data-integration.d.ts.map

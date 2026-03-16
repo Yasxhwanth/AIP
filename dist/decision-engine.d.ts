@@ -35,7 +35,7 @@ export declare function simulateDecision(ruleId: string, ruleData: any, entityDa
     projectId: string;
     version: number;
     name: string;
-    description: null;
+    description: any;
     antecedent: {
         type: string;
         field: string;

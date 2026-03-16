@@ -168,6 +168,7 @@ export class IdentityService {
     externalId: string,
     targetLogicalId: string,
     confidence: number,
+    projectId: string,
     prisma: PrismaClient
   ) {
     return prisma.entityAlias.upsert({
@@ -179,13 +180,15 @@ export class IdentityService {
       },
       update: {
         targetLogicalId,
-        confidence
+        confidence,
+        projectId,
       },
       create: {
         sourceSystem,
         externalId,
         targetLogicalId,
-        confidence
+        confidence,
+        projectId,
       }
     });
   }
@@ -203,9 +206,10 @@ export class IdentityService {
       threshold?: number;   // minimum score to create a candidate (default 0.75)
       sourceJobId?: string;
       limit?: number;       // max instances to compare (default 500)
-    } = {}
+      projectId: string;
+    } = { projectId: 'default' }
   ): Promise<number> {
-    const { threshold = 0.75, sourceJobId, limit = 500 } = options;
+    const { threshold = 0.75, sourceJobId, limit = 500, projectId } = options;
 
     // Fetch current active instances for this entity type
     const instances = await prisma.currentEntityState.findMany({
@@ -252,6 +256,7 @@ export class IdentityService {
               matchReasons: score.reasons,
               status: 'PENDING',
               sourceJobId: sourceJobId ?? null,
+              projectId: projectId,
             }
           }).catch(() => { /* ignore duplicate */ });
           created++;
@@ -266,11 +271,13 @@ export class IdentityService {
    * Merges entity B into entity A: updates all aliases pointing to B to point to A,
    * then marks the MatchCandidate as MERGED.
    */
-  static async mergeEntities(
+  static async mergeEntities(params: {
     candidateId: string,
     reviewerName: string,
+    projectId: string,
     prisma: PrismaClient
-  ): Promise<void> {
+  }): Promise<void> {
+    const { candidateId, reviewerName, projectId, prisma } = params;
     const p = prisma as any;
     const candidate = await p.matchCandidate.findUnique({ where: { id: candidateId } });
     if (!candidate) throw new Error('MatchCandidate not found');
@@ -316,6 +323,7 @@ export class IdentityService {
         matchReasons: candidate.matchReasons,
         resolution: 'MERGED',
         resolvedBy: reviewerName,
+        projectId: projectId,
       }
     });
   }

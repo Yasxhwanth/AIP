@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import {
     Send, Brain, Shield, Eye, Lock, ChevronRight, CheckCircle2,
     AlertTriangle, Zap, MapPin, BarChart3, Globe, Clock,
-    ChevronDown, ChevronUp, X, Activity, Cpu, Layers
+    ChevronDown, ChevronUp, X, Activity, Cpu, Layers, Terminal
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { MetricsDashboard } from "@/components/MetricsDashboard";
@@ -430,7 +430,7 @@ export default function AIPTerminal() {
                             <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} space-y-2`}>
                                 <div className="flex items-center space-x-2 opacity-60">
                                     <span className="text-[9px] font-mono text-pt-text-muted uppercase font-bold">{msg.role === 'user' ? 'OPERATOR' : 'MAVEN'} · {msg.timestamp}</span>
-                                    {!isUser && msg.classification && <ClassBadge level={msg.classification} />}
+                                    {msg.role !== 'user' && msg.classification && <ClassBadge level={msg.classification} />}
                                 </div>
                                 <div className={`max-w-[90%] p-4 text-[12px] leading-relaxed border ${msg.role === 'user'
                                     ? 'bg-pt-intent-primary/10 border-pt-intent-primary/30 text-pt-text'
@@ -440,7 +440,7 @@ export default function AIPTerminal() {
                                 </div>
 
                                 {/* Detailed Signals (Metadata) */}
-                                {!msg.role === 'assistant' && (msg.sources?.length || msg.policyEvents?.length) && (
+                                {msg.role !== 'assistant' && (msg.sources?.length || msg.policyEvents?.length) && (
                                     <div className="w-[90%] bg-pt-bg-panel/20 border-l-2 border-pt-border p-3 space-y-3">
                                         {msg.sources && <SourceList sources={msg.sources} />}
                                         {msg.policyEvents && <PolicyEvents events={msg.policyEvents} />}

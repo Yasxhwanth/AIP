@@ -254,7 +254,7 @@ export async function runInference(
     // Async capture of latency metrics
     setImmediate(async () => {
         try {
-            await recordLatencyMetric(modelVersionId, durationMs, isError, prisma);
+            await recordLatencyMetric(modelVersionId, durationMs, isError, version.modelDefinition.projectId, prisma);
         } catch (e) {
             console.error("Failed to record latency metric:", e);
         }
@@ -268,6 +268,7 @@ export async function runInference(
             input: input as Prisma.InputJsonValue,
             output: prediction as Prisma.InputJsonValue,
             confidence,
+            projectId: version.modelDefinition.projectId,
         },
     });
 
@@ -314,6 +315,7 @@ async function recordLatencyMetric(
     modelVersionId: string,
     durationMs: number,
     isError: boolean,
+    projectId: string,
     prisma: PrismaClient
 ) {
     const now = new Date();
@@ -343,7 +345,8 @@ async function recordLatencyMetric(
                     p99: durationMs,
                     avg: durationMs,
                     requestCount: 1,
-                    errorCount: isError ? 1 : 0
+                    errorCount: isError ? 1 : 0,
+                    projectId: projectId
                 }
             });
             return;

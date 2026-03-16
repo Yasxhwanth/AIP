@@ -57,8 +57,8 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
     const pathname = usePathname();
     const router = useRouter();
     const [assistOpen, setAssistOpen] = useState(false);
-    const { projects } = useWorkspaceStore();
-    const activeProject = projects[0]; // Baseline for demo
+    const { projects, activeProjectName, activeProjectClassification } = useWorkspaceStore();
+    const activeProject = activeProjectName ? { name: activeProjectName, classification: activeProjectClassification } : projects[0];
 
     // Key command listener for shortcuts
     useEffect(() => {
@@ -111,6 +111,9 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
             } else if (keyBuffer === 'gs') {
                 router.push('/sre/jobs');
                 keyBuffer = "";
+            } else if (keyBuffer === 'ga') {
+                router.push('/sre/agent-monitor');
+                keyBuffer = "";
             }
 
             // Limit buffer size
@@ -139,7 +142,8 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
                     <NavItem icon={Shield} label="Maven" href="/maven" active={pathname?.startsWith('/maven')} />
                     <NavItem icon={LayoutGrid} label="Workshop" href="/workshop" active={pathname?.startsWith('/workshop')} />
                     <NavItem icon={Terminal} label="Terminal" href="/terminal" active={pathname?.startsWith('/terminal')} />
-                    <NavItem icon={Cpu} label="SRE" href="/sre/jobs" active={pathname?.startsWith('/sre')} />
+                    <NavItem icon={Zap} label="Agent Monitor" href="/sre/agent-monitor" active={pathname?.startsWith('/sre/agent-monitor')} />
+                    <NavItem icon={Cpu} label="SRE" href="/sre/jobs" active={pathname === '/sre/jobs'} />
                 </nav>
 
                 <div className="mt-auto flex flex-col items-center pb-4 space-y-2">
@@ -157,7 +161,12 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
                     <div className="flex items-center space-x-4">
                         <div className="flex items-center space-x-2 px-2 py-1 hover:bg-pt-bg-hover rounded border border-transparent hover:border-pt-border transition-all cursor-pointer group">
                             <Fingerprint size={12} className="text-pt-intent-primary opacity-50 group-hover:opacity-100" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-pt-text">{activeProject?.name || 'Default Project'}</span>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black uppercase tracking-[0.15em] text-pt-text leading-tight">{activeProject?.name || 'Default Project'}</span>
+                                {activeProject?.classification && (
+                                    <span className="text-[7px] font-bold text-amber-500 tracking-wider h-2 leading-[8px]">{activeProject.classification}</span>
+                                )}
+                            </div>
                             <ChevronDown size={10} className="text-pt-text-muted opacity-50" />
                         </div>
                         <div className="h-4 w-px bg-pt-border" />

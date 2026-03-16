@@ -14,6 +14,7 @@ export interface PolicyEvaluationResult {
     allowed: boolean;
     reason: string;
     matchedPolicies: string[];
+    maskedFields?: string[];
 }
 /**
  * Attribute-Based Access Control (ABAC) Engine
@@ -28,6 +29,10 @@ export declare class AbacEngine {
      * Deny by default if no matching ALLOW policies are found, or if a DENY policy matches.
      */
     evaluate(actor: AbacActor, action: string, resource: AbacResource): Promise<PolicyEvaluationResult>;
+    /**
+     * Redact sensitive fields from a data object based on the evaluation result.
+     */
+    mask(data: any, maskedFields?: string[]): any;
     /**
      * Evaluates the JSON condition tree against the request context.
      * E.g. { "actor.role": "ADMIN" } or { "actor.clearanceLevel": { ">=": "resource.classification" } }

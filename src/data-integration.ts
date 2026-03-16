@@ -173,6 +173,7 @@ export async function upsertEntityInstance(
                     options.sourceRecordId,
                     now, // source timestamp (approximated here as now)
                     null, // Entire record provenance for now
+                    entityType.projectId || 'system',
                     tx
                 );
             }
@@ -383,7 +384,7 @@ export async function executeJob(
                 confidence = resolved.confidence;
             } else {
                 // If not resolved, use the externalId as the logicalId for now and register an alias
-                await IdentityService.registerAlias(job.dataSource.name, externalId, externalId, 1.0, prisma);
+                await IdentityService.registerAlias(job.dataSource.name, externalId, externalId, 1.0, entityType.projectId, prisma);
             }
 
             const mapped = transformRecord(raw, fieldMapping);

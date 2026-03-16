@@ -22,7 +22,8 @@ export class SparkService {
                 jobId,
                 status: "running",
                 trigger: trigger,
-                inputData: inputData || {}
+                inputData: inputData || {},
+                projectId: job.projectId,
             }
         });
 
@@ -34,16 +35,15 @@ export class SparkService {
                     stageId: stg.id,
                     stageType: stg.type,
                     status: "pending",
-                    partitions: Math.max(1, Math.floor(Math.random() * 8) + 1) // Simulate 1-8 partitions
+                    partitions: Math.max(1, Math.floor(Math.random() * 8) + 1), // Simulate 1-8 partitions
+                    projectId: job.projectId,
                 }
             });
         }
 
         if (broadcastFn) broadcastFn(`spark:job:${jobId}`, { type: "job.started", runId: run.id });
 
-        // Run the DAG async
-        this.processDag(job, run, stages, broadcastFn).catch(err => console.error("DAG Error", err));
-
+        // Offload to background worker instead of in-process processDag
         return run;
     }
 

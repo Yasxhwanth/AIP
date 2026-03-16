@@ -9,6 +9,7 @@ export type PageId =
     | 'maven'
     | 'sre'
     | 'terminal'
+    | 'agent-studio'
     | 'admin';
 
 export interface AipContextSelection {
@@ -19,6 +20,7 @@ export interface AipContextSelection {
     jobId?: string;
     alertId?: string;
     tab?: string;
+    apiHealth?: any;
     filters?: Record<string, any>;
     vars?: Record<string, any>; // Palantir-style Application Variables
 }
