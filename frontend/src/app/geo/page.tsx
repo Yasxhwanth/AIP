@@ -22,7 +22,6 @@ import {
     Satellite,
     Plane,
     Radio,
-
     Zap,
     Monitor,
     Sun,
@@ -33,10 +32,13 @@ import {
     MapPin,
     SlidersHorizontal,
     X,
+    AlertTriangle,
+    BatteryWarning,
+    RadioTower
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { LANDMARKS, VisualMode } from "@/components/BattlefieldOverview";
+import { LANDMARKS, VisualMode, DroneAlertEvent } from "@/components/BattlefieldOverview";
 import { ApiClient } from "@/lib/apiClient";
 import { MissionPanel } from "@/components/MissionPanel";
 
@@ -67,6 +69,7 @@ const LAYER_CONFIG = [
     { id: 'flights', label: 'Live Flights', icon: Plane, color: 'text-yellow-400', dot: 'bg-yellow-400' },
     { id: 'satellites', label: 'Satellites', icon: Satellite, color: 'text-lime-400', dot: 'bg-lime-400' },
     { id: 'military', label: 'Military ADS-B', icon: Radio, color: 'text-red-400', dot: 'bg-red-400' },
+    { id: '3dtiles', label: 'Google 3D Tiles', icon: Globe, color: 'text-white', dot: 'bg-white' },
 ];
 
 // ─── Visual Mode Config ─────────────────────────────────────────────────────
@@ -87,6 +90,7 @@ function GeoExplorerInner() {
     const [visualMode, setVisualMode] = useState<VisualMode>('normal');
     const [layers, setLayers] = useState<Record<string, boolean>>({
         aip: true, flights: false, satellites: false, military: false,
+        '3dtiles': true,
     });
     const [layerCounts, setLayerCounts] = useState<Record<string, number>>({});
 
@@ -102,8 +106,19 @@ function GeoExplorerInner() {
     const [entityDetails, setEntityDetails] = useState<any>(null);
     const [trackedEntities, setTrackedEntities] = useState<string[]>([]);
 
+    // Alerts State
+    const [activeAlerts, setActiveAlerts] = useState<DroneAlertEvent[]>([]);
+
     // Timeline
-    const [currentDate] = useState(new Date().toISOString().slice(0, 19) + 'Z');
+    const [currentDate, setCurrentDate] = useState("");
+
+    useEffect(() => {
+        setCurrentDate(new Date().toISOString().slice(0, 19) + 'Z');
+        const interval = setInterval(() => {
+            setCurrentDate(new Date().toISOString().slice(0, 19) + 'Z');
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     const toggleLayer = useCallback((id: string) => {
         setLayers(prev => ({ ...prev, [id]: !prev[id] }));
@@ -147,6 +162,26 @@ function GeoExplorerInner() {
         setShowNavPanel(false);
     }, []);
 
+    const handleAlert = useCallback((alert: DroneAlertEvent) => {
+        setActiveAlerts(prev => {
+            // Deduplicate by type and drone
+            const filtered = prev.filter(a => !(a.logicalId === alert.logicalId && a.type === alert.type));
+            const active = [alert, ...filtered].slice(0, 5); // Max 5 visible
+
+            // Auto-clear alert after 10s if not critical
+            if (alert.severity !== 'critical') {
+                setTimeout(() => {
+                    setActiveAlerts(current => current.filter(a => a.id !== alert.id));
+                }, 10000);
+            }
+            return active;
+        });
+    }, []);
+
+    const dismissAlert = (id: string) => {
+        setActiveAlerts(prev => prev.filter(a => a.id !== id));
+    };
+
     const filteredLandmarks = LANDMARKS.filter(l =>
         l.label.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -183,6 +218,7 @@ function GeoExplorerInner() {
                 flyToRef={flyToRef}
                 onEntitySelect={handleEntitySelect}
                 trackedEntities={trackedEntities}
+                onAlert={handleAlert}
             />
 
             {/* Overlay Interface */}
@@ -214,6 +250,7 @@ function GeoExplorerInner() {
                                 onChange={e => setSearchQuery(e.target.value)}
                                 onFocus={() => setShowNavPanel(true)}
                                 placeholder="SEARCH LOCATION / VECTOR..."
+                                suppressHydrationWarning
                                 className="w-full h-10 bg-pt-bg/90 backdrop-blur border border-pt-border rounded px-10 text-[10px] font-mono tracking-widest text-pt-text placeholder-pt-text-muted/40 outline-none focus:border-pt-intent-primary transition-all pointer-events-auto shadow-2xl"
                             />
                             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-pt-text-muted" />
@@ -230,9 +267,10 @@ function GeoExplorerInner() {
                             <button
                                 key={m.id}
                                 onClick={() => setVisualMode(m.id)}
+                                suppressHydrationWarning
                                 className={`h-8 px-3 rounded border transition-all flex items-center gap-2 ${visualMode === m.id
-                                        ? 'bg-pt-intent-primary/20 border-pt-intent-primary text-pt-intent-primary'
-                                        : 'bg-pt-bg/80 border-pt-border text-pt-text-muted hover:text-pt-text hover:bg-pt-bg-panel'
+                                    ? 'bg-pt-intent-primary/20 border-pt-intent-primary text-pt-intent-primary'
+                                    : 'bg-pt-bg/80 border-pt-border text-pt-text-muted hover:text-pt-text hover:bg-pt-bg-panel'
                                     }`}
                                 title={m.label}
                             >
@@ -258,6 +296,7 @@ function GeoExplorerInner() {
                                     <button
                                         key={layer.id}
                                         onClick={() => toggleLayer(layer.id)}
+                                        suppressHydrationWarning
                                         className={`w-full px-3 py-2 rounded flex items-center justify-between transition-all ${active ? 'bg-pt-bg-panel border border-pt-border/50' : 'hover:bg-pt-bg-panel/50 text-pt-text-muted'
                                             }`}
                                     >
@@ -292,31 +331,64 @@ function GeoExplorerInner() {
                     )}
                 </div>
 
-                {/* Right Tool-strip */}
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 pointer-events-auto">
-                    {[
-                        { icon: Globe, onClick: () => flyToRef.current?.(20, 0, 20000000), title: 'Global Reset' },
-                        {
-                            icon: Activity,
-                            onClick: () => selectedEntityId && setTrackedEntities(prev => prev.includes(selectedEntityId) ? prev.filter(id => id !== selectedEntityId) : [...prev, selectedEntityId]),
-                            title: 'Historical Trace',
-                            active: selectedEntityId && trackedEntities.includes(selectedEntityId)
-                        },
-                        { icon: Crosshair, onClick: () => { }, title: 'Recenter on Asset' },
-                        { icon: Maximize2, onClick: () => { }, title: 'Fullscreen' },
-                    ].map((tool, i) => (
-                        <button
-                            key={i}
-                            onClick={tool.onClick}
-                            className={`w-12 h-12 flex items-center justify-center border transition-all rounded shadow-2xl ${tool.active
+                {/* Right Tool-strip & Alerts */}
+                <div className="absolute right-4 top-24 bottom-24 flex flex-col justify-between pointer-events-none">
+                    <div className="flex flex-col gap-2 items-end pointer-events-auto">
+                        {[
+                            { icon: Globe, onClick: () => flyToRef.current?.(20, 0, 20000000), title: 'Global Reset' },
+                            {
+                                icon: Activity,
+                                onClick: () => selectedEntityId && setTrackedEntities(prev => prev.includes(selectedEntityId) ? prev.filter(id => id !== selectedEntityId) : [...prev, selectedEntityId]),
+                                title: 'Historical Trace',
+                                active: selectedEntityId && trackedEntities.includes(selectedEntityId)
+                            },
+                            { icon: Crosshair, onClick: () => { }, title: 'Recenter on Asset' },
+                            { icon: Maximize2, onClick: () => { }, title: 'Fullscreen' },
+                        ].map((tool, i) => (
+                            <button
+                                key={i}
+                                onClick={tool.onClick}
+                                suppressHydrationWarning
+                                className={`w-12 h-12 flex items-center justify-center border transition-all rounded shadow-2xl ${tool.active
                                     ? 'bg-pt-intent-primary/20 border-pt-intent-primary text-pt-intent-primary'
                                     : 'bg-pt-bg/90 border-pt-border text-pt-text-muted hover:text-pt-text hover:bg-pt-bg-panel'
-                                }`}
-                            title={tool.title}
-                        >
-                            <tool.icon size={18} />
-                        </button>
-                    ))}
+                                    }`}
+                                title={tool.title}
+                            >
+                                <tool.icon size={18} />
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Skydio-style Alert HUD */}
+                    <div className="flex flex-col gap-2 items-end pointer-events-auto w-80">
+                        {activeAlerts.map(alert => {
+                            const isCrit = alert.severity === 'critical';
+                            const colors = isCrit
+                                ? 'bg-red-950/90 border-red-500 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+                                : 'bg-amber-950/90 border-amber-500 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]';
+
+                            const Icon = alert.type.includes('BATTERY') ? BatteryWarning
+                                : alert.type === 'SIGNAL_LOST' ? RadioTower
+                                    : AlertTriangle;
+
+                            return (
+                                <div key={alert.id} className={`w-full p-3 rounded border backdrop-blur-md flex items-start gap-3 animate-in fade-in slide-in-from-right-8 duration-300 ${colors}`}>
+                                    <div className="mt-0.5 animate-pulse"><Icon size={18} /></div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start">
+                                            <span className="font-mono text-[10px] font-black uppercase tracking-widest">{alert.logicalId}</span>
+                                            <span className="font-mono text-[9px] opacity-70">{new Date(alert.ts).toLocaleTimeString()}</span>
+                                        </div>
+                                        <p className="font-sans text-xs font-medium mt-1 text-white">{alert.message}</p>
+                                    </div>
+                                    <button onClick={() => dismissAlert(alert.id)} className="opacity-50 hover:opacity-100 transition-opacity">
+                                        <X size={14} className={isCrit ? 'text-red-400' : 'text-amber-400'} />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Bottom Scrubber */}
@@ -324,14 +396,15 @@ function GeoExplorerInner() {
                     <div className="w-[800px] bg-pt-bg/90 backdrop-blur border border-pt-border p-3 rounded shadow-2xl">
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex gap-1 p-1 bg-pt-bg-panel border border-pt-border">
-                                <button className="w-8 h-8 flex items-center justify-center text-pt-text-muted hover:text-pt-text transition-all"><Rewind size={14} /></button>
+                                <button suppressHydrationWarning className="w-8 h-8 flex items-center justify-center text-pt-text-muted hover:text-pt-text transition-all"><Rewind size={14} /></button>
                                 <button
                                     onClick={() => setIsPlaying(p => !p)}
+                                    suppressHydrationWarning
                                     className="w-10 h-8 flex items-center justify-center bg-pt-intent-primary text-white hover:bg-pt-intent-primary-hover transition-all shadow-lg"
                                 >
                                     {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-1" />}
                                 </button>
-                                <button className="w-8 h-8 flex items-center justify-center text-pt-text-muted hover:text-pt-text transition-all"><FastForward size={14} /></button>
+                                <button suppressHydrationWarning className="w-8 h-8 flex items-center justify-center text-pt-text-muted hover:text-pt-text transition-all"><FastForward size={14} /></button>
                             </div>
 
                             <div className="flex items-center gap-4">

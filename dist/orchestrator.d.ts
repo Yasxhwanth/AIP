@@ -26,19 +26,20 @@ export declare class Orchestrator {
         priority?: number;
         integrationJobId?: string;
         parentJobId?: string;
+        projectId: string;
     }): Promise<{
+        projectId: string;
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        projectId: string | null;
         status: string;
         attempts: number;
+        priority: number;
         idempotencyKey: string | null;
         payload: Prisma.JsonValue;
         lastError: string | null;
         startedAt: Date | null;
         jobType: string;
-        priority: number;
         completedAt: Date | null;
         lockedAt: Date | null;
         lockedByWorkerId: string | null;

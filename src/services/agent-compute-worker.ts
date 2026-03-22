@@ -1,9 +1,20 @@
 import amqp from 'amqplib';
 import { PrismaClient } from '../generated/prisma';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { getTenantPrisma, tenantStorage } from '../tenant-context';
 import { getLlmClient } from '../lib/llm-factory';
+import { AIPExecutor } from '../aip-executor';
+import { defaultToolRegistry } from '../aip-tools';
+
+const databaseUrl = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString: databaseUrl });
+const adapter = new PrismaPg(pool);
 
 // @ts-ignore: dynamic type matching
-const prisma = new PrismaClient() as any;
+const prismaRaw = new PrismaClient({ adapter });
+const prisma = getTenantPrisma(prismaRaw) as any;
+const executor = new AIPExecutor(prisma, defaultToolRegistry);
 const RBMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
 const QUEUE_NAME = 'agent_compute_queue';
 
@@ -38,87 +49,121 @@ async function startAgentWorker() {
             if (msg !== null) {
                 try {
                     const reqPayload = JSON.parse(msg.content.toString());
-                    const { agentId, message, correlationId, replyTo } = reqPayload;
+                    const { agentId, projectId, message, correlationId, replyTo } = reqPayload;
 
                     console.log(`[Compute Worker] Processing chat for Agent: ${agentId}`);
 
-                    const agent = await prisma.aIPAgent.findUnique({ where: { id: agentId } });
-                    if (!agent) throw new Error('Agent not found');
+                    await tenantStorage.run({ projectId }, async () => {
+                        const agent = await prisma.aIPAgent.findUnique({ where: { id: agentId } });
+                        if (!agent) throw new Error('Agent not found');
 
-                    // RAG Process 
-                    const allowedTypes = agent.ontologyAccess as string[];
-                    let contextData = "\\nNo live contextual data found.";
+                        // RAG Process 
+                        const allowedTypes = agent.ontologyAccess as string[];
+                        let contextData = "\\nNo live contextual data found.";
 
-                    if (allowedTypes && allowedTypes.length > 0) {
-                        const entities = await prisma.entityType.findMany({
-                            where: { id: { in: allowedTypes } },
-                            include: { instances: { take: 10 } }
-                        });
-                        contextData = entities.map((et: any) => {
-                            return `\n=== Current State for ${et.name} ===\nTotal tracked: ${et.instances.length}\nSample Data:\n${et.instances.map((i: any) => `- Logcal ID ${i.logicalId}: ${JSON.stringify(i.data)}`).join('\n')}`;
-                        }).join('\n');
-                    }
-
-                    const llmMessages: any[] = [
-                        { role: 'system', content: `${agent.systemPrompt || 'You are an AI assistant.'}\n\nYou have access to the following live Ontology Data from the platform database:\n${contextData}` },
-                        { role: 'user', content: message }
-                    ];
-
-                    let finalResponse = "Compute Worker Error.";
-                    if (process.env.OPENAI_API_KEY) {
-
-                        // ── AIP Logic: Bind Database Functions as OpenAI Tools ──
-                        let openAITools: any[] | undefined = undefined;
-                        const availableFunctions = [];
-
-                        if (agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0) {
-                            const dbFunctions = await prisma.aIPFunction.findMany({
-                                where: { id: { in: agent.tools } }
+                        if (allowedTypes && allowedTypes.length > 0) {
+                            const entities = await prisma.entityType.findMany({
+                                where: { id: { in: allowedTypes } },
+                                include: { instances: { take: 10 } }
                             });
-
-                            if (dbFunctions.length > 0) {
-                                openAITools = [];
-                                for (const fn of dbFunctions) {
-                                    availableFunctions.push(fn);
-                                    openAITools.push({
-                                        type: "function",
-                                        function: {
-                                            name: fn.name,
-                                            description: fn.description,
-                                            parameters: fn.parameters || { type: "object", properties: {} }
-                                        }
-                                    });
-                                }
-                            }
+                            contextData = entities.map((et: any) => {
+                                return `\n=== Current State for ${et.name} ===\nTotal tracked: ${et.instances.length}\nSample Data:\n${et.instances.map((i: any) => `- Logcal ID ${i.logicalId}: ${JSON.stringify(i.data)}`).join('\n')}`;
+                            }).join('\n');
                         }
 
-                        // ── Inference Pass (Gemini handles tool calling via Unified Interface) ──
-                        const llmResponse = await llm.chat({
-                            model: (agent as any).modelConfig?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
-                            systemPrompt: `${agent.systemPrompt || 'You are an AI assistant.'}\n\nYou have access to the following live Ontology Data from the platform database:\n${contextData}`,
-                            messages: [{ role: 'user', content: message }],
-                            tools: openAITools // The LlmClient interface handles the mapping
-                        });
+                        const llmMessages: any[] = [
+                            { role: 'system', content: `${agent.systemPrompt || 'You are an AI assistant.'}\n\nYou have access to the following live Ontology Data from the platform database:\n${contextData}` },
+                            { role: 'user', content: message }
+                        ];
 
-                        finalResponse = llmResponse.answer || 'No response generated.';
+                        let finalResponse = "Compute Worker Error.";
+                        if (process.env.OPENAI_API_KEY) {
 
-                    } else {
-                        // Mock fallback
-                        await new Promise(r => setTimeout(r, 1000));
-                        finalResponse = "[Compute Worker Mock Response]: " + message;
-                    }
+                            // ── AIP Logic: Bind Database Functions as OpenAI Tools ──
+                            let openAITools: any[] | undefined = undefined;
+                            const availableFunctions = [];
 
-                    // Reply via RPC pattern back to the Express Web Thread
-                    if (replyTo && correlationId) {
-                        channel.sendToQueue(replyTo, Buffer.from(JSON.stringify({
-                            response: finalResponse,
-                            modelUsed: process.env.OPENAI_API_KEY ? 'gpt-4o' : 'mock-worker'
-                        })), {
-                            correlationId: correlationId
-                        });
-                    }
+                            if (agent.tools && Array.isArray(agent.tools) && agent.tools.length > 0) {
+                                const dbFunctions = await prisma.aIPFunction.findMany({
+                                    where: { id: { in: agent.tools } }
+                                });
 
-                    channel.ack(msg);
+                                if (dbFunctions.length > 0) {
+                                    openAITools = [];
+                                    for (const fn of dbFunctions) {
+                                        availableFunctions.push(fn);
+                                        openAITools.push({
+                                            type: "function",
+                                            function: {
+                                                name: fn.name,
+                                                description: fn.description,
+                                                parameters: fn.parameters || { type: "object", properties: {} }
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+
+                            // ── Inference Pass (Gemini handles tool calling via Unified Interface) ──
+                            let messages: any[] = [{ role: 'user', content: message }];
+
+                            let maxLoops = 5;
+                            let currentLoop = 0;
+
+                            while (currentLoop < maxLoops) {
+                                currentLoop++;
+                                const llmResponse = await llm.chat({
+                                    model: (agent as any).modelConfig?.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+                                    systemPrompt: `${agent.systemPrompt || 'You are an AI assistant.'}\n\nYou have access to the following live Ontology Data from the platform database:\n${contextData}`,
+                                    messages,
+                                    tools: openAITools // The LlmClient interface handles the mapping
+                                });
+
+                                if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
+                                    // Append AI's explicit intent
+                                    messages.push({ role: 'assistant', content: `[Invoking tools: ${llmResponse.toolCalls.map(tc => tc.name).join(', ')}]` });
+
+                                    for (const tc of llmResponse.toolCalls) {
+                                        let toolResultStr = '';
+                                        try {
+                                            const res = await executor.execute({
+                                                toolName: tc.name,
+                                                parameters: tc.arguments,
+                                                projectId
+                                            });
+                                            toolResultStr = JSON.stringify(res, null, 2);
+                                        } catch (e: any) {
+                                            toolResultStr = JSON.stringify({ error: e.message });
+                                        }
+                                        // Feed tool result back
+                                        messages.push({ role: 'user', content: `Tool ${tc.name} result:\n${toolResultStr}` });
+                                    }
+                                } else {
+                                    finalResponse = llmResponse.answer || 'No response generated.';
+                                    break;
+                                }
+                            }
+
+                            if (!finalResponse) finalResponse = "Hit maximum inference loops while calling tools.";
+
+                        } else {
+                            // Mock fallback
+                            await new Promise(r => setTimeout(r, 1000));
+                            finalResponse = "[Compute Worker Mock Response]: " + message;
+                        }
+
+                        // Reply via RPC pattern back to the Express Web Thread
+                        if (replyTo && correlationId) {
+                            channel.sendToQueue(replyTo, Buffer.from(JSON.stringify({
+                                response: finalResponse,
+                                modelUsed: process.env.OPENAI_API_KEY ? 'gpt-4o' : 'mock-worker'
+                            })), {
+                                correlationId: correlationId
+                            });
+                        }
+
+                        channel.ack(msg);
+                    });
                 } catch (err) {
                     console.error('Agent compute failed:', err);
                     channel.nack(msg, false, false);

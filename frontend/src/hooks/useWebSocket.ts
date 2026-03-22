@@ -9,6 +9,12 @@
  *   { type: 'metric.threshold_breached', metricId, metricName, value, threshold, ts }
  *   { type: 'action.executed', actionName, logicalId, executionId, status, ts }
  *   { type: 'connected', clientId, ts }
+ *
+ * Performance note:
+ *   useDronePositionStream — zero-react-state path for Cesium 60fps drone smoothing.
+ *   It calls onPosition(logicalId, data) directly from the WS onmessage handler,
+ *   completely bypassing React setState so Cesium's requestAnimationFrame is never
+ *   interrupted by reconciliation work.
  */
 
 "use client";
@@ -112,6 +118,8 @@ export function useWebSocket(
 export function useLiveEntities(objectType: string) {
     const [entities, setEntities] = useState<Record<string, any>>({});
     const [lastUpdate, setLastUpdate] = useState<number | null>(null);
+    // Stable array ref — avoids allocating a new array on every render
+    const entitiesArrayRef = useRef<any[]>([]);
 
     const { connected, lastEvent } = useWebSocket(
         [`entities:${objectType}`],
@@ -119,12 +127,16 @@ export function useLiveEntities(objectType: string) {
             onEvent: (ev) => {
                 if (ev.type !== "entity.change" || ev.objectType !== objectType) return;
                 setEntities((prev) => {
+                    let next: Record<string, any>;
                     if (ev.changeType === "deleted") {
-                        const next = { ...prev };
+                        next = { ...prev };
                         delete next[ev.logicalId];
-                        return next;
+                    } else {
+                        next = { ...prev, [ev.logicalId]: { ...ev.data, id: ev.logicalId } };
                     }
-                    return { ...prev, [ev.logicalId]: { ...ev.data, id: ev.logicalId } };
+                    // Keep stable ref in sync so consumers that hold the ref don't stale
+                    entitiesArrayRef.current = Object.values(next);
+                    return next;
                 });
                 setLastUpdate(ev.ts);
             },
@@ -132,10 +144,80 @@ export function useLiveEntities(objectType: string) {
     );
 
     return {
-        entities: Object.values(entities),
+        entities: entitiesArrayRef.current,
         entityMap: entities,
         count: Object.keys(entities).length,
         connected,
         lastUpdate,
     };
+}
+
+/**
+ * useDronePositionStream — zero-React-state path for Cesium 60fps drone smoothing.
+ *
+ * Calls onPosition(logicalId, data) synchronously inside the WebSocket onmessage
+ * handler — no setState, no React reconciliation, no blocked animation frame.
+ * Use this to feed Cesium.SampledPositionProperty directly from the WS thread.
+ *
+ * @param onPosition  Stable callback ref (wrap in useCallback with [] deps)
+ */
+export function useDronePositionStream(
+    onPosition: (logicalId: string, data: any) => void
+) {
+    // Keep latest callback in a ref so the WS listener closure never stales
+    const cbRef = useRef(onPosition);
+    useEffect(() => { cbRef.current = onPosition; });
+
+    const [connected, setConnected] = useState(false);
+    const wsRef = useRef<WebSocket | null>(null);
+    const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const connect = () => {
+            try {
+                const ws = new WebSocket(WS_URL);
+                wsRef.current = ws;
+
+                ws.onopen = () => {
+                    setConnected(true);
+                    ws.send(JSON.stringify({ subscribe: ['entities:Drone'] }));
+                };
+
+                ws.onmessage = (ev) => {
+                    // Hot path — parse once, call directly, NO setState
+                    try {
+                        const msg = JSON.parse(ev.data) as WSEvent;
+                        if (
+                            msg.type === 'entity.change' &&
+                            msg.objectType === 'Drone' &&
+                            msg.changeType !== 'deleted' &&
+                            msg.logicalId &&
+                            msg.data
+                        ) {
+                            cbRef.current(msg.logicalId, msg.data);
+                        }
+                    } catch { /* ignore malformed */ }
+                };
+
+                ws.onclose = () => {
+                    setConnected(false);
+                    wsRef.current = null;
+                    reconnectRef.current = setTimeout(connect, 3000);
+                };
+
+                ws.onerror = () => ws.close();
+            } catch { /* ignore non-browser */ }
+        };
+
+        connect();
+
+        return () => {
+            if (reconnectRef.current) clearTimeout(reconnectRef.current);
+            wsRef.current?.close();
+        };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return { connected };
 }

@@ -29,10 +29,10 @@ export declare class IdentityService {
     /**
      * Explicitly links an external identity to an internal logicalId.
      */
-    static registerAlias(sourceSystem: string, externalId: string, targetLogicalId: string, confidence: number, prisma: PrismaClient): Promise<{
+    static registerAlias(sourceSystem: string, externalId: string, targetLogicalId: string, confidence: number, projectId: string, prisma: PrismaClient): Promise<{
+        projectId: string;
         id: string;
         createdAt: Date;
-        projectId: string | null;
         targetLogicalId: string;
         externalId: string;
         sourceSystem: string;
@@ -49,11 +49,17 @@ export declare class IdentityService {
         threshold?: number;
         sourceJobId?: string;
         limit?: number;
+        projectId: string;
     }): Promise<number>;
     /**
      * Merges entity B into entity A: updates all aliases pointing to B to point to A,
      * then marks the MatchCandidate as MERGED.
      */
-    static mergeEntities(candidateId: string, reviewerName: string, prisma: PrismaClient): Promise<void>;
+    static mergeEntities(params: {
+        candidateId: string;
+        reviewerName: string;
+        projectId: string;
+        prisma: PrismaClient;
+    }): Promise<void>;
 }
 //# sourceMappingURL=identity-service.d.ts.map

@@ -1,0 +1,45 @@
+﻿
+> aip@1.0.0 prebuild
+> npm run prisma:generate
+
+
+> aip@1.0.0 prisma:generate
+> prisma generate
+
+node.exe : Loaded 
+Prisma config from 
+prisma.config.ts.
+At C:\nvm4w\nodejs\npm.
+ps1:16 char:5
++     & 
+"$basedir/node$exe"  "$
+basedir/node_modules/np
+m/bin/npm-cli.js" ...
++     ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (Loaded Prisma   
+  c...isma.config.t    
+s.:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+
+Prisma schema loaded 
+from 
+prisma\schema.prisma.
+
+Γ£ö Generated Prisma Client (v7.4.1) to .\src\generated\prisma in 516ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+
+> aip@1.0.0 build
+> tsc
+

@@ -6,20 +6,20 @@ export declare class ProvenanceService {
     /**
      * Records standard (non-crypto) provenance for a single entity instance or its fields.
      */
-    static recordLineage(entityInstanceId: string, sourceSystem: string, sourceRecordId: string, sourceTimestamp: Date, attributeNames: string[] | null, prisma: any): Promise<any>;
+    static recordLineage(entityInstanceId: string, sourceSystem: string, sourceRecordId: string, sourceTimestamp: Date, attributeNames: string[] | null, projectId: string, prisma: any): Promise<any>;
     private static getSecretKey;
     /**
      * Records field-level cryptographic provenance.
      * Hashes each field value using SHA-256 to create an immutable log.
      */
-    static recordCryptoProvenance(entityId: string, entityType: string, operationType: string, sourceSystem: string, operatorId: string, fields: Record<string, any>, prisma: PrismaClient): Promise<any[]>;
+    static recordCryptoProvenance(entityId: string, entityType: string, operationType: string, sourceSystem: string, operatorId: string, fields: Record<string, any>, projectId: string, prisma: PrismaClient): Promise<any[]>;
     /**
      * Creates an HMAC-SHA256 integrity seal for an entity at the current point in time.
      * This proves mathematically that the database row hasn't been tampered with since sealing.
      */
-    static createIntegritySeal(entityId: string, entityType: string, sealedBy: string, prisma: PrismaClient): Promise<{
+    static createIntegritySeal(entityId: string, entityType: string, sealedBy: string, projectId: string, prisma: PrismaClient): Promise<{
+        projectId: string;
         id: string;
-        projectId: string | null;
         entityType: string;
         entityId: string;
         sealHmac: string;

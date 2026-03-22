@@ -2,12 +2,14 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma';
+import { OntologyService } from '../ontology-service';
 
 const baseUrl = process.env.DATABASE_URL || '';
 const databaseUrl = baseUrl.replace('aip_app:aip_password', 'aip_user:aip_password');
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+const ontologySvc = new OntologyService(prisma);
 
 async function main() {
     console.log('🛡️  Starting Military Demo Data Seed...');
@@ -148,22 +150,15 @@ async function main() {
             projectId
         };
 
-        if (!existing) {
-            await prisma.currentEntityState.create({
-                data: creationData
-            });
-            console.log(`Seeded entity state: ${entity.logicalId}`);
-        } else {
-            await prisma.currentEntityState.update({
-                where: { logicalId: entity.logicalId },
-                data: {
-                    data: entity.data as any,
-                    updatedAt: entity.updatedAt,
-                    projectId
-                }
-            });
-            console.log(`Updated entity state: ${entity.logicalId}`);
-        }
+        await ontologySvc.recordDomainEventAndApply({
+            eventType: existing ? 'EntityUpdated' : 'EntityCreated',
+            logicalId: entity.logicalId,
+            entityTypeId: entity.entityTypeId as string,
+            data: entity.data as any,
+            projectId,
+            actor: 'system-seed'
+        });
+        console.log(`${existing ? 'Updated' : 'Seeded'} entity state: ${entity.logicalId}`);
     }
 
     console.log('✅ Military Data Seed Complete!');

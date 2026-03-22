@@ -51,19 +51,34 @@ class GovernanceService {
      * Approves and applies a change request.
      */
     async approveAndApply(crId, reviewedBy) {
-        console.log(`[GovernanceService] approveAndApply starting for CR: ${crId}`);
+        logger_1.default.info({ crId, reviewedBy }, 'Approving and applying change request');
         return await this.prisma.$transaction(async (tx) => {
-            console.log(`[GovernanceService] Transaction started`);
             const cr = await tx.changeRequest.findUnique({
                 where: { id: crId }
             });
-            console.log(`[GovernanceService] CR fetched: ${cr ? 'found' : 'not found'}`);
             if (!cr)
                 throw new Error(`ChangeRequest '${crId}' not found`);
-            if (cr.status !== 'DRAFT')
+            if (cr.status !== 'DRAFT' && cr.status !== 'IN_REVIEW') {
                 throw new Error(`ChangeRequest is in status '${cr.status}' and cannot be approved.`);
-            // 1. Update status
-            console.log(`[GovernanceService] Updating CR status to APPROVED...`);
+            }
+            // 1. Apply the actual change to the resource
+            const { resourceType, resourceId, proposedChanges, projectId } = cr;
+            const modelName = resourceType.charAt(0).toLowerCase() + resourceType.slice(1);
+            logger_1.default.info({ resourceType, resourceId, modelName }, 'Applying proposed changes to target resource');
+            if (resourceId) {
+                // UPDATE existing resource
+                await tx[modelName].update({
+                    where: { id: resourceId },
+                    data: { ...proposedChanges, projectId } // Ensure projectId is preserved
+                });
+            }
+            else {
+                // CREATE new resource
+                await tx[modelName].create({
+                    data: { ...proposedChanges, projectId }
+                });
+            }
+            // 2. Update CR status
             const updatedCr = await tx.changeRequest.update({
                 where: { id: crId },
                 data: {
@@ -72,9 +87,7 @@ class GovernanceService {
                     reviewedAt: new Date()
                 }
             });
-            console.log(`[GovernanceService] CR updated.`);
-            // 2. Write audit log via tx to avoid connection pool deadlock
-            console.log(`[GovernanceService] Writing audit log...`);
+            // 3. Write audit log
             await tx.auditLog.create({
                 data: {
                     actor: reviewedBy,
@@ -85,13 +98,48 @@ class GovernanceService {
                     projectId: cr.projectId,
                     before: cr,
                     after: updatedCr,
-                    metadata: { context: 'governance' }
+                    metadata: { context: 'governance', resourceType, resourceId }
                 }
             });
-            console.log(`[GovernanceService] Audit log written.`);
-            logger_1.default.info({ crId, resourceType: cr.resourceType }, 'Change request approved and applied');
+            logger_1.default.info({ crId, resourceType }, 'Change request approved and applied successfully');
             return updatedCr;
-        }, { timeout: 10000 }); // 10s timeout to avoid forever hang
+        }, { timeout: 15000 });
+    }
+    /**
+     * Rejects a change request with a reason.
+     */
+    async rejectChangeRequest(crId, reviewedBy, reason) {
+        const updatedCr = await this.prisma.changeRequest.update({
+            where: { id: crId },
+            data: {
+                status: 'REJECTED',
+                reviewedBy,
+                reviewedAt: new Date(),
+                rejectionReason: reason
+            }
+        });
+        await this.auditSvc.logAction({
+            actor: reviewedBy,
+            action: 'REJECT_CHANGE_REQUEST',
+            resourceType: 'ChangeRequest',
+            resourceId: crId,
+            projectId: updatedCr.projectId,
+            after: updatedCr,
+            metadata: { context: 'governance', reason }
+        });
+        return updatedCr;
+    }
+    /**
+     * Lists change requests for a project.
+     */
+    async listChangeRequests(projectId, status) {
+        return await this.prisma.changeRequest.findMany({
+            where: {
+                projectId,
+                ...(status ? { status } : {})
+            },
+            orderBy: { createdAt: 'desc' }
+        });
     }
 }
 exports.GovernanceService = GovernanceService;

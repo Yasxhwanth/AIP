@@ -19,5 +19,13 @@ export declare class GovernanceService {
      * Approves and applies a change request.
      */
     approveAndApply(crId: string, reviewedBy: string): Promise<any>;
+    /**
+     * Rejects a change request with a reason.
+     */
+    rejectChangeRequest(crId: string, reviewedBy: string, reason: string): Promise<any>;
+    /**
+     * Lists change requests for a project.
+     */
+    listChangeRequests(projectId: string, status?: string): Promise<any>;
 }
 //# sourceMappingURL=governance-service.d.ts.map

@@ -4,14 +4,11 @@ exports.GeminiClient = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 class GeminiClient {
     constructor() {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            throw new Error('GEMINI_API_KEY is not defined in environment variables');
-        }
+        const apiKey = process.env.GEMINI_API_KEY || 'missing-gemini-key-dummy';
         this.genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
     }
     async chat(opts) {
-        const modelName = opts.model || 'gemini-1.5-flash';
+        const modelName = opts.model || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
         // Map tools to Gemini format
         let tools;
         if (opts.tools && opts.tools.length > 0) {

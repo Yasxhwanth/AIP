@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -31,6 +30,7 @@ interface Message {
     links?: AipAssistResponse['links'];
     trace?: AipAssistResponse['trace'];
     actions?: AipAssistResponse['actions'];
+    proposal?: AipAssistResponse['proposal'];
 }
 
 interface SidebarProps {
@@ -84,7 +84,8 @@ export const AipAssistSidebar = ({ isOpen, onClose }: SidebarProps) => {
                 role: 'assistant',
                 content: response.answer,
                 links: response.links,
-                trace: response.trace
+                trace: response.trace,
+                proposal: response.proposal
             };
             setMessages(prev => [...prev, aiMsg]);
 
@@ -104,13 +105,13 @@ export const AipAssistSidebar = ({ isOpen, onClose }: SidebarProps) => {
 
                 // Stage high-risk actions for human-in-the-loop confirmation
                 if (highRiskActions.length > 0) {
-                    const aiMsg: Message = {
+                    const warnMsg: Message = {
                         id: (Date.now() + 1).toString(),
                         role: 'assistant',
                         content: "Operational Warning: Proposed high-risk actions detected. Manual confirmation required.",
                         actions: highRiskActions
                     };
-                    setMessages(prev => [...prev, aiMsg]);
+                    setMessages(prev => [...prev, warnMsg]);
                 }
             }
         } catch (err: any) {
@@ -214,6 +215,48 @@ export const AipAssistSidebar = ({ isOpen, onClose }: SidebarProps) => {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+
+                            {msg.proposal && (
+                                <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg space-y-3 relative overflow-hidden group/proposal">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 to-transparent animate-pulse" />
+                                    <div className="flex items-center gap-2 relative z-10">
+                                        <Shield size={12} className="text-pt-intent-primary" />
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-pt-intent-primary">Mission Action Proposal</span>
+                                    </div>
+                                    <div className="space-y-1 relative z-10">
+                                        <h4 className="text-[10px] font-bold text-white uppercase tracking-tight">{msg.proposal.title}</h4>
+                                        <p className="text-[9px] text-white/50 leading-relaxed italic">" {msg.proposal.detail} "</p>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5 relative z-10">
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    await ApiClient.post(`/api/v1/maven/proposals/${msg.proposal?.id}/approve`, {});
+                                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: "MISSION AUTHORIZED: Proposal has been committed to the primary ontology and dispatched for execution.", proposal: undefined } : m));
+                                                } catch (err) {
+                                                    console.error("Failed to authorize proposal", err);
+                                                }
+                                            }}
+                                            className="w-full py-2 bg-pt-intent-primary text-white text-[9px] font-black uppercase tracking-widest rounded-sm hover:bg-pt-intent-primary/80 transition-all shadow-[0_0_15px_rgba(16,107,163,0.3)] flex items-center justify-center gap-2"
+                                        >
+                                            <Zap size={10} fill="currentColor" /> Authorize Execution
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    await ApiClient.post(`/api/v1/maven/proposals/${msg.proposal?.id}/reject`, { reason: 'Dismissed by mission commander.' });
+                                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: "PROPOSAL DISMISSED: The suggested action was rejected by command.", proposal: undefined } : m));
+                                                } catch (err) {
+                                                    console.error("Failed to reject proposal", err);
+                                                }
+                                            }}
+                                            className="w-full py-1.5 bg-black/40 border border-pt-border text-pt-text-muted text-[8px] font-black uppercase tracking-widest rounded-sm hover:text-pt-text transition-all"
+                                        >
+                                            Dismiss Recommendation
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 

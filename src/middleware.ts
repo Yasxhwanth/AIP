@@ -7,6 +7,7 @@ import { PrismaClient } from './generated/prisma';
 import logger from './logger';
 import { tenantStorage } from './tenant-context';
 import { AbacEngine } from './abac-engine';
+import { SecurityContext } from './security-context';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -168,33 +169,43 @@ export function apiKeyAuth(prisma: PrismaClient) {
 
 export function tenantContext() {
     return (req: Request, _res: Response, next: NextFunction): void => {
-        const projectId = req.auth?.projectId;
+        const projectId = req.auth?.projectId || (req.headers['x-project-id'] as string);
         if (projectId) {
-            tenantStorage.run({ projectId }, () => next());
+            tenantStorage.run({ projectId }, () => {
+                (req as any).projectId = projectId; // Also attach to request for easy access
+                next();
+            });
         } else {
             next();
         }
     };
 }
 
+
 // ── Security Guard (ABAC) ────────────────────────────────────────
 
-export function securityGuard(abac: AbacEngine) {
+/**
+ * Global Security Guard middleware that intercepts every request and
+ * evaluates it against ABAC policies using the SecurityContext.
+ */
+export function securityGuard(securityCtx: SecurityContext) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         if (!req.auth) {
             res.status(401).json({ error: 'Not authenticated' });
             return;
         }
 
-        // Simple resource inference for demonstration
-        let resourceType = '*';
+        // 1. Infer resource type from path
+        let resourceType = 'System';
         const path = req.path;
-        if (path.includes('/entity-types')) resourceType = 'EntityType';
+        if (path.includes('/entity-types') || path.includes('/entities')) resourceType = 'EntityType';
         if (path.includes('/change-requests')) resourceType = 'ChangeRequest';
         if (path.includes('/pipelines')) resourceType = 'Pipeline';
         if (path.includes('/data-sources')) resourceType = 'DataSource';
+        if (path.includes('/dashboards')) resourceType = 'Dashboard';
 
-        const actionMapping: Record<string, string> = {
+        // 2. Map HTTP method to ABAC action
+        const actionMapping: Record<string, 'READ' | 'WRITE' | 'DELETE' | 'ADMIN'> = {
             'GET': 'READ',
             'POST': 'WRITE',
             'PUT': 'WRITE',
@@ -204,25 +215,23 @@ export function securityGuard(abac: AbacEngine) {
         const action = actionMapping[req.method] || 'READ';
 
         try {
-            const result = await abac.evaluate(req.auth as any, action, {
+            // 3. Enforce security decision via centralized context
+            const decision = await securityCtx.enforceFromRequest(req, res, action, {
                 type: resourceType,
                 id: req.params.id as string,
                 attributes: req.body
             });
 
-            if (!result.allowed) {
-                res.status(403).json({
-                    error: 'Forbidden: ABAC Policy Denial',
-                    reason: result.reason,
-                    correlationId: req.correlationId
-                });
-                return;
+            if (decision) {
+                // If allowed, we can optionally attach the decision to the request 
+                // if downstream handlers need to apply masks.
+                (req as any).securityDecision = decision;
+                next();
             }
-
-            next();
-        } catch (err) {
-            req.log.error({ err }, 'ABAC evaluation failed');
-            next();
+        } catch (err: any) {
+            console.error('[CRITICAL] SecurityContext evaluation block threw an error:', err);
+            req.log.error({ err }, 'SecurityContext evaluation failed');
+            res.status(500).json({ error: 'Security evaluation error', correlationId: req.correlationId });
         }
     };
 }
@@ -245,7 +254,7 @@ export function requireRole(...roles: string[]) {
 
 // ── Rate Limiter ─────────────────────────────────────────────────
 
-export function createRateLimiter(windowMs = 60_000, max = 100) {
+export function createRateLimiter(windowMs = 60_000, max = 5000) {
     return rateLimit({
         windowMs,
         max,
@@ -307,6 +316,8 @@ export function enforceIdempotency(prisma: PrismaClient) {
         }
 
         try {
+            // The unique constraint on idempotencyKey in the DomainEvent table
+            // acts as our distributed lock.
             await prisma.domainEvent.create({
                 data: {
                     idempotencyKey,

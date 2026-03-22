@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { MetricsDashboard } from "@/components/MetricsDashboard";
+import { ApiClient } from "@/lib/apiClient";
 
 const BattlefieldOverview = dynamic(
     () => import("@/components/BattlefieldOverview").then(m => ({ default: m.BattlefieldOverview })),
@@ -15,7 +16,7 @@ const BattlefieldOverview = dynamic(
 );
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type CanvasMode = 'map' | 'metrics' | 'coa' | 'imagery';
+type CanvasMode = 'map' | 'metrics' | 'coa' | 'imagery' | 'tail';
 
 interface DataSource {
     id: string;
@@ -298,6 +299,53 @@ function COACanvas({ coas, onApprove }: { coas: COACard[]; onApprove: (id: strin
     );
 }
 
+// ── Tail Log Canvas ─────────────────────────────────────────────────────────────
+function TailLogCanvas() {
+    const [logs, setLogs] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchLogs = async () => {
+            try {
+                const results = await ApiClient.get<any[]>('/api/v1/maven/audit/tail', { limit: "100" });
+                setLogs(results);
+            } catch (err) {
+                console.error("Failed to fetch tail logs", err);
+            }
+        };
+        fetchLogs();
+        const interval = setInterval(fetchLogs, 2000);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="h-full flex flex-col bg-black text-[#00ff41] font-mono text-[10px] p-4 overflow-hidden">
+            <div className="flex items-center justify-between mb-4 border-b border-[#00ff41]/20 pb-2">
+                <span className="flex items-center gap-2">
+                    <Activity size={12} className="animate-pulse" />
+                    MISSION_CRITICAL_AUDIT_STREAM_LIVE
+                </span>
+                <span className="opacity-50 uppercase tracking-widest">{new Date().toISOString()}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar scroll-smooth">
+                {logs.map((log, i) => (
+                    <div key={log.id || i} className="flex gap-4 opacity-80 hover:opacity-100 transition-opacity">
+                        <span className="text-white/30 shrink-0">[{new Date(log.occurredAt).toISOString().substring(11, 19)}]</span>
+                        <span className="text-blue-400 shrink-0">[{log.actor.toUpperCase()}]</span>
+                        <span className="text-amber-500 shrink-0">{log.action}</span>
+                        <span className="text-white/60 shrink-0">{log.resourceType}://{log.resourceId?.substring(0, 8)}</span>
+                        <span className="text-white truncate">&gt; {JSON.stringify(log.after || log.metadata || "").substring(0, 120)}</span>
+                    </div>
+                ))}
+                {logs.length === 0 && (
+                    <div className="h-full flex items-center justify-center opacity-20">
+                        <span className="animate-pulse">AWAITING MISSION DATA...</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ── Message Bubble ────────────────────────────────────────────────────────────
 function MessageBubble({ msg }: { msg: AiMessage }) {
     const [expanded, setExpanded] = useState(false);
@@ -392,6 +440,29 @@ export default function AIPTerminal() {
                 </div>
 
                 <div className="flex items-center space-x-3">
+                    <button
+                        onClick={async () => {
+                            try {
+                                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/governance/sync/snapshot?projectId=proj-demo`, {
+                                    headers: { 'X-Project-Id': 'proj-demo' }
+                                });
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `mission-sync-${new Date().toISOString()}.aip`;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                            } catch (err) {
+                                console.error("Sync Snapshot failed", err);
+                            }
+                        }}
+                        className="flex items-center space-x-1.5 px-2 py-0.5 rounded border border-pt-intent-primary/30 bg-pt-intent-primary/5 text-pt-intent-primary text-[9px] font-black uppercase tracking-widest hover:bg-pt-intent-primary/10 transition-all"
+                    >
+                        <Zap size={10} />
+                        <span>Sync Snapshot</span>
+                    </button>
                     <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded border border-pt-intent-success/30 bg-pt-intent-success/5 text-pt-intent-success text-[9px] font-black uppercase tracking-widest">
                         <Shield size={10} />
                         <span>Enforced</span>
@@ -496,6 +567,7 @@ export default function AIPTerminal() {
                                     { mode: 'map' as const, label: 'Geo Intelligence', icon: Globe },
                                     { mode: 'metrics' as const, label: 'Systems Health', icon: Activity },
                                     { mode: 'coa' as const, label: 'Strategic Options', icon: Layers },
+                                    { mode: 'tail' as const, label: 'Mission Tail', icon: Terminal },
                                 ].map(tab => (
                                     <button
                                         key={tab.mode}
@@ -535,6 +607,7 @@ export default function AIPTerminal() {
                                         </div>
                                     )
                             )}
+                            {canvasMode === 'tail' && <TailLogCanvas />}
                         </div>
                     </div>
                 </main>

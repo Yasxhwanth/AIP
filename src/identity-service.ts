@@ -1,4 +1,5 @@
 import { PrismaClient } from './generated/prisma';
+import { OntologyService } from './ontology-service';
 
 // ── Fuzzy Matching Utilities ──────────────────────────────────────
 
@@ -295,9 +296,15 @@ export class IdentityService {
 
     if (stateA && stateB) {
       const merged = { ...(stateB.data as object), ...(stateA.data as object) }; // A wins on conflicts
-      await prisma.currentEntityState.update({
-        where: { logicalId: candidate.logicalIdA },
-        data: { data: merged as any, updatedAt: new Date() }
+      const ontologySvc = new OntologyService(prisma);
+      await ontologySvc.recordDomainEventAndApply({
+        eventType: 'EntityUpdated',
+        logicalId: candidate.logicalIdA,
+        entityTypeId: candidate.entityTypeId,
+        data: merged as any,
+        projectId: projectId,
+        actor: reviewerName,
+        metadata: { mergedFrom: candidate.logicalIdB, matchId: candidate.id }
       });
     }
 

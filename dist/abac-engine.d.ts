@@ -22,6 +22,7 @@ export interface PolicyEvaluationResult {
  */
 export declare class AbacEngine {
     private prisma;
+    private audit;
     constructor(prisma: PrismaClient);
     /**
      * Main evaluation function.

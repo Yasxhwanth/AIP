@@ -72,6 +72,7 @@ model Project {
   aipActionExecutions AIPActionExecution[]
   aipAutomateRuns     AIPAutomateRun[]
   aiWorkflowRuns      AIWorkflowRun[]
+  actionProposals     ActionProposal[]
   evals               AIPEval[]
   evalRuns            AIPEvalRun[]
   functionVersions    FunctionVersion[]
@@ -83,6 +84,8 @@ model Project {
   modelLatencyMetrics    ModelLatencyMetric[]
   actionDefinitions      ActionDefinition[]
   executionPlans         ExecutionPlan[]
+  schemaDriftReports    SchemaDriftReport[]
+  qualityBaselines      QualityBaseline[]
 }
 
 model EntityType {
@@ -101,6 +104,8 @@ model EntityType {
   modelDefinitions      ModelDefinition[]
   decisionRules         DecisionRule[]
   currentStates         CurrentEntityState[]
+  driftReports          SchemaDriftReport[]
+  qualityBaselines      QualityBaseline[]
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -281,6 +286,7 @@ model AuditLog {
   before       Json?    // state before (for mutating operations)
   after        Json?    // state after
   metadata     Json?    // request metadata (IP, correlationId, etc)
+  explanation  Json?    // Explainable AI: natural language justification for the action/decision
   occurredAt   DateTime @default(now())
 
   projectId String
@@ -550,6 +556,7 @@ model DataSource {
 
   integrationJobs IntegrationJob[]
   rejectedRecords RejectedRecord[]
+  driftReports    SchemaDriftReport[]
 
   @@index([projectId])
 }
@@ -834,6 +841,8 @@ model InferenceResult {
   input          Json
   output         Json
   confidence     Float?
+  lineage        Json?    // Deep Lineage: links to exact input records/ids used for this inference
+  explanation    Json?    // Explainable AI: rationale for the prediction/confidence
   createdAt      DateTime @default(now())
 
   projectId      String
@@ -914,6 +923,7 @@ model DecisionLog {
   conditionResults Json // per-condition evaluation details
   decision         String // EXECUTE, PENDING_APPROVAL, SKIPPED, SIMULATED
   status           String   @default("PENDING") // COMPLETED, FAILED, PENDING, SIMULATED
+  explanation      Json?    // Explainable AI: why this rule matched or was skipped
   createdAt        DateTime @default(now())
   executionTrace ExecutionTrace? // Optional because log might be SKIPPED or PENDING_APPROVAL
 
@@ -1143,6 +1153,34 @@ model AIPActionExecution {
   @@index([logicalId, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
   @@index([projectId])
+}
+
+// Staged recommendations from AIP agents that require human-in-the-loop review.
+model ActionProposal {
+  id              String   @id @default(uuid())
+  projectId       String
+  agentId         String?  // The AIPAgent that proposed this
+  actionId        String   // The tool/action name (e.g. "suggest_reroute")
+  title           String   // Human-readable title
+  description     String?  @db.Text // AI-generated reasoning/justification
+  parameters      Json?    // The arguments for the action
+  status          String   @default("PENDING") // PENDING | APPROVED | REJECTED | EXECUTED | EXPIRED
+  riskTier        String   @default("low")
+  
+  submittedBy     String   @default("ai")
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  
+  executionId     String?  // Link to AIPActionExecution after approval
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@index([projectId, status])
+  @@index([actionId])
 }
 
 // ── Phase 9: AIP Metrics (Live Ontology Aggregations) ─────────────────────────
@@ -1533,3 +1571,37 @@ model CryptoProvenanceSeal {
   @@index([projectId])
   @@unique([entityId, sealedAt])
 }
+
+model SchemaDriftReport {
+  id           String   @id @default(uuid())
+  projectId    String
+  dataSourceId String
+  jobId        String?
+  entityTypeId String
+  driftType    String   // "ADDED_FIELD", "REMOVED_FIELD", "TYPE_CHANGE"
+  fieldName    String
+  expectedType String?
+  observedType String?
+  detectedAt   DateTime @default(now())
+  metadata     Json?
+
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, dataSourceId])
+}
+
+model QualityBaseline {
+  id           String   @id @default(uuid())
+  projectId    String
+  entityTypeId String
+  fieldStats   Json
+  recordedAt   DateTime @default(now())
+
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entityType   EntityType @relation(fields: [entityTypeId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, entityTypeId])
+}
+

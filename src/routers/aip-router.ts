@@ -11,11 +11,14 @@ import { GovernanceService } from '../governance-service';
 const WRITE_TOOLS = new Set(['propose_change', 'run_pipeline', 'create_change_request']);
 const READ_ONLY_SAFETY_TIER = 'READ_ONLY';
 
+import { enforceIdempotency } from '../middleware';
+
 export function createAipRouter(prisma: PrismaClient) {
     const router = Router();
     const executor = new AIPExecutor(prisma, defaultToolRegistry);
     const llm = getLlmClient();
     const governanceSvc = new GovernanceService(prisma);
+    const idempotency = enforceIdempotency(prisma);
 
     /**
      * Discovery: List available tools with safety tier metadata
@@ -36,7 +39,7 @@ export function createAipRouter(prisma: PrismaClient) {
     /**
      * Execution: Run a tool directly
      */
-    router.post('/execute', async (req, res) => {
+    router.post('/execute', idempotency, async (req, res) => {
         const { toolName, parameters } = req.body;
         const projectId = (req as any).projectId || req.body.projectId;
 
@@ -70,7 +73,7 @@ export function createAipRouter(prisma: PrismaClient) {
     /**
      * Propose Action: Create a ChangeRequest for write-tool calls that need approval
      */
-    router.post('/propose-action', async (req, res) => {
+    router.post('/propose-action', idempotency, async (req, res) => {
         const { toolName, parameters, agentId } = req.body;
         const projectId = (req as any).projectId || req.body.projectId || 'proj-demo';
         const actor = (req as any).auth?.apiKeyName || 'aip-agent';
@@ -102,7 +105,7 @@ export function createAipRouter(prisma: PrismaClient) {
     /**
      * Assist: Natural language interaction with Gemini-backed abstraction
      */
-    router.post('/assist', async (req, res) => {
+    router.post('/assist', idempotency, async (req, res) => {
         const { message, page, vars, projectId: reqProjectId, agentId } = req.body;
         const projectId = (req as any).projectId || reqProjectId || 'proj-demo';
         const actor = (req as any).auth?.apiKeyName || 'system';

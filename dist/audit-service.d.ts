@@ -8,6 +8,7 @@ export interface AuditLogOptions {
     before?: any;
     after?: any;
     metadata?: any;
+    explanation?: any;
 }
 export declare class AuditService {
     private prisma;
@@ -20,5 +21,10 @@ export declare class AuditService {
      * Helper to compute a simple diff between two objects for visualization.
      */
     static computeDiff(before: any, after: any): any;
+    private static readonly SENSITIVE_FIELDS;
+    /**
+     * Recursively masks sensitive fields in an object.
+     */
+    private maskPII;
 }
 //# sourceMappingURL=audit-service.d.ts.map

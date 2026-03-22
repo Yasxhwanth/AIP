@@ -10,9 +10,7 @@ exports.dryRunJob = dryRunJob;
 exports.startScheduler = startScheduler;
 const policy_engine_1 = require("./policy-engine");
 const identity_service_1 = require("./identity-service");
-const provenance_service_1 = require("./provenance-service");
 const ontology_reasoner_1 = require("./ontology-reasoner");
-const domain_events_1 = require("./domain-events");
 const crypto_1 = __importDefault(require("crypto"));
 const connectors = {
     /**
@@ -91,111 +89,49 @@ function transformRecord(record, fieldMapping) {
  * Returns { success: true } on success, { success: false, error } on failure.
  */
 async function upsertEntityInstance(entityType, logicalId, attrData, prisma, options) {
-    const now = new Date();
+    const { OntologyService } = require('./ontology-service');
+    const ontologySvc = new OntologyService(prisma);
     try {
-        const { eventId, previousState, instanceId } = await prisma.$transaction(async (tx) => {
-            // Fetch the currently-active row
-            const current = await tx.entityInstance.findFirst({
-                where: {
-                    entityTypeId: entityType.id,
-                    logicalId,
-                    validTo: null,
-                },
-            });
-            // Close the currently-active row (if any)
-            if (current) {
-                await tx.entityInstance.update({
-                    where: { id: current.id },
-                    data: { validTo: now },
-                });
+        const hash = crypto_1.default.createHash('sha256').update(JSON.stringify(attrData)).digest('hex');
+        const idempotencyKey = options?.sourceRecordId
+            ? `EntityStateChanged:${options.sourceSystem}:${options.sourceRecordId}`
+            : `EntityStateChanged:${logicalId}:${hash}`;
+        const result = await ontologySvc.recordDomainEventAndApply({
+            eventType: 'EntityStateChanged',
+            logicalId,
+            entityTypeId: entityType.id,
+            entityVersion: entityType.version,
+            data: attrData,
+            projectId: entityType.projectId ?? 'default',
+            actor: options?.sourceSystem ?? 'data-integration',
+            idempotencyKey,
+            sourceSystem: options?.sourceSystem,
+            sourceRecordId: options?.sourceRecordId,
+            metadata: {
+                confidence: options?.confidence ?? 1.0,
+                sourceSystem: options?.sourceSystem
             }
-            // Insert new active row
-            const newInstance = await tx.entityInstance.create({
-                data: {
-                    logicalId,
-                    entityTypeId: entityType.id,
-                    entityVersion: entityType.version,
-                    data: attrData,
-                    validFrom: now,
-                    validTo: null,
-                    confidenceScore: options?.confidence ?? 1.0,
-                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED', // Low confidence requires review
-                    projectId: entityType.projectId
-                },
-            });
-            // Record Provenance
-            if (options?.sourceSystem && options?.sourceRecordId) {
-                await provenance_service_1.ProvenanceService.recordLineage(newInstance.id, options.sourceSystem, options.sourceRecordId, now, // source timestamp (approximated here as now)
-                null, // Entire record provenance for now
-                tx);
-            }
-            // Emit domain event
-            const hash = crypto_1.default.createHash('sha256').update(JSON.stringify(attrData)).digest('hex');
-            const idempotencyKey = options?.sourceRecordId
-                ? `EntityStateChanged:${options.sourceSystem}:${options.sourceRecordId}`
-                : `EntityStateChanged:${logicalId}:${hash}`;
-            const domainEventPayload = {
-                prisma: tx,
-                entityTypeId: entityType.id,
-                logicalId,
-                entityVersion: entityType.version,
-                eventType: 'EntityStateChanged',
-                idempotencyKey,
-                payload: {
-                    previousState: current?.data ?? null,
-                    newState: attrData,
-                    validFrom: now.toISOString(),
-                },
-                projectId: entityType.projectId ?? 'default'
-            };
-            if (options?.generateOutbox) {
-                domainEventPayload.outbox = {
-                    projectId: entityType.projectId ?? 'default',
-                    aggregateType: 'EntityInstance',
-                    targetSystem: options.generateOutbox.targetSystem
-                };
-            }
-            const domainEvent = await (0, domain_events_1.recordDomainEvent)(domainEventPayload);
-            // CQRS: Upsert read model projection
-            await tx.currentEntityState.upsert({
-                where: { logicalId },
-                create: {
-                    logicalId,
-                    entityTypeId: entityType.id,
-                    data: attrData,
-                    updatedAt: now,
-                    projectId: entityType.projectId
-                },
-                update: {
-                    data: attrData,
-                    updatedAt: now,
-                    projectId: entityType.projectId
-                },
-            });
-            return {
-                eventId: domainEvent.id,
-                previousState: current?.data ?? null,
-                instanceId: newInstance.id
-            };
         });
-        // Fire-and-forget: evaluate policies
+        // ── Fire-and-forget logic ──
+        // Note: These could eventually be moved into the Outbox/Worker for even tighter decoupling
+        // 1. Evaluate policies
         (0, policy_engine_1.evaluatePolicies)({
-            eventId,
+            eventId: result.event.id,
             eventType: 'EntityStateChanged',
             entityTypeId: entityType.id,
             logicalId,
             entityVersion: entityType.version,
             payload: {
-                previousState,
+                previousState: null, // Previous state fetch could be optimized if needed
                 newState: attrData,
-                validFrom: now.toISOString(),
+                validFrom: new Date().toISOString(),
             },
         }, prisma);
-        // Fire-and-forget: trigger semantic reasoner to derive ontology properties natively 
+        // 2. Trigger semantic reasoner
         (0, ontology_reasoner_1.runReasonerForEntity)(logicalId, entityType.projectId ?? 'default', prisma).catch(err => {
             console.error(`[Semantic Reasoner Error] Failed to reason for entity ${logicalId}:`, err);
         });
-        return { success: true, instanceId };
+        return { success: true, instanceId: result.instanceId };
     }
     catch (error) {
         return { success: false, error: String(error) };
@@ -307,7 +243,7 @@ async function executeJob(jobId, prisma, queueId, inlineData, options) {
             }
             else {
                 // If not resolved, use the externalId as the logicalId for now and register an alias
-                await identity_service_1.IdentityService.registerAlias(job.dataSource.name, externalId, externalId, 1.0, prisma);
+                await identity_service_1.IdentityService.registerAlias(job.dataSource.name, externalId, externalId, 1.0, entityType.projectId, prisma);
             }
             const mapped = transformRecord(raw, fieldMapping);
             const result = await upsertEntityInstance(entityType, logicalId, mapped, prisma, {

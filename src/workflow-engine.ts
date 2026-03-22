@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from './generated/prisma';
 import { getLlmClient } from './lib/llm-factory';
+import { OntologyService } from './ontology-service';
 
 /** Interpolate {{varName}} template tokens from a context map */
 export function interpolate(template: string, ctx: Record<string, any>): string {
@@ -242,17 +243,15 @@ export async function executeWorkflow(
                         const logicalId: string = interpolate(node.data?.logicalId || `workflow-${workflowId}-${Date.now()}`, ctx);
                         const et = await prisma.entityType.findFirst({ where: { name: etName } });
                         if (et) {
-                            const projectId = (global as any).DEFAULT_PROJECT_ID || '';
-                            await prisma.currentEntityState.upsert({
-                                where: { logicalId },
-                                create: {
-                                    entityTypeId: et.id,
-                                    logicalId,
-                                    data: { value: output, generatedAt: new Date().toISOString() },
-                                    updatedAt: new Date(),
-                                    projectId: workflow.projectId,
-                                },
-                                update: { data: { value: output, generatedAt: new Date().toISOString() }, updatedAt: new Date() }
+                            const ontologySvc = new OntologyService(prisma);
+                            await ontologySvc.recordDomainEventAndApply({
+                                eventType: 'WorkflowOutput',
+                                logicalId,
+                                entityTypeId: et.id,
+                                entityVersion: et.version,
+                                data: { value: output, generatedAt: new Date().toISOString() },
+                                projectId: workflow.projectId,
+                                actor: 'system:workflow-engine'
                             });
                             await log(`  ✓ Wrote output to Ontology entity ${etName}/${logicalId}`);
                         }

@@ -12,14 +12,14 @@ class ProvenanceService {
     /**
      * Records standard (non-crypto) provenance for a single entity instance or its fields.
      */
-    static async recordLineage(entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeNames, prisma) {
+    static async recordLineage(entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeNames, projectId, prisma) {
         if (!attributeNames) {
             return prisma.provenanceRecord.create({
-                data: { entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: null }
+                data: { entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: null, projectId }
             });
         }
         const records = attributeNames.map(attr => ({
-            entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: attr
+            entityInstanceId, sourceSystem, sourceRecordId, sourceTimestamp, attributeName: attr, projectId
         }));
         return prisma.provenanceRecord.createMany({ data: records });
     }
@@ -31,7 +31,7 @@ class ProvenanceService {
      * Records field-level cryptographic provenance.
      * Hashes each field value using SHA-256 to create an immutable log.
      */
-    static async recordCryptoProvenance(entityId, entityType, operationType, sourceSystem, operatorId, fields, prisma) {
+    static async recordCryptoProvenance(entityId, entityType, operationType, sourceSystem, operatorId, fields, projectId, prisma) {
         const chains = [];
         for (const [field, value] of Object.entries(fields)) {
             // Find the previous hash for this field to maintain the chain
@@ -52,7 +52,8 @@ class ProvenanceService {
                     sourceSystem,
                     operationType,
                     operatorId,
-                    previousHash: previous?.valueHash || null
+                    previousHash: previous?.valueHash || null,
+                    projectId,
                 }
             });
             chains.push(entry);
@@ -63,7 +64,7 @@ class ProvenanceService {
      * Creates an HMAC-SHA256 integrity seal for an entity at the current point in time.
      * This proves mathematically that the database row hasn't been tampered with since sealing.
      */
-    static async createIntegritySeal(entityId, entityType, sealedBy, prisma) {
+    static async createIntegritySeal(entityId, entityType, sealedBy, projectId, prisma) {
         // 1. Get the LATEST hash for every field for this entity
         const chains = await prisma.cryptoProvenanceChain.findMany({
             where: { entityId },
@@ -91,7 +92,8 @@ class ProvenanceService {
                 sealHmac: hmac,
                 fieldCount: fieldKeys.length,
                 fieldHashes: latestHashes,
-                sealedBy
+                sealedBy,
+                projectId,
             }
         });
     }

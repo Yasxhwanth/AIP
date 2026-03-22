@@ -77,7 +77,7 @@ async function traverseRule(sourceLogicalId, rule, prisma) {
     }));
 }
 // ── Upsert Derived Relationship ───────────────────────────────────────────────
-async function upsertDerivedRelationship(rule, sourceLogicalId, targetLogicalId, pathConfidence, prisma) {
+async function upsertDerivedRelationship(rule, sourceLogicalId, targetLogicalId, pathConfidence, projectId, prisma) {
     const derivedConfidence = Math.min((rule.consequent.confidence ?? 1.0) * pathConfidence, 1.0);
     const existing = await prisma.currentGraph.findUnique({
         where: {
@@ -113,6 +113,7 @@ async function upsertDerivedRelationship(rule, sourceLogicalId, targetLogicalId,
                 baseConfidence: derivedConfidence,
                 decayRate: rule.consequent.decayRate ?? 0.0,
                 lastObservedAt: new Date(),
+                projectId,
             },
         });
         return { isNew: true };
@@ -140,7 +141,7 @@ async function runReasonerForEntity(logicalId, projectId, prisma) {
         };
         const targets = await traverseRule(logicalId, ruleData, prisma);
         for (const { targetLogicalId, pathConfidence } of targets) {
-            const { isNew } = await upsertDerivedRelationship(ruleData, logicalId, targetLogicalId, pathConfidence, prisma);
+            const { isNew } = await upsertDerivedRelationship(ruleData, logicalId, targetLogicalId, pathConfidence, projectId, prisma);
             derived.push({
                 ruleId: rule.id,
                 ruleName: rule.name,

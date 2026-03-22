@@ -47,5 +47,9 @@ export declare const ExplainFailureTool: AIPTool;
  * Helper to convert Zod schema to Gemini-compatible JSON schema
  */
 export declare function zodToGeminiSchema(schema: z.ZodType<any>): any;
+/**
+ * propose_change: Submit a proposal for ontology or configuration change
+ */
+export declare const ProposeChangeTool: AIPTool;
 export declare const defaultToolRegistry: AIPToolRegistry;
 //# sourceMappingURL=aip-tools.d.ts.map

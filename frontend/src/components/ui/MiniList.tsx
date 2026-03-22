@@ -24,14 +24,16 @@ export const MiniListItem = ({
     <div
         onClick={onClick}
         className={cn(
-            "flex items-center px-3 py-1.5 cursor-pointer border-b border-pt-border last:border-b-0 transition-colors select-none",
-            active ? 'bg-pt-intent-primary/10 border-l-[3px] border-l-pt-intent-primary pl-[9px]' : 'hover:bg-pt-bg-hover active:bg-pt-bg-hover/80 text-pt-text-muted hover:text-pt-text'
+            "group flex items-center px-3 py-2 cursor-pointer border-b border-pt-border/60 last:border-b-0 transition-colors select-none min-h-10",
+            active
+                ? "bg-pt-intent-primary/10 border-l-[3px] border-l-pt-intent-primary pl-[9px]"
+                : "hover:bg-pt-bg-hover active:bg-pt-bg-hover/80 text-pt-text-muted hover:text-pt-text"
         )}
     >
         {Icon && <Icon size={12} className={cn("mr-2 shrink-0 transition-colors", active ? "text-pt-intent-primary" : "text-pt-text-muted")} />}
         <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center">
-                <span className={cn("text-[11px] truncate uppercase tracking-tight font-medium transition-colors", active ? 'text-pt-text font-bold' : '')}>
+                <span className={cn("text-[10px] truncate uppercase tracking-[0.08em] font-bold transition-colors", active ? "text-pt-text" : "")}>
                     {label}
                 </span>
                 {value !== undefined && (
@@ -50,7 +52,7 @@ export const MiniListItem = ({
 );
 
 export const MiniList = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div className={cn("flex flex-col select-none", className)}>
+    <div className={cn("flex flex-col select-none min-h-0", className)}>
         {children}
     </div>
 );

@@ -4,10 +4,13 @@ export interface ExecuteToolArgs {
     toolName: string;
     parameters: any;
     projectId: string;
+    actor?: string;
+    actorMetadata?: any;
 }
 export declare class AIPExecutor {
     private prisma;
     private registry;
+    private audit;
     constructor(prisma: PrismaClient, registry?: AIPToolRegistry);
     /**
      * Executes a tool within the specified project context.

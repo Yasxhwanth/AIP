@@ -1,0 +1,16 @@
+{
+  "code": "P1001",
+  "meta": {
+    "modelName": "Project",
+    "driverAdapterError": {
+      "name": "DriverAdapterError",
+      "cause": {
+        "kind": "DatabaseNotReachable",
+        "host": "127.0.0.1",
+        "port": 5432
+      }
+    }
+  },
+  "clientVersion": "7.4.1",
+  "name": "PrismaClientKnownRequestError"
+}

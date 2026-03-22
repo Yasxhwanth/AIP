@@ -6,7 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const amqplib_1 = __importDefault(require("amqplib"));
 // @ts-ignore: Next.js edge compatibility typing issue
 const prisma_1 = require("../generated/prisma");
+const ontology_service_1 = require("../ontology-service");
 const prisma = new prisma_1.PrismaClient();
+const ontologySvc = new ontology_service_1.OntologyService(prisma);
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
 const QUEUE_NAME = 'data_ingestion_queue';
 async function connectToRabbitMQ(retries = 5, delay = 5000) {
@@ -37,20 +39,18 @@ async function startWorker() {
                     const payload = JSON.parse(msg.content.toString());
                     const { entityTypeId, logicalId, data } = payload;
                     console.log(`[Ingestion Worker] Processing entity sync: ${logicalId}`);
-                    // Upsert Entity to Postgres
-                    await prisma.currentEntityState.upsert({
-                        where: { logicalId },
-                        update: { data, updatedAt: new Date() },
-                        create: { logicalId, entityTypeId, data }
-                    });
-                    // Audit Log (Fire and forget style log)
-                    await prisma.entityEvent.create({
-                        data: {
-                            logicalId: String(logicalId),
-                            entityTypeId: String(entityTypeId),
-                            eventType: 'UPDATED',
-                            payload
-                        }
+                    const et = await prisma.entityType.findUnique({ where: { id: entityTypeId } });
+                    if (!et)
+                        throw new Error(`Entity type ${entityTypeId} not found`);
+                    // Canonical Event-sourced write
+                    await ontologySvc.recordDomainEventAndApply({
+                        eventType: 'EntitySync',
+                        logicalId: String(logicalId),
+                        entityTypeId,
+                        entityVersion: et.version,
+                        data,
+                        projectId: et.projectId,
+                        actor: 'system:ingestion-worker'
                     });
                     // Acknowledge successful processing to remove from queue
                     channel.ack(msg);

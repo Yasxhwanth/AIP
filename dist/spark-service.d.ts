@@ -7,8 +7,8 @@ export declare class SparkService {
      */
     executeJob(jobId: string, trigger: string, inputData?: any, broadcastFn?: (eventUrl: string, payload: any) => void): Promise<{
         error: string | null;
+        projectId: string;
         id: string;
-        projectId: string | null;
         status: string;
         jobId: string;
         trigger: string;

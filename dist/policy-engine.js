@@ -77,6 +77,7 @@ async function evaluatePolicies(event, prisma) {
                             previousState: event.payload.previousState,
                             validFrom: event.payload.validFrom,
                         },
+                        projectId: policy.projectId,
                     },
                 });
                 // eslint-disable-next-line no-console

@@ -1,5 +1,6 @@
 import { PrismaClient } from './generated/prisma';
 import { AuditService } from './audit-service';
+import { OutboxService } from './outbox-service';
 import logger from './logger';
 
 export interface CreateChangeRequestArgs {
@@ -104,7 +105,23 @@ export class GovernanceService {
                 }
             });
 
-            // 3. Write audit log
+            // 3. Transactional Outbox fan-out for external systems
+            await OutboxService.enqueue(tx, {
+                projectId: cr.projectId,
+                aggregateType: resourceType,
+                aggregateId: resourceId || updatedCr.id,
+                eventType: resourceId ? 'ResourceUpdated' : 'ResourceCreated',
+                targetSystem: proposedChanges?.targetSystem || 'WEBHOOK',
+                payload: {
+                    event: 'GovernanceApproval',
+                    resourceType,
+                    resourceId,
+                    approvedBy: reviewedBy,
+                    changes: proposedChanges
+                }
+            });
+
+            // 4. Write audit log
             await tx.auditLog.create({
                 data: {
                     actor: reviewedBy,
@@ -155,12 +172,30 @@ export class GovernanceService {
      * Lists change requests for a project.
      */
     async listChangeRequests(projectId: string, status?: string) {
-        return await (this.prisma as any).changeRequest.findMany({
+        const crs = await (this.prisma as any).changeRequest.findMany({
             where: {
                 projectId,
                 ...(status ? { status } : {})
             },
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            take: 100
         });
+
+        if (crs.length === 0) return [];
+
+        const outboxEvents = await (this.prisma as any).outboxEvent.findMany({
+            where: { aggregateId: { in: crs.map((cr: any) => cr.resourceId || cr.id) } },
+            select: { aggregateId: true, status: true }
+        });
+
+        const outboxMap = new Map();
+        for (const ob of outboxEvents) {
+            outboxMap.set(ob.aggregateId, ob.status);
+        }
+
+        return crs.map((cr: any) => ({
+            ...cr,
+            outboxStatus: outboxMap.get(cr.resourceId || cr.id) || null
+        }));
     }
 }

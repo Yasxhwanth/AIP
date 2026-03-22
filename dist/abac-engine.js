@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AbacEngine = void 0;
+const audit_service_1 = require("./audit-service");
 /**
  * Attribute-Based Access Control (ABAC) Engine
  * Evaluates a request against stored AbacPolicy definitions.
@@ -8,6 +9,7 @@ exports.AbacEngine = void 0;
 class AbacEngine {
     constructor(prisma) {
         this.prisma = prisma;
+        this.audit = new audit_service_1.AuditService(prisma);
     }
     /**
      * Main evaluation function.
@@ -62,11 +64,26 @@ class AbacEngine {
         }
         // Explicit DENY always overrides ALLOW
         if (matchedDeny.length > 0) {
-            return {
+            const result = {
                 allowed: false,
                 reason: `Explicit Deny: Policy [${matchedDeny.join(', ')}] evaluated to DENY.`,
                 matchedPolicies: matchedDeny
             };
+            // ── AUDIT LOG: Security Denial ─────────────────────────────────────
+            await this.audit.logAction({
+                actor: actor.apiKeyName,
+                action: 'SECURITY_DENIAL',
+                resourceType: resource.type,
+                resourceId: resource.id,
+                metadata: {
+                    role: actor.role,
+                    action,
+                    reason: result.reason,
+                    matchedPolicies: matchedDeny,
+                    status: 'DENIED'
+                }
+            });
+            return result;
         }
         if (isAllowed) {
             return {
@@ -76,11 +93,25 @@ class AbacEngine {
                 maskedFields: Array.from(maskedFields)
             };
         }
-        return {
+        const implicitResult = {
             allowed: false,
             reason: 'Implicit Deny: No ALLOW policies condition matched.',
             matchedPolicies: []
         };
+        // ── AUDIT LOG: Security Denial (Implicit) ───────────────────────────
+        await this.audit.logAction({
+            actor: actor.apiKeyName,
+            action: 'SECURITY_DENIAL',
+            resourceType: resource.type,
+            resourceId: resource.id,
+            metadata: {
+                role: actor.role,
+                action,
+                reason: implicitResult.reason,
+                status: 'DENIED'
+            }
+        });
+        return implicitResult;
     }
     /**
      * Redact sensitive fields from a data object based on the evaluation result.

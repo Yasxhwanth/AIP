@@ -64,4 +64,11 @@ export interface AipAssistResponse {
         args: any;
         result?: any;
     }>;
+    proposal?: {
+        id: string;
+        type: string;
+        title: string;
+        detail: string;
+        status: string;
+    };
 }

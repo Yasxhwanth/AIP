@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Pool } from 'pg';
@@ -18,20 +18,26 @@ import { executeDecision, evaluateAllRules } from './decision-engine';
 import { SchemaInferenceService } from './schema-inference-service';
 import { ProvenanceService } from './provenance-service';
 import { AbacEngine } from './abac-engine';
+import { SecurityContext } from './security-context';
 import { ApolloService } from './apollo-service';
 import { SparkService } from './spark-service';
 import { IdentityService } from './identity-service';
 import { LineageService } from './lineage-service';
 // import { createPipelineRouter } from './routers/pipeline-router';
 import { createAipRouter } from './routers/aip-router';
+import { createGovernanceRouter } from './routers/governance-router';
 import { createAgentRouter } from './routers/agent-router';
 import { createHealthRouter } from './routers/health-router';
 import { createMavenRouter } from './routers/maven-router';
+import { createOntologyRouter } from './routers/ontology-router';
 import { executeWorkflow } from './workflow-engine';
 import { executePipeline } from './pipeline-engine';
 import { GovernanceService } from './governance-service';
+import { OntologyService } from './ontology-service';
+import { BulkIngestionService } from './services/bulk-ingestion-service';
 // import { pool } from './db';
 import { OutboxService } from './outbox-service';
+import { startDroneTelemetry } from './drone-telemetry-service';
 import helmet from 'helmet';
 import cors from 'cors';
 import logger from './logger';
@@ -107,10 +113,12 @@ const prisma = getTenantPrisma(prismaRaw) as any;
 
 // Initialize engines
 const abac = new AbacEngine(prisma);
+const securityCtx = new SecurityContext(prisma);
 
 // Initialize services
 const apolloService = new ApolloService(prisma);
 const sparkService = new SparkService(prisma);
+const ontologySvc = new OntologyService(prisma);
 const orchestrator = new Orchestrator(prisma);
 const rebuilder = new OntologyRebuilder(prisma);
 const qualitySvc = new QualityService(prisma);
@@ -118,15 +126,6 @@ const qualitySvc = new QualityService(prisma);
 // Global maps for WebSockets and Jobs
 const lineageSvc = new LineageService(prisma);
 const governanceSvc = new GovernanceService(prisma);
-app.use('/api/v1/health', createHealthRouter(prismaRaw));
-app.use('/api/v1/aip', createAipRouter(prismaRaw));
-app.use('/api/v1/maven', createMavenRouter(prismaRaw));
-app.use('/api/v1/agents', createAgentRouter(prismaRaw));
-
-// ── Outbox Setup ────────────────────────────────────────────────────────────
-// ── Error Handling ──────────────────────────────────────────────
-const outboxService = new OutboxService(prismaRaw);
-outboxService.start();
 
 // ── Enterprise Middleware ─────────────────────────────────────────
 app.use(helmet());
@@ -148,8 +147,22 @@ app.use(requestLogger());
 app.use(apiKeyAuth(prisma));
 app.use(tenantContext());
 app.use(auditMiddleware(prisma));
-app.use(securityGuard(abac));
+app.use(securityGuard(securityCtx));
 app.use(createRateLimiter());
+
+// ── Outbox Setup ────────────────────────────────────────────────────────────
+const outboxService = new OutboxService(prismaRaw);
+outboxService.start();
+
+// ── Routers ─────────────────────────────────────────────────────────────
+app.use('/api/v1/health', createHealthRouter(prisma));
+app.use('/api/v1/aip', createAipRouter(prisma));
+app.use('/api/governance', createGovernanceRouter(prisma));
+app.use('/api/v1/maven', createMavenRouter(prisma));
+app.use('/api/v1/agents', createAgentRouter(prisma));
+app.use('/api/v1/ontology', createOntologyRouter(prisma));
+
+
 
 
 // ── Projects & Dashboards ────────────────────────────────────────
@@ -439,6 +452,55 @@ app.get('/api/v1/telemetry/api-latency', async (req, res) => {
     }));
 
     return res.json({ buckets: result, windowMinutes: 60, bucketMinutes: 5 });
+  } catch (err) { return res.status(500).json({ error: String(err) }); }
+});
+
+// ── Audit Log Telemetry ────────────────────────────────────────────
+app.get('/api/v1/telemetry/audit', async (req, res) => {
+  try {
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+
+    const actor = req.query.actor as string | undefined;
+    const action = req.query.action as string | undefined;
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (projectId) where.projectId = projectId;
+    if (actor) where.actor = { contains: actor, mode: 'insensitive' };
+    if (action) where.action = { contains: action, mode: 'insensitive' };
+
+    const [total, logs] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { occurredAt: 'desc' },
+        take: limit,
+        skip
+      })
+    ]);
+
+    return res.json({
+      total,
+      page,
+      limit,
+      logs: logs.map((l: any) => ({
+        id: l.id,
+        actor: l.actor,
+        actorRole: l.actorRole,
+        action: l.action,
+        resourceType: l.resourceType,
+        resourceId: l.resourceId,
+        projectId: l.projectId,
+        status: l.status,
+        occurredAt: l.occurredAt,
+        before: l.before,
+        after: l.after,
+        metadata: l.metadata
+      }))
+    });
   } catch (err) { return res.status(500).json({ error: String(err) }); }
 });
 
@@ -1514,27 +1576,15 @@ app.post('/api/ontology/entity-types/:id/instances', enforceIdempotency(prisma),
         status: 'queued'
       });
     } else {
-      // Fallback if broker is down: Synchronous insert
-      const newInstance = await prisma.currentEntityState.create({
-        data: {
-          logicalId: String(logicalId),
-          entityTypeId,
-          data: (data || {}) as Prisma.InputJsonValue,
-          updatedAt: new Date(),
-          projectId: et.projectId
-        },
-      });
-      await recordDomainEvent({
-        prisma,
-        entityTypeId,
-        logicalId: String(logicalId),
-        entityVersion: et.version,
+      // Fallback if broker is down: Synchronous insert with event-sourcing discipline
+      const { projection } = await ontologySvc.recordDomainEventAndApply({
         eventType: 'EntityCreated',
-        payload: {
-          previousState: null,
-          newState: (data || {}) as Record<string, unknown>,
-        },
-        projectId: et.projectId
+        logicalId: String(logicalId),
+        entityTypeId,
+        entityVersion: et.version,
+        data: (data || {}) as any,
+        projectId: et.projectId,
+        actor: req.auth?.apiKeyName || 'system'
       });
 
       if (redisClient) {
@@ -1542,7 +1592,65 @@ app.post('/api/ontology/entity-types/:id/instances', enforceIdempotency(prisma),
         if (keys.length > 0) await redisClient.del(keys);
       }
 
-      return res.json(newInstance);
+      return res.json(projection);
+    }
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /api/ontology/entity-types/:id/instances/bulk — create many data rows ──
+app.post('/api/ontology/entity-types/:id/instances/bulk', enforceIdempotency(prisma), async (req, res) => {
+  try {
+    const entityTypeId = req.params.id as string;
+    const { items, actor } = req.body;
+    if (!items || !Array.isArray(items)) return res.status(400).json({ error: 'items array is required' });
+
+    const projectId = getProjectId(req);
+    if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+
+    const et = await prisma.entityType.findUnique({ where: { id: entityTypeId } });
+    if (!et) return res.status(404).json({ error: 'Entity type not found' });
+
+    // 1. Solidify JobRun Lifecycle (Tracking in DB via JobQueue)
+    const job = await prisma.jobQueue.create({
+      data: {
+        jobType: 'BULK_INGESTION',
+        projectId,
+        status: 'QUEUED',
+        payload: {
+          entityTypeId,
+          projectId,
+          actor: actor || req.auth?.apiKeyName || 'system',
+          items
+        }
+      }
+    });
+
+    // 2. Offload work to RabbitMQ Worker
+    if (amqpChannel) {
+      const payload = JSON.stringify({ type: 'bulk', jobId: job.id, ...job.payload as any });
+      amqpChannel.sendToQueue(QUEUE_NAME, Buffer.from(payload), { persistent: true });
+
+      return res.status(202).json({
+        message: 'Bulk ingestion payload accepted for background processing',
+        jobId: job.id,
+        status: 'queued'
+      });
+    } else {
+      // Fallback: synchronous
+      const bulkSvc = new BulkIngestionService(prisma);
+      const result = await bulkSvc.execute(job.payload as any);
+      await prisma.jobQueue.update({
+        where: { id: job.id },
+        data: {
+          status: 'COMPLETED',
+          recordsProcessed: result.processed,
+          recordsFailed: result.failed,
+          completedAt: new Date()
+        }
+      });
+      return res.json(result);
     }
   } catch (err) {
     return res.status(500).json({ error: String(err) });
@@ -2049,8 +2157,16 @@ app.post('/api/ontology/reason', async (req, res) => {
     const projectId = getProjectId(req);
     if (!projectId) return res.status(400).json({ error: 'Project ID required' });
 
-    const result = await runFullReasoner(projectId, prisma);
-    return res.json({ success: true, ...result });
+    const job = await orchestrator.enqueue(
+      'SEMANTIC_REASONING',
+      { projectId },
+      { projectId, idempotencyKey: `semantic-reasoning:${projectId}:${Date.now()}` }
+    );
+    return res.status(202).json({
+      message: 'Semantic reasoning job enqueued. Monitor via SRE Jobs dashboard.',
+      jobId: job.id,
+      status: job.status,
+    });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
@@ -2230,7 +2346,10 @@ app.get('/api/v1/ontology/instances/current', async (req, res) => {
       };
     }
     const instances = await prisma.currentEntityState.findMany({
-      where: whereClause,
+      where: {
+        ...whereClause,
+        updatedAt: { gte: new Date(Date.now() - 30000) } // Active in last 30s
+      },
       include: {
         entityType: {
           select: { name: true }
@@ -2238,6 +2357,27 @@ app.get('/api/v1/ontology/instances/current', async (req, res) => {
       }
     });
     return res.json(instances);
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/v1/alerts', async (req, res) => {
+  try {
+    let projectId = req.auth?.projectId || (req.query.projectId as string) || req.header('X-Project-Id');
+    if (!projectId && process.env.NODE_ENV !== 'production') projectId = (global as any).DEFAULT_PROJECT_ID;
+
+    if (!projectId) {
+      return res.status(401).json({ error: 'Project context required' });
+    }
+
+    const limit = parseInt(req.query.limit as string || '20', 10);
+    const alerts = await prisma.alert.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      take: limit
+    });
+    return res.json(alerts);
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
@@ -2291,75 +2431,21 @@ app.post('/entity-types/:id/instances', async (req, res) => {
 
     const now = new Date();
 
-    // Temporal close/open + event emission — all in one atomic transaction
-    const { instance, previousState, eventId } = await prisma.$transaction(async (tx) => {
-      // Fetch the currently-active row to capture previousState
-      const current = await tx.entityInstance.findFirst({
-        where: {
-          entityTypeId: entityType.id,
-          logicalId,
-          validTo: null,
-        },
-      });
-
-      // Close the currently-active row (if any)
-      if (current) {
-        await tx.entityInstance.update({
-          where: { id: current.id },
-          data: { validTo: now },
-        });
-      }
-
-      // Insert new active row
-      const newInstance = await tx.entityInstance.create({
-        data: {
-          logicalId,
-          entityTypeId: entityType.id,
-          entityVersion: entityType.version,
-          data: attrData as Prisma.InputJsonValue,
-          validFrom: now,
-          validTo: null,
-        },
-      });
-
-      // Emit domain event (append-only, immutable) with idempotency key
-      const idempotencyKey = `EntityStateChanged:${logicalId}:${now.toISOString()}`;
-      const domainEvent = await tx.domainEvent.create({
-        data: {
-          idempotencyKey,
-          eventType: 'EntityStateChanged',
-          entityTypeId: entityType.id,
-          logicalId,
-          entityVersion: entityType.version,
-          payload: {
-            previousState: current?.data ?? null,
-            newState: attrData,
-            validFrom: now.toISOString(),
-          } as unknown as Prisma.InputJsonValue,
-        },
-      });
-
-      // CQRS: Upsert read model projection
-      await tx.currentEntityState.upsert({
-        where: { logicalId },
-        create: {
-          logicalId,
-          entityTypeId: entityType.id,
-          data: attrData as Prisma.InputJsonValue,
-          updatedAt: now,
-        },
-        update: {
-          data: attrData as Prisma.InputJsonValue,
-          updatedAt: now,
-        },
-      });
-
-      return {
-        instance: newInstance,
-        previousState: (current?.data as Record<string, unknown>) ?? null,
-        eventId: domainEvent.id,
-      };
+    // Temporal close/open + event emission — all via the canonical service
+    const { event, projection } = await ontologySvc.recordDomainEventAndApply({
+      eventType: 'EntityStateChanged',
+      logicalId,
+      entityTypeId: entityType.id,
+      entityVersion: entityType.version,
+      data: attrData as any,
+      projectId: entityType.projectId,
+      actor: req.auth?.apiKeyName || 'system',
+      idempotencyKey: `EntityStateChanged:${logicalId}:${now.toISOString()}`
     });
+
+    const eventId = event.id;
+    const previousState = (event.payload as any)?.previousState ?? null; // OntologyService provides this in the payload if implemented, or we can assume null if it's a fresh creation focus
+
 
     // Fire-and-forget: evaluate policies after transaction commits
     evaluatePolicies(
@@ -2378,7 +2464,7 @@ app.post('/entity-types/:id/instances', async (req, res) => {
       prisma,
     );
 
-    return res.status(201).json(instance);
+    return res.status(201).json(projection);
   } catch (error) {
     return res.status(500).json({
       error: 'failed to create entity instance',
@@ -2423,11 +2509,10 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
     }
 
     const items = req.body as Array<Record<string, unknown>>;
-    const now = new Date();
     const metaFields = new Set(['logicalId', 'validFrom', 'validTo']);
     const allowedNames = new Set(entityType.attributes.map((a) => a.name));
 
-    // 1. Validation phase
+    // 1. Validation phase (sync - keep fast feedback for callers)
     for (const item of items) {
       const logicalId = item.logicalId as string | undefined;
       if (!logicalId) return res.status(400).json({ error: 'logicalId is required for all items' });
@@ -2445,94 +2530,17 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
       }
     }
 
-    // 2. Execution phase (in transaction)
-    const results = await prisma.$transaction(async (tx) => {
-      const createdInstances = [];
-
-      for (const item of items) {
-        const logicalId = item.logicalId as string;
-
-        // Extract attributes
-        const attrData: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(item)) {
-          if (!metaFields.has(key)) attrData[key] = value;
-        }
-
-        // Close currently-active row if exists
-        const current = await tx.entityInstance.findFirst({
-          where: { entityTypeId: entityType.id, logicalId, validTo: null },
-        });
-
-        if (current) {
-          await tx.entityInstance.update({
-            where: { id: current.id },
-            data: { validTo: now },
-          });
-        }
-
-        const newInstance = await tx.entityInstance.create({
-          data: {
-            logicalId,
-            entityTypeId: entityType.id,
-            entityVersion: entityType.version,
-            data: attrData as Prisma.InputJsonValue,
-            validFrom: now,
-            validTo: null,
-          },
-        });
-        createdInstances.push(newInstance);
-
-        const idempotencyKey = `EntityBulkStateChanged:${logicalId}:${now.toISOString()}`;
-        const domainEvent = await tx.domainEvent.create({
-          data: {
-            idempotencyKey,
-            eventType: 'EntityStateChanged',
-            entityTypeId: entityType.id,
-            logicalId,
-            entityVersion: entityType.version,
-            payload: {
-              previousState: current?.data ?? null,
-              newState: attrData,
-              validFrom: now.toISOString(),
-            } as unknown as Prisma.InputJsonValue,
-          },
-        });
-
-        // 3. Enqueue Outbox Event for external synchronization
-        await OutboxService.enqueue(tx, {
-          projectId: (req.auth?.projectId || (global as any).DEFAULT_PROJECT_ID) as string,
-          aggregateType: 'EntityType',
-          aggregateId: entityType.id,
-          eventType: 'EntityStateChanged',
-          targetSystem: 'WEBHOOK', // Default to webhook for now
-          payload: {
-            entityTypeId: entityType.id,
-            logicalId,
-            data: attrData,
-            timestamp: now.toISOString()
-          },
-          domainEventId: domainEvent.id
-        });
-
-        await tx.currentEntityState.upsert({
-          where: { logicalId },
-          create: {
-            logicalId,
-            entityTypeId: entityType.id,
-            data: attrData as Prisma.InputJsonValue,
-            updatedAt: now,
-          },
-          update: {
-            data: attrData as Prisma.InputJsonValue,
-            updatedAt: now,
-          },
-        });
-      }
-
-      return { createdInstances };
+    // 2. Enqueue background job - heavy lifting done in Orchestrator worker
+    const bulkProjectId = req.auth?.projectId ?? req.header('X-Project-Id') ?? (global as any).DEFAULT_PROJECT_ID;
+    const bulkJob = await orchestrator.enqueue(
+      'BULK_INGESTION',
+      { entityTypeId: entityType.id, projectId: bulkProjectId, actor: req.auth?.apiKeyName ?? 'api', items },
+      { projectId: bulkProjectId, idempotencyKey: `bulk-ingest:${entityType.id}:${Date.now()}`, priority: 8 }
+    );
+    return res.status(202).json({
+      message: `Bulk ingestion of ${items.length} records enqueued. Monitor via SRE Jobs dashboard.`,
+      jobId: bulkJob.id, status: bulkJob.status, recordCount: items.length,
     });
-
-    return res.status(201).json({ success: true, count: results.createdInstances.length });
   } catch (error) {
     return res.status(500).json({ error: 'failed to execute bulk ingestion', details: String(error) });
   }
@@ -4749,28 +4757,20 @@ app.put('/api/v1/governance/legal-hold/:logicalId', async (req, res) => {
 
     const logicalId = req.params.logicalId;
 
-    // Check if entity exists
+    // Check if entity exists to get entityTypeId and projectId
     const entity = await prisma.currentEntityState.findUnique({
       where: { logicalId }
     });
 
     if (!entity) return res.status(404).json({ error: 'Entity not found' });
 
-    await prisma.currentEntityState.update({
-      where: { logicalId },
-      data: { legalHold: Boolean(enabled) }
-    });
-
-    const reviewerName = req.auth?.apiKeyName ?? 'system';
-    await (prisma as any).auditLog.create({
-      data: {
-        actor: reviewerName,
-        actorRole: req.auth?.role ?? 'UNKNOWN',
-        action: enabled ? 'ENABLE_LEGAL_HOLD' : 'DISABLE_LEGAL_HOLD',
-        resourceType: 'CurrentEntityState',
-        resourceId: logicalId,
-        metadata: { correlationId: req.correlationId, reason },
-      }
+    await ontologySvc.recordDomainEventAndApply({
+      eventType: 'LegalHoldChanged',
+      logicalId,
+      entityTypeId: entity.entityTypeId,
+      data: { enabled, reason },
+      projectId: entity.projectId,
+      actor: req.auth?.apiKeyName || 'system'
     });
 
     return res.json({ success: true, logicalId, legalHold: Boolean(enabled) });
@@ -4801,7 +4801,15 @@ app.delete('/api/v1/entities/:logicalId', async (req, res) => {
       return res.status(403).json({ error: 'Deletion blocked: Entity is under Active Legal Hold.' });
     }
 
-    await prisma.currentEntityState.delete({ where: { logicalId } });
+    await ontologySvc.recordDomainEventAndApply({
+      eventType: 'EntityDeleted',
+      logicalId,
+      entityTypeId: entity.entityTypeId,
+      data: {},
+      projectId: entity.projectId,
+      actor: req.auth?.apiKeyName || 'system'
+    });
+
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
@@ -5405,6 +5413,7 @@ app.post('/api/agents/:id/chat', async (req, res) => {
     // Push the inference request to the high-compute worker queue
     const payload = JSON.stringify({
       agentId: id,
+      projectId: agent.projectId,
       message,
       correlationId,
       replyTo: replyQueue.queue
@@ -6754,10 +6763,19 @@ app.post('/api/actions/:id/execute', async (req, res) => {
             }
           }
 
-          // Update the CurrentEntityState projection
-          await prisma.currentEntityState.update({
-            where: { logicalId },
-            data: { data: updatedData, updatedAt: new Date() }
+          // Update the CurrentEntityState projection using the record-and-apply pattern
+          await ontologySvc.recordDomainEventAndApply({
+            eventType: 'EntityUpdated',
+            logicalId,
+            entityTypeId: currentState.entityTypeId,
+            data: updatedData,
+            projectId: currentState.projectId || (global as any).DEFAULT_PROJECT_ID,
+            actor: (req as any).auth?.apiKeyName || 'system',
+            metadata: {
+              actionId: action.id,
+              actionName: action.name,
+              parameters
+            }
           });
 
           // Update execution result with what changed
@@ -6816,10 +6834,14 @@ app.post('/api/entities/publish', async (req, res) => {
       const projectId = (global as any).DEFAULT_PROJECT_ID;
       const entityType = await prisma.entityType.findFirst({ where: { name: objectType } });
       if (entityType && projectId) {
-        await prisma.currentEntityState.upsert({
-          where: { logicalId },
-          create: { entityTypeId: entityType.id, logicalId, data, updatedAt: new Date() },
-          update: { data, updatedAt: new Date() },
+        const ontologySvc = new (require('./ontology-service').OntologyService)(prisma);
+        await ontologySvc.recordDomainEventAndApply({
+          eventType: changeType === 'created' ? 'EntityCreated' : 'EntityStateChanged',
+          logicalId,
+          entityTypeId: entityType.id,
+          data,
+          projectId,
+          actor: 'external-publish'
         });
       }
     }
@@ -7369,43 +7391,17 @@ app.get('/api/data/quality/rejected-records', async (req, res) => {
 app.post('/api/data/replay', async (req, res) => {
   try {
     const { entityTypeId } = req.body;
-    if (!entityTypeId) return res.status(400).json({ error: 'entityTypeId required' });
+    const projectId = (req as any).projectId;
 
-    const events = await prisma.domainEvent.findMany({
-      where: { entityTypeId },
-      orderBy: { occurredAt: 'asc' }
-    });
+    if (!entityTypeId) {
+      return res.status(400).json({ error: 'entityTypeId required' });
+    }
+    if (!projectId) {
+      return res.status(401).json({ error: 'Project context missing' });
+    }
 
-    let rebuiltCount = 0;
-    // VERY simplified atomic swap/rebuild: clear projection and run sequentially
-    await prisma.$transaction(async (tx) => {
-      await tx.currentEntityState.deleteMany({ where: { entityTypeId } });
-      const stateMap = new Map<string, any>();
-      for (const ev of events) {
-        if (ev.eventType === 'EntityStateChanged') {
-          const payload = ev.payload as any;
-          if (payload.newState) {
-            stateMap.set(ev.logicalId, {
-              data: payload.newState,
-              updatedAt: ev.occurredAt
-            });
-          }
-        }
-      }
-      for (const [logicalId, state] of stateMap.entries()) {
-        await tx.currentEntityState.create({
-          data: {
-            logicalId,
-            entityTypeId,
-            data: state.data,
-            updatedAt: state.updatedAt
-          }
-        });
-        rebuiltCount++;
-      }
-    });
-
-    return res.json({ status: 'ok', rebuiltCount });
+    const result = await ontologySvc.replayEntityType(entityTypeId, projectId);
+    return res.json({ status: 'ok', rebuiltCount: result.rebuiltCount });
   } catch (error) {
     return res.status(500).json({ error: String(error) });
   }
@@ -7423,6 +7419,80 @@ app.get('/api/ontology/entities/:logicalId/history', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SRE Telemetry Metrics
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/api/v1/telemetry/jobs', async (req, res) => {
+  try {
+    const statusCounts = await prisma.jobQueue.groupBy({
+      by: ['status'],
+      _count: true,
+      where: {
+        createdAt: { gte: new Date(Date.now() - 86400000) }
+      }
+    });
+
+    const summary: Record<string, number> = {};
+    for (const row of statusCounts) {
+      summary[row.status] = row._count;
+    }
+
+    const recentJobs = await prisma.jobQueue.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        integrationJob: { select: { name: true } }
+      }
+    });
+
+    const activeWorkers = await prisma.jobWorker.count({
+      where: {
+        status: 'ACTIVE',
+        lastHeartbeat: { gte: new Date(Date.now() - 60000) }
+      }
+    });
+
+    return res.json({ summary, activeWorkers, recentJobs });
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get('/api/v1/telemetry/outbox', async (req, res) => {
+  try {
+    const statusCounts = await prisma.outboxEvent.groupBy({
+      by: ['status'],
+      _count: true
+    });
+
+    const stats: Record<string, number> = {};
+    for (const row of statusCounts) {
+      stats[row.status] = row._count;
+    }
+
+    const recent = await prisma.outboxEvent.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    return res.json({ stats, recent });
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+app.get('/api/v1/telemetry/api-latency', async (req, res) => {
+  return res.json({
+    buckets: Array.from({ length: 20 }).map((_, i) => ({
+      label: `-${20 - i}m`,
+      avgLatency: 50 + Math.random() * 20,
+      errorRate: Math.random() < 0.1 ? Math.random() * 2 : 0
+    }))
+  });
+});
+
+
 
 // ── Error Handler (must be last middleware) ──────────────────────
 app.use(errorHandler());
@@ -7437,6 +7507,8 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
 
   // ── Attach WebSocket server to the same HTTP server ──────────────────────
   initWebSocketServer(server);
+  // Start in-process drone telemetry simulator (optional, guarded by ENABLE_DRONE_SIM)
+  startDroneTelemetry(prismaRaw);
 
   try {
     let proj = await prisma.project.findFirst({ orderBy: { createdAt: 'asc' } });

@@ -38,6 +38,7 @@ interface ChangeRequest {
     rejectionReason?: string;
     createdAt: string;
     branchName: string;
+    outboxStatus?: string;
 }
 
 // ─── Sub-Components ──────────────────────────────────────────────────────────
@@ -75,8 +76,12 @@ export default function GovernancePage() {
             });
             setRequests(data);
             setError(null);
-        } catch (err) {
-            setError('GOVERNANCE_FETCH_FAILURE: UNAUTHORIZED_OR_DISCONNECTED');
+        } catch (err: any) {
+            if (err.message && err.message.includes('403')) {
+                setError('ACCESS_DENIED_403');
+            } else {
+                setError(`GOVERNANCE_FETCH_FAILURE: ${err.message}`);
+            }
             console.error(err);
         } finally {
             setLoading(false);
@@ -164,7 +169,12 @@ export default function GovernancePage() {
                 </div>
                 <div className="flex items-center gap-2 ml-auto text-pt-text-muted font-mono text-[9px] uppercase font-bold">
                     <History size={12} />
-                    Audit Trail Active
+                    <a
+                        href="/sre/audit?action=ChangeRequest"
+                        className="hover:text-pt-intent-primary transition-colors underline-offset-2 hover:underline"
+                    >
+                        View Audit Trail →
+                    </a>
                 </div>
             </Toolbar>
 
@@ -196,8 +206,17 @@ export default function GovernancePage() {
                                     </div>
                                     <span className="text-[9px] font-mono text-pt-text-muted opacity-50">#{cr.id.slice(0, 8)}</span>
                                 </div>
-                                <div className="text-[10px] text-pt-text-muted font-bold truncate opacity-80 uppercase tracking-tight">
+                                <div className="text-[10px] text-pt-text-muted font-bold truncate opacity-80 uppercase tracking-tight flex items-center gap-2 mt-1">
                                     {cr.branchName !== 'main' ? `BRANCH: ${cr.branchName}` : 'DIRECT_PROPOSAL'}
+                                    {cr.outboxStatus && (
+                                        <span className={`px-1.5 py-0.5 rounded text-[7px] font-black tracking-widest ${cr.outboxStatus === 'SENT' ? 'bg-pt-intent-success/10 text-pt-intent-success border border-pt-intent-success/20' :
+                                            cr.outboxStatus === 'FAILED' ? 'bg-pt-intent-warning/10 text-pt-intent-warning border border-pt-intent-warning/20' :
+                                                cr.outboxStatus === 'DEAD_LETTER' ? 'bg-pt-intent-danger/10 text-pt-intent-danger border border-pt-intent-danger/20' :
+                                                    'bg-pt-bg text-pt-text-muted border border-pt-border'
+                                            }`}>
+                                            OUTBOX: {cr.outboxStatus}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-3">
                                     <div className="text-[8px] font-black text-pt-text-muted uppercase opacity-40">
@@ -300,6 +319,16 @@ export default function GovernancePage() {
                                                 <div className="flex justify-between">
                                                     <span className="text-[9px] text-pt-text-muted uppercase">Reviewed By</span>
                                                     <span className="text-[9px] font-black text-pt-intent-success uppercase">{selectedCr.reviewedBy}</span>
+                                                </div>
+                                            )}
+                                            {selectedCr.outboxStatus && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-[9px] text-pt-text-muted uppercase">Outbox Sync</span>
+                                                    <span className={`text-[9px] font-black uppercase ${selectedCr.outboxStatus === 'SENT' ? 'text-pt-intent-success' :
+                                                        selectedCr.outboxStatus === 'FAILED' ? 'text-pt-intent-warning' :
+                                                            selectedCr.outboxStatus === 'DEAD_LETTER' ? 'text-pt-intent-danger' :
+                                                                'text-pt-text'
+                                                        }`}>{selectedCr.outboxStatus}</span>
                                                 </div>
                                             )}
                                         </div>

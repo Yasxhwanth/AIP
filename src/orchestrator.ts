@@ -6,6 +6,8 @@ import { executeSparkJob } from './spark-engine';
 import { computeAllRecentRollups } from './rollup-engine';
 import { RelationshipDerivationService } from './relationship-derivation-service';
 import { tenantStorage } from './tenant-context';
+import { BulkIngestionService } from './services/bulk-ingestion-service';
+import { runFullReasoner } from './ontology-reasoner';
 import os from 'os';
 
 /**
@@ -242,94 +244,133 @@ export class Orchestrator {
         let success = false;
         let errorMessage = '';
 
-        try {
-            // ---- ROUTER ----
-            if (job.jobType === 'INTEGRATION_SYNC') {
-                if (!job.integrationJobId) throw new Error("Missing integrationJobId payload");
+        // ── Tenant Context Isolation ──────────────────────────────────────────
+        // Wrap the entire job logic in the job's specific tenant context.
+        // This ensures RLS policies (aip.tenant_id) are correctly applied.
+        const projectId = job.projectId || 'system';
 
-                // Map the old executeJob logic to the jobQueue record instead of jobExecution
-                const result = await executeJob(job.integrationJobId, this.prisma, job.id);
+        await tenantStorage.run({ projectId }, async () => {
+            try {
+                // ---- ROUTER ----
+                if (job.jobType === 'INTEGRATION_SYNC') {
+                    if (!job.integrationJobId) throw new Error("Missing integrationJobId payload");
 
-                if (result.status === 'FAILED') {
-                    throw new Error(result.error || "Integration sync failed");
+                    // Map the old executeJob logic to the jobQueue record instead of jobExecution
+                    const result = await executeJob(job.integrationJobId, this.prisma, job.id);
+
+                    if (result.status === 'FAILED') {
+                        throw new Error(result.error || "Integration sync failed");
+                    }
+
+                    // Update specific metrics
+                    await this.prisma.jobQueue.update({
+                        where: { id: job.id },
+                        data: {
+                            recordsProcessed: result.recordsProcessed,
+                            recordsFailed: result.recordsFailed,
+                            recordsDropped: result.recordsDropped,
+                        }
+                    });
+                } else if (job.jobType === 'AI_WORKFLOW') {
+                    const { workflowId, runId, inputs } = job.payload as any;
+                    if (!workflowId || !runId) throw new Error("Missing workflowId or runId in AI_WORKFLOW payload");
+
+                    const result = await executeWorkflow(workflowId, runId, this.prisma, inputs || {});
+
+                    // Update run record in case it finished successfully
+                    await this.prisma.aIWorkflowRun.update({
+                        where: { id: runId },
+                        data: {
+                            status: result.status,
+                            steps: result.steps,
+                            logs: result.logs,
+                            summary: result.summary,
+                            finishedAt: new Date(),
+                            duration: Date.now() - startTime
+                        }
+                    });
+                } else if (job.jobType === 'PIPELINE_RUN') {
+                    const { pipelineId, runId, trigger } = job.payload as any;
+                    if (!pipelineId || !runId) throw new Error("Missing pipelineId or runId in PIPELINE_RUN payload");
+
+                    const result = await executePipeline(pipelineId, runId, this.prisma, trigger || 'manual');
+
+                    await this.prisma.pipelineRun.update({
+                        where: { id: runId },
+                        data: {
+                            status: result.status,
+                            steps: result.steps,
+                            logs: result.logs,
+                            recordsIn: result.recordsIn,
+                            recordsOut: result.recordsOut,
+                            errorCount: result.errorCount,
+                            finishedAt: new Date(),
+                            duration: Date.now() - startTime
+                        }
+                    });
+                } else if (job.jobType === 'SPARK_JOB') {
+                    const { jobId, runId } = job.payload as any;
+                    if (!jobId || !runId) throw new Error("Missing jobId or runId in SPARK_JOB payload");
+
+                    await executeSparkJob(jobId, runId, this.prisma);
+                } else if (job.jobType === 'TELEMETRY_ROLLUP_TRIGGER') {
+                    const payload = job.payload as any;
+                    if (!payload || !payload.windowSize || !payload.lookbackMs) {
+                        throw new Error("Missing windowSize or lookbackMs in TELEMETRY_ROLLUP_TRIGGER payload");
+                    }
+                    const result = await computeAllRecentRollups(payload.windowSize, payload.lookbackMs, this.prisma);
+                    console.log(`[Orchestrator] TELEMETRY_ROLLUP_TRIGGER completed. Yielded ${result.totalBuckets} buckets across ${result.combinationsProcessed} metric combos.`);
+                } else if (job.jobType === 'RELATIONSHIP_DECAY') {
+                    const count = await RelationshipDerivationService.applyConfidenceDecay(this.prisma);
+                    console.log(`[Orchestrator] RELATIONSHIP_DECAY completed. Decayed ${count} probabilistic edges.`);
+                } else if (job.jobType === 'MLOPS_DRIFT_MONITOR') {
+                    await this.checkModelDrift();
+                    console.log("[Orchestrator] Processed MLOPS_DRIFT_MONITOR.");
+                } else if (job.jobType === 'SYSTEM_PING') {
+                    console.log("[Orchestrator] Processed system ping.");
+                } else if (job.jobType === 'BULK_INGESTION') {
+                    // ── Offloaded bulk entity ingestion ──────────────────────────────
+                    const bulkPayload = job.payload as any;
+                    if (!bulkPayload?.entityTypeId || !bulkPayload?.items) {
+                        throw new Error("BULK_INGESTION job missing required payload fields: entityTypeId, items");
+                    }
+                    const bulkSvc = new BulkIngestionService(this.prisma);
+                    const bulkResult = await bulkSvc.execute({
+                        entityTypeId: bulkPayload.entityTypeId,
+                        projectId: bulkPayload.projectId ?? job.projectId,
+                        actor: bulkPayload.actor ?? 'orchestrator',
+                        items: bulkPayload.items,
+                    });
+                    await this.prisma.jobQueue.update({
+                        where: { id: job.id },
+                        data: {
+                            recordsProcessed: bulkResult.processed,
+                            recordsFailed: bulkResult.failed,
+                        }
+                    });
+                    if (bulkResult.failed > 0) {
+                        console.warn(`[Orchestrator] BULK_INGESTION completed with ${bulkResult.failed} failures.`, bulkResult.errors.slice(0, 5));
+                    } else {
+                        console.log(`[Orchestrator] BULK_INGESTION completed: ${bulkResult.processed} records processed.`);
+                    }
+                } else if (job.jobType === 'SEMANTIC_REASONING') {
+                    // ── Offloaded full-project semantic reasoner ──────────────────────
+                    const reasonPayload = job.payload as any;
+                    const targetProjectId = reasonPayload?.projectId ?? job.projectId;
+                    if (!targetProjectId) throw new Error("SEMANTIC_REASONING job missing projectId");
+                    const result = await runFullReasoner(targetProjectId, this.prisma);
+                    console.log(`[Orchestrator] SEMANTIC_REASONING completed for project ${targetProjectId}:`, result);
+                } else {
+                    throw new Error(`Unknown jobType: ${job.jobType}`);
                 }
 
-                // Update specific metrics
-                await this.prisma.jobQueue.update({
-                    where: { id: job.id },
-                    data: {
-                        recordsProcessed: result.recordsProcessed,
-                        recordsFailed: result.recordsFailed,
-                        recordsDropped: result.recordsDropped,
-                    }
-                });
-            } else if (job.jobType === 'AI_WORKFLOW') {
-                const { workflowId, runId, inputs } = job.payload as any;
-                if (!workflowId || !runId) throw new Error("Missing workflowId or runId in AI_WORKFLOW payload");
-
-                const result = await executeWorkflow(workflowId, runId, this.prisma, inputs || {});
-
-                // Update run record in case it finished successfully
-                await this.prisma.aIWorkflowRun.update({
-                    where: { id: runId },
-                    data: {
-                        status: result.status,
-                        steps: result.steps,
-                        logs: result.logs,
-                        summary: result.summary,
-                        finishedAt: new Date(),
-                        duration: Date.now() - startTime
-                    }
-                });
-            } else if (job.jobType === 'PIPELINE_RUN') {
-                const { pipelineId, runId, trigger } = job.payload as any;
-                if (!pipelineId || !runId) throw new Error("Missing pipelineId or runId in PIPELINE_RUN payload");
-
-                const result = await executePipeline(pipelineId, runId, this.prisma, trigger || 'manual');
-
-                await this.prisma.pipelineRun.update({
-                    where: { id: runId },
-                    data: {
-                        status: result.status,
-                        steps: result.steps,
-                        logs: result.logs,
-                        recordsIn: result.recordsIn,
-                        recordsOut: result.recordsOut,
-                        errorCount: result.errorCount,
-                        finishedAt: new Date(),
-                        duration: Date.now() - startTime
-                    }
-                });
-            } else if (job.jobType === 'SPARK_JOB') {
-                const { jobId, runId } = job.payload as any;
-                if (!jobId || !runId) throw new Error("Missing jobId or runId in SPARK_JOB payload");
-
-                await executeSparkJob(jobId, runId, this.prisma);
-            } else if (job.jobType === 'TELEMETRY_ROLLUP_TRIGGER') {
-                const payload = job.payload as any;
-                if (!payload || !payload.windowSize || !payload.lookbackMs) {
-                    throw new Error("Missing windowSize or lookbackMs in TELEMETRY_ROLLUP_TRIGGER payload");
-                }
-                const result = await computeAllRecentRollups(payload.windowSize, payload.lookbackMs, this.prisma);
-                console.log(`[Orchestrator] TELEMETRY_ROLLUP_TRIGGER completed. Yielded ${result.totalBuckets} buckets across ${result.combinationsProcessed} metric combos.`);
-            } else if (job.jobType === 'RELATIONSHIP_DECAY') {
-                const count = await RelationshipDerivationService.applyConfidenceDecay(this.prisma);
-                console.log(`[Orchestrator] RELATIONSHIP_DECAY completed. Decayed ${count} probabilistic edges.`);
-            } else if (job.jobType === 'MLOPS_DRIFT_MONITOR') {
-                await this.checkModelDrift();
-                console.log("[Orchestrator] Processed MLOPS_DRIFT_MONITOR.");
-            } else if (job.jobType === 'SYSTEM_PING') {
-                console.log("[Orchestrator] Processed system ping.");
-            } else {
-                throw new Error(`Unknown jobType: ${job.jobType}`);
+                success = true;
+            } catch (error: any) {
+                success = false;
+                errorMessage = error.message || String(error);
+                console.error(`[Orchestrator] Job ${job.id} failed:`, errorMessage);
             }
-
-            success = true;
-        } catch (error: any) {
-            success = false;
-            errorMessage = error.message || String(error);
-            console.error(`[Orchestrator] Job ${job.id} failed:`, errorMessage);
-        }
+        });
 
         // ---- FINALIZE ----
         const duration = Date.now() - startTime;
@@ -444,3 +485,4 @@ export class Orchestrator {
         }
     }
 }
+

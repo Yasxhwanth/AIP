@@ -1,12 +1,9 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.interpolate = interpolate;
 exports.executeWorkflow = executeWorkflow;
-const openai_1 = __importDefault(require("openai"));
-const _openai = new openai_1.default({ apiKey: process.env.OPENAI_API_KEY || '' });
+const llm_factory_1 = require("./lib/llm-factory");
+const ontology_service_1 = require("./ontology-service");
 /** Interpolate {{varName}} template tokens from a context map */
 function interpolate(template, ctx) {
     if (!template)
@@ -114,21 +111,15 @@ async function executeWorkflow(workflowId, runId, prisma, inputs = {}, broadcast
                     const model = node.data?.model || 'gpt-4o-mini';
                     const temperature = parseFloat(node.data?.temperature ?? '0.7');
                     await log(`  Calling LLM (${model}) with ${userPrompt.length} char prompt`);
-                    if (!process.env.OPENAI_API_KEY) {
-                        output = `[MOCK LLM] Would call ${model} with: "${userPrompt.slice(0, 100)}"`;
-                        await log('  ⚠ No OPENAI_API_KEY — returning mock response');
-                    }
-                    else {
-                        const completion = await _openai.chat.completions.create({
-                            model, temperature,
-                            messages: [
-                                { role: 'system', content: systemPrompt },
-                                { role: 'user', content: userPrompt }
-                            ]
-                        });
-                        output = completion.choices[0]?.message?.content ?? '';
-                        await log(`  ✓ LLM returned ${String(output).length} chars`);
-                    }
+                    const llm = (0, llm_factory_1.getLlmClient)();
+                    const response = await llm.chat({
+                        model: node.data.modelConfig?.model || model,
+                        systemPrompt,
+                        messages: [{ role: 'user', content: userPrompt }],
+                        temperature
+                    });
+                    output = response.answer || '';
+                    await log(`  ✓ LLM returned ${String(output).length} chars`);
                     ctx['llm_output'] = output;
                     break;
                 }
@@ -242,11 +233,15 @@ async function executeWorkflow(workflowId, runId, prisma, inputs = {}, broadcast
                         const logicalId = interpolate(node.data?.logicalId || `workflow-${workflowId}-${Date.now()}`, ctx);
                         const et = await prisma.entityType.findFirst({ where: { name: etName } });
                         if (et) {
-                            const projectId = global.DEFAULT_PROJECT_ID || '';
-                            await prisma.currentEntityState.upsert({
-                                where: { logicalId },
-                                create: { entityTypeId: et.id, logicalId, data: { value: output, generatedAt: new Date().toISOString() }, updatedAt: new Date() },
-                                update: { data: { value: output, generatedAt: new Date().toISOString() }, updatedAt: new Date() }
+                            const ontologySvc = new ontology_service_1.OntologyService(prisma);
+                            await ontologySvc.recordDomainEventAndApply({
+                                eventType: 'WorkflowOutput',
+                                logicalId,
+                                entityTypeId: et.id,
+                                entityVersion: et.version,
+                                data: { value: output, generatedAt: new Date().toISOString() },
+                                projectId: workflow.projectId,
+                                actor: 'system:workflow-engine'
                             });
                             await log(`  ✓ Wrote output to Ontology entity ${etName}/${logicalId}`);
                         }

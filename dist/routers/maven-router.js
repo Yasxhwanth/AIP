@@ -4,11 +4,80 @@ exports.createMavenRouter = createMavenRouter;
 const express_1 = require("express");
 const aip_executor_1 = require("../aip-executor");
 const aip_tools_1 = require("../aip-tools");
-const openai_1 = require("openai");
-const openai = new openai_1.OpenAI();
+const llm_factory_1 = require("../lib/llm-factory");
 function createMavenRouter(prisma) {
     const router = (0, express_1.Router)();
     const executor = new aip_executor_1.AIPExecutor(prisma, aip_tools_1.defaultToolRegistry);
+    /**
+     * GET /drones
+     * Returns live drone status for the current Maven project.
+     *
+     * Backed by the Ontology: expects an EntityType named "Drone" whose
+     * CurrentEntityState.data payload looks roughly like:
+     * {
+     *   callsign: "DFR 5",
+     *   label: "Dock: DFR 5",
+     *   status: "flying" | "ready" | "offline",
+     *   battery_pct: 94,
+     *   location: { lat: 37.7, lng: -122.4 },
+     *   position: { lat: 37.7, lng: -122.4, alt_ft: 120 },
+     *   speed_mph: 3,
+     *   heading_deg: 360,
+     *   dockId: "dock-dfr-5",
+     *   video_url: "https://example/stream"
+     * }
+     */
+    router.get('/drones', async (req, res) => {
+        try {
+            const projectId = req.projectId;
+            if (!projectId)
+                return res.status(401).json({ error: 'Project context missing' });
+            const droneType = await prisma.entityType.findFirst({
+                where: {
+                    projectId,
+                    name: 'Drone',
+                    branchName: 'main',
+                },
+            });
+            if (!droneType) {
+                // No Drone entity type yet for this project; return empty list so UI can handle gracefully.
+                return res.json([]);
+            }
+            const states = await prisma.currentEntityState.findMany({
+                where: {
+                    projectId,
+                    entityTypeId: droneType.id,
+                    updatedAt: { gte: new Date(Date.now() - 30000) } // Active in last 30s
+                },
+                orderBy: { updatedAt: 'desc' },
+                take: 100,
+            });
+            const drones = states.map((s) => {
+                const data = s.data ?? {};
+                const location = data.location ?? {};
+                const position = data.position ?? {};
+                return {
+                    id: s.logicalId,
+                    callsign: data.callsign || data.name || s.logicalId,
+                    label: data.label || data.dockLabel || data.dockId || s.logicalId,
+                    status: data.status || 'unknown',
+                    batteryPct: typeof data.battery_pct === 'number' ? data.battery_pct : null,
+                    lat: location.lat ?? position.lat ?? null,
+                    lon: location.lng ?? position.lng ?? null,
+                    altitudeFt: position.alt_ft ?? null,
+                    speedMph: data.speed_mph ?? null,
+                    headingDeg: data.heading_deg ?? null,
+                    dockId: data.dockId ?? null,
+                    lastSeen: s.updatedAt,
+                    videoUrl: data.video_url || null,
+                };
+            });
+            res.json(drones);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
     /**
      * GET /alerts
      * Fetches active alerts for the "Global Logistics & Readiness" project.
@@ -87,39 +156,32 @@ function createMavenRouter(prisma) {
                 activeAlerts: alerts.map(a => a.alertType)
             };
             // 3. Inference
-            const response = await openai.chat.completions.create({
-                model: agent.model || "gpt-4o",
-                messages: [
-                    { role: "system", content: agent.systemPrompt },
-                    { role: "system", content: `CURRENT MISSION CONTEXT: ${JSON.stringify(context)}` },
-                    { role: "user", content: message }
-                ],
+            const llm = (0, llm_factory_1.getLlmClient)();
+            const response = await llm.chat({
+                model: agent.modelConfig?.model || "gemini-2.0-flash",
+                systemPrompt: agent.systemPrompt + `\n\nCURRENT MISSION CONTEXT: ${JSON.stringify(context)}`,
+                messages: [{ role: "user", content: message }],
                 tools: [
                     {
-                        type: "function",
-                        function: {
-                            name: "suggest_reroute",
-                            description: "Propose a reroute for a convoy to avoid port congestion.",
-                            parameters: {
-                                type: "object",
-                                properties: {
-                                    convoyId: { type: "string" },
-                                    reason: { type: "string" },
-                                    recommendedPort: { type: "string" }
-                                },
-                                required: ["convoyId", "reason", "recommendedPort"]
-                            }
+                        name: "suggest_reroute",
+                        description: "Propose a reroute for a convoy to avoid port congestion.",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                convoyId: { type: "string" },
+                                reason: { type: "string" },
+                                recommendedPort: { type: "string" }
+                            },
+                            required: ["convoyId", "reason", "recommendedPort"]
                         }
                     }
                 ]
             });
-            const choice = response.choices[0].message;
-            if (choice.tool_calls) {
-                // If the model suggests a tool, we return the "recommendation" to the UI
-                const toolCall = choice.tool_calls[0];
-                const args = JSON.parse(toolCall.function.arguments);
+            if (response.toolCalls && response.toolCalls.length > 0) {
+                const toolCall = response.toolCalls[0];
+                const args = toolCall.arguments;
                 return res.json({
-                    message: choice.content || "I have analyzed the congestion and prepared a reroute recommendation.",
+                    message: response.answer || "I have analyzed the congestion and prepared a reroute recommendation.",
                     recommendation: {
                         type: 'REROUTE',
                         title: `Reroute ${args.convoyId} to ${args.recommendedPort}`,
@@ -129,7 +191,7 @@ function createMavenRouter(prisma) {
                     }
                 });
             }
-            res.json({ message: choice.content });
+            res.json({ message: response.answer });
         }
         catch (err) {
             res.status(500).json({ error: err.message });

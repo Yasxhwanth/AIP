@@ -9,6 +9,7 @@ exports.hashApiKey = hashApiKey;
 exports.generateJwt = generateJwt;
 exports.apiKeyAuth = apiKeyAuth;
 exports.tenantContext = tenantContext;
+exports.securityGuard = securityGuard;
 exports.requireRole = requireRole;
 exports.createRateLimiter = createRateLimiter;
 exports.validate = validate;
@@ -137,12 +138,68 @@ function apiKeyAuth(prisma) {
 // ── Tenant Context ───────────────────────────────────────────────
 function tenantContext() {
     return (req, _res, next) => {
-        const projectId = req.auth?.projectId;
+        const projectId = req.auth?.projectId || req.headers['x-project-id'];
         if (projectId) {
-            tenant_context_1.tenantStorage.run({ projectId }, () => next());
+            tenant_context_1.tenantStorage.run({ projectId }, () => {
+                req.projectId = projectId; // Also attach to request for easy access
+                next();
+            });
         }
         else {
             next();
+        }
+    };
+}
+// ── Security Guard (ABAC) ────────────────────────────────────────
+/**
+ * Global Security Guard middleware that intercepts every request and
+ * evaluates it against ABAC policies using the SecurityContext.
+ */
+function securityGuard(securityCtx) {
+    return async (req, res, next) => {
+        if (!req.auth) {
+            res.status(401).json({ error: 'Not authenticated' });
+            return;
+        }
+        // 1. Infer resource type from path
+        let resourceType = 'System';
+        const path = req.path;
+        if (path.includes('/entity-types') || path.includes('/entities'))
+            resourceType = 'EntityType';
+        if (path.includes('/change-requests'))
+            resourceType = 'ChangeRequest';
+        if (path.includes('/pipelines'))
+            resourceType = 'Pipeline';
+        if (path.includes('/data-sources'))
+            resourceType = 'DataSource';
+        if (path.includes('/dashboards'))
+            resourceType = 'Dashboard';
+        // 2. Map HTTP method to ABAC action
+        const actionMapping = {
+            'GET': 'READ',
+            'POST': 'WRITE',
+            'PUT': 'WRITE',
+            'PATCH': 'WRITE',
+            'DELETE': 'DELETE'
+        };
+        const action = actionMapping[req.method] || 'READ';
+        try {
+            // 3. Enforce security decision via centralized context
+            const decision = await securityCtx.enforceFromRequest(req, res, action, {
+                type: resourceType,
+                id: req.params.id,
+                attributes: req.body
+            });
+            if (decision) {
+                // If allowed, we can optionally attach the decision to the request 
+                // if downstream handlers need to apply masks.
+                req.securityDecision = decision;
+                next();
+            }
+        }
+        catch (err) {
+            req.log.error({ err }, 'SecurityContext evaluation failed');
+            res.status(500).json({ error: 'Security evaluation error', correlationId: req.correlationId });
         }
     };
 }
@@ -218,6 +275,8 @@ function enforceIdempotency(prisma) {
             return next();
         }
         try {
+            // The unique constraint on idempotencyKey in the DomainEvent table
+            // acts as our distributed lock.
             await prisma.domainEvent.create({
                 data: {
                     idempotencyKey,
@@ -226,6 +285,7 @@ function enforceIdempotency(prisma) {
                     logicalId: 'System',
                     entityVersion: 1,
                     payload: { path: req.path, method: req.method },
+                    projectId: req.auth?.projectId || 'system',
                 }
             });
             next();

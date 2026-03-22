@@ -6,11 +6,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIPExecutor = void 0;
 const aip_tools_1 = require("./aip-tools");
 const tenant_context_1 = require("./tenant-context");
+const audit_service_1 = require("./audit-service");
 const logger_1 = __importDefault(require("./logger"));
 class AIPExecutor {
     constructor(prisma, registry = aip_tools_1.defaultToolRegistry) {
         this.prisma = prisma;
         this.registry = registry;
+        this.audit = new audit_service_1.AuditService(prisma);
     }
     /**
      * Executes a tool within the specified project context.
@@ -25,7 +27,8 @@ class AIPExecutor {
         // Validate parameters
         const validatedParams = tool.parameters.parse(parameters);
         const startTime = Date.now();
-        logger_1.default.info({ toolName, projectId }, 'Executing AIP Tool');
+        const actor = args.actor || 'aip-agent';
+        logger_1.default.info({ toolName, projectId, actor }, 'Executing AIP Tool');
         // Run within tenant storage context
         return tenant_context_1.tenantStorage.run({ projectId }, async () => {
             try {
@@ -34,6 +37,21 @@ class AIPExecutor {
                     projectId
                 });
                 const durationMs = Date.now() - startTime;
+                // ── AUDIT LOG: Success ─────────────────────────────────────────
+                await this.audit.logAction({
+                    actor,
+                    action: `AGENT_TOOL_${toolName.toUpperCase()}`,
+                    resourceType: 'AGENT_TOOL',
+                    resourceId: toolName,
+                    projectId,
+                    after: result,
+                    metadata: {
+                        ...args.actorMetadata,
+                        parameters: validatedParams,
+                        durationMs,
+                        status: 'SUCCESS'
+                    }
+                });
                 return {
                     success: true,
                     tool: toolName,
@@ -49,6 +67,21 @@ class AIPExecutor {
             catch (err) {
                 const durationMs = Date.now() - startTime;
                 logger_1.default.error({ toolName, err: err.message }, 'AIP Tool execution failed');
+                // ── AUDIT LOG: Failure ─────────────────────────────────────────
+                await this.audit.logAction({
+                    actor,
+                    action: `AGENT_TOOL_${toolName.toUpperCase()}`,
+                    resourceType: 'AGENT_TOOL',
+                    resourceId: toolName,
+                    projectId,
+                    metadata: {
+                        ...args.actorMetadata,
+                        parameters: validatedParams,
+                        durationMs,
+                        status: 'FAILED',
+                        error: err.message
+                    }
+                });
                 return {
                     success: false,
                     tool: toolName,

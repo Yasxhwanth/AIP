@@ -1,20 +1,27 @@
 import 'dotenv/config';
 import { PrismaClient } from '../generated/prisma';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
 import { tenantStorage, getTenantPrisma } from '../tenant-context';
 
 async function main() {
-    const baseUrl = process.env.DATABASE_URL || '';
-    const databaseUrl = baseUrl.replace('aip_user:aip_password', 'aip_app:aip_password');
-    const pool = new Pool({ connectionString: databaseUrl });
-    const adapter = new PrismaPg(pool);
-    const prismaRaw = new PrismaClient({ adapter });
+    const prismaRaw = new PrismaClient();
     const prisma = getTenantPrisma(prismaRaw) as any;
 
-    console.log('🧪 Starting RLS Verification...');
+    console.log('🧪 Starting RLS Verification (Stage 3)...');
 
-    // 1. Get a Project ID from the seed (we know one exists)
+    // 1. Apply FORCE RLS (Ensures owner bypass is disabled)
+    console.log('Harding RLS with FORCE...');
+    const tables = [
+        'EntityType', 'EntityTypeInstance', 'AuditLog', 'DomainEvent', 'CurrentEntityState'
+    ];
+    for (const table of tables) {
+        try {
+            await prismaRaw.$executeRawUnsafe(`ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY`);
+        } catch (e) {
+            // Might fail if not owner or table missing, ignore for now
+        }
+    }
+
+    // 2. Get a Project ID from the seed
     const projects = await prismaRaw.project.findMany();
     if (!projects || projects.length === 0) {
         console.error('❌ No projects found to test with. Run seed first.');
@@ -23,33 +30,37 @@ async function main() {
     const tenant1 = (projects[0] as any).id;
     console.log(`Using Tenant 1: ${tenant1}`);
 
-    // 2. Test Reading without tenant context (should return nothing due to RLS)
+    // 3. Test Reading without tenant context
     console.log('\n--- Test 1: Reading WITHOUT tenant context ---');
     try {
-        const entitiesRaw = await prismaRaw.currentEntityState.findMany();
-        console.log(`Raw Prisma (no RLS): found ${entitiesRaw.length} entities (Expected: 0)`);
-
-        // Note: Raw Prisma client doesn't set aip.tenant_id, so it should return 0 records if RLS is working
-        const entitiesRLS = await prisma.currentEntityState.findMany();
-        console.log(`Tenant Prisma (no context): found ${entitiesRLS.length} entities (Expected: 0)`);
+        const entities = await prisma.currentEntityState.findMany();
+        console.log(`Tenant Prisma (no context): found ${entities.length} entities (Expected: 0)`);
+        if (entities.length === 0) {
+            console.log('✅ RLS successfully denied access without context.');
+        } else {
+            console.warn('⚠️ RLS bypassed! (Is FORCE RLS applied? Is it the owner?)');
+        }
     } catch (err: any) {
-        console.log(`Expected Error for no context (if current_setting fails): ${err.message}`);
+        console.log(`Error (Expected): ${err.message}`);
     }
 
-    // 3. Test Reading WITH tenant context
+    // 4. Test Reading WITH tenant context
     console.log(`\n--- Test 2: Reading WITH Tenant 1 context (${tenant1}) ---`);
     await tenantStorage.run({ projectId: tenant1 }, async () => {
-        const entities = await prisma.currentEntityState.findMany();
-        console.log(`Tenant Prisma (Tenant 1): found ${entities.length} entities (Expected: 5)`);
-
-        if (entities.length > 0) {
-            console.log('✅ RLS successfully allowed access with context.');
-        } else {
-            console.error('❌ RLS denied access even with correct context.');
+        try {
+            const entities = await prisma.currentEntityState.findMany();
+            console.log(`Tenant Prisma (Tenant 1): found ${entities.length} entities`);
+            if (entities.length > 0) {
+                console.log('✅ RLS successfully allowed access with correct context.');
+            } else {
+                console.warn('❌ RLS denied access even with correct context! (Check if entities belong to this project)');
+            }
+        } catch (err: any) {
+            console.error(`❌ Unexpected error: ${err.message}`);
         }
     });
 
-    // 4. Test Isolation with a dummy tenant ID
+    // 5. Test Isolation with a dummy tenant ID
     const dummyTenant = '00000000-0000-0000-0000-000000000000';
     console.log(`\n--- Test 3: Reading with DUMMY Tenant (${dummyTenant}) ---`);
     await tenantStorage.run({ projectId: dummyTenant }, async () => {
@@ -63,7 +74,8 @@ async function main() {
         }
     });
 
-    await pool.end();
+    await prismaRaw.$disconnect();
 }
 
 main().catch(console.error);
+

@@ -130,6 +130,7 @@ const actionExecutors = {
                     payload: { source: 'decision-engine', triggerData: context.triggerData },
                     evaluationTrace: context.triggerData,
                     acknowledged: false,
+                    projectId: config.projectId ?? 'system',
                 },
             });
             return { success: true, result: { alertId: alert.id, severity: alert.severity } };
@@ -197,21 +198,36 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
     }
     // Determine decision
     let decision;
+    let explanationSummary;
     if (!allPassed) {
         decision = 'SKIPPED';
+        const failedCount = conditionResults.filter(r => !r.passed).length;
+        explanationSummary = `Rule skipped because ${failedCount} of ${conditions.length} conditions were not met.`;
     }
     else if (simulate) {
         decision = 'SIMULATED';
+        explanationSummary = 'Rule logic matched, but execution was suppressed for simulation.';
     }
     else if (rule.confidenceThreshold !== null && triggeredConfidence !== null && triggeredConfidence < rule.confidenceThreshold) {
-        decision = 'PENDING_ESCALATION'; // Falls below confidence, human review needed
+        decision = 'PENDING_ESCALATION';
+        explanationSummary = `Rule logic matched, but confidence (${triggeredConfidence}) is below threshold (${rule.confidenceThreshold}). Escalated for human review.`;
     }
     else if (!rule.autoExecute) {
-        decision = 'PENDING_APPROVAL'; // Requires human review
+        decision = 'PENDING_APPROVAL';
+        explanationSummary = 'Rule logic matched. Operation requires manual approval per security policy.';
     }
     else {
         decision = 'EXECUTE';
+        explanationSummary = `All ${conditions.length} conditions met and confidence above threshold. Executing automated actions.`;
     }
+    const explanation = {
+        summary: explanationSummary,
+        allPassed,
+        confidenceEvaluated: triggeredConfidence,
+        thresholdRequired: rule.confidenceThreshold,
+        logicOperator: rule.logicOperator,
+        timestamp: new Date()
+    };
     // 1. Create Initial DecisionLog
     let status = decision === 'SKIPPED' ? 'COMPLETED' : simulate ? 'SIMULATED' : (decision === 'PENDING_APPROVAL' || decision === 'PENDING_ESCALATION') ? 'PENDING' : 'RUNNING';
     const log = await prisma.decisionLog.create({
@@ -223,13 +239,15 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
             conditionResults: conditionResults,
             decision,
             status,
+            explanation: explanation,
+            projectId: rule.projectId,
         },
     });
     let executionTraceId;
     // 2. Execute Actions & Create Trace (only if decision is EXECUTE or SIMULATED)
     if (decision === 'EXECUTE' || decision === 'SIMULATED') {
         const trace = await prisma.executionTrace.create({
-            data: { decisionLogId: log.id, status: 'RUNNING' }
+            data: { decisionLogId: log.id, status: 'RUNNING', projectId: rule.projectId }
         });
         executionTraceId = trace.id;
         let hasFailures = false;
@@ -241,7 +259,8 @@ async function executeDecision(ruleId, logicalId, triggerType, triggerData, pris
                     stepOrder: plan.stepOrder,
                     status: 'RUNNING',
                     startedAt: new Date(),
-                    inputPayload: { logicalId, triggerData: triggerData, simulated: simulate }
+                    inputPayload: { logicalId, triggerData: triggerData, simulated: simulate },
+                    projectId: rule.projectId,
                 }
             });
             if (simulate) {

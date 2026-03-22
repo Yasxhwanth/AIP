@@ -3,10 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defaultToolRegistry = exports.ExplainFailureTool = exports.GetOutboxStatsTool = exports.ListJobsTool = exports.GetLineageTool = exports.SearchEntitiesTool = exports.GetEntityTool = exports.AIPToolRegistry = void 0;
+exports.defaultToolRegistry = exports.ProposeChangeTool = exports.ExplainFailureTool = exports.GetOutboxStatsTool = exports.ListJobsTool = exports.GetLineageTool = exports.SearchEntitiesTool = exports.GetEntityTool = exports.AIPToolRegistry = void 0;
 exports.zodToGeminiSchema = zodToGeminiSchema;
 const zod_1 = require("zod");
 const logger_1 = __importDefault(require("./logger"));
+const governance_service_1 = require("./governance-service");
 class AIPToolRegistry {
     constructor() {
         this.tools = new Map();
@@ -283,6 +284,36 @@ function zodToGeminiSchema(schema) {
     }
     return { type: 'STRING' }; // Fallback
 }
+/**
+ * propose_change: Submit a proposal for ontology or configuration change
+ */
+exports.ProposeChangeTool = {
+    name: 'propose_change',
+    description: 'Propose a change to the ontology or platform configuration. This creates a Change Request that must be approved by an administrator.',
+    parameters: zod_1.z.object({
+        resourceType: zod_1.z.enum(['EntityType', 'Pipeline', 'DecisionRule', 'Project']),
+        resourceId: zod_1.z.string().optional(),
+        proposedChanges: zod_1.z.any(),
+        branchName: zod_1.z.string().default('main')
+    }),
+    handler: async (params, { prisma, projectId }) => {
+        const govSvc = new governance_service_1.GovernanceService(prisma);
+        const cr = await govSvc.createChangeRequest({
+            projectId,
+            resourceType: params.resourceType,
+            resourceId: params.resourceId,
+            proposedChanges: params.proposedChanges,
+            createdBy: 'aip-agent', // Standard actor for agent-initiated proposals
+            branchName: params.branchName
+        });
+        return {
+            success: true,
+            changeRequestId: cr.id,
+            status: cr.status,
+            message: 'Change request submitted for administrative review.'
+        };
+    }
+};
 // ── Registry Initialization ────────────────────────────────────────
 exports.defaultToolRegistry = new AIPToolRegistry();
 exports.defaultToolRegistry.register(exports.GetEntityTool);
@@ -291,4 +322,5 @@ exports.defaultToolRegistry.register(exports.GetLineageTool);
 exports.defaultToolRegistry.register(exports.ListJobsTool);
 exports.defaultToolRegistry.register(exports.GetOutboxStatsTool);
 exports.defaultToolRegistry.register(exports.ExplainFailureTool);
+exports.defaultToolRegistry.register(exports.ProposeChangeTool);
 //# sourceMappingURL=aip-tools.js.map

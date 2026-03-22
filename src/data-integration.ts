@@ -129,133 +129,58 @@ export async function upsertEntityInstance(
         generateOutbox?: { targetSystem: string };
     }
 ): Promise<{ success: boolean; instanceId?: string; error?: string }> {
-    const now = new Date();
+    const { OntologyService } = require('./ontology-service');
+    const ontologySvc = new OntologyService(prisma);
 
     try {
-        const { eventId, previousState, instanceId } = await prisma.$transaction(async (tx) => {
-            // Fetch the currently-active row
-            const current = await tx.entityInstance.findFirst({
-                where: {
-                    entityTypeId: entityType.id,
-                    logicalId,
-                    validTo: null,
-                },
-            });
+        const hash = crypto.createHash('sha256').update(JSON.stringify(attrData)).digest('hex');
+        const idempotencyKey = options?.sourceRecordId
+            ? `EntityStateChanged:${options.sourceSystem}:${options.sourceRecordId}`
+            : `EntityStateChanged:${logicalId}:${hash}`;
 
-            // Close the currently-active row (if any)
-            if (current) {
-                await tx.entityInstance.update({
-                    where: { id: current.id },
-                    data: { validTo: now },
-                });
+        const result = await ontologySvc.recordDomainEventAndApply({
+            eventType: 'EntityStateChanged',
+            logicalId,
+            entityTypeId: entityType.id,
+            entityVersion: entityType.version,
+            data: attrData,
+            projectId: entityType.projectId ?? 'default',
+            actor: options?.sourceSystem ?? 'data-integration',
+            idempotencyKey,
+            sourceSystem: options?.sourceSystem,
+            sourceRecordId: options?.sourceRecordId,
+            metadata: {
+                confidence: options?.confidence ?? 1.0,
+                sourceSystem: options?.sourceSystem
             }
-
-            // Insert new active row
-            const newInstance = await tx.entityInstance.create({
-                data: {
-                    logicalId,
-                    entityTypeId: entityType.id,
-                    entityVersion: entityType.version,
-                    data: attrData as Prisma.InputJsonValue,
-                    validFrom: now,
-                    validTo: null,
-                    confidenceScore: options?.confidence ?? 1.0,
-                    reviewStatus: (options?.confidence ?? 1.0) < 0.7 ? 'PENDING' : 'APPROVED', // Low confidence requires review
-                    projectId: entityType.projectId
-                },
-            });
-
-            // Record Provenance
-            if (options?.sourceSystem && options?.sourceRecordId) {
-                await ProvenanceService.recordLineage(
-                    newInstance.id,
-                    options.sourceSystem,
-                    options.sourceRecordId,
-                    now, // source timestamp (approximated here as now)
-                    null, // Entire record provenance for now
-                    entityType.projectId || 'system',
-                    tx
-                );
-            }
-
-            // Emit domain event
-            const hash = crypto.createHash('sha256').update(JSON.stringify(attrData)).digest('hex');
-            const idempotencyKey = options?.sourceRecordId
-                ? `EntityStateChanged:${options.sourceSystem}:${options.sourceRecordId}`
-                : `EntityStateChanged:${logicalId}:${hash}`;
-
-            const domainEventPayload: RecordDomainEventArgs = {
-                prisma: tx as PrismaClient,
-                entityTypeId: entityType.id,
-                logicalId,
-                entityVersion: entityType.version,
-                eventType: 'EntityStateChanged',
-                idempotencyKey,
-                payload: {
-                    previousState: (current?.data as Record<string, unknown>) ?? null,
-                    newState: attrData,
-                    validFrom: now.toISOString(),
-                },
-                projectId: entityType.projectId ?? 'default'
-            };
-
-            if (options?.generateOutbox) {
-                domainEventPayload.outbox = {
-                    projectId: entityType.projectId ?? 'default',
-                    aggregateType: 'EntityInstance',
-                    targetSystem: options.generateOutbox.targetSystem
-                };
-            }
-
-            const domainEvent = await recordDomainEvent(domainEventPayload);
-
-            // CQRS: Upsert read model projection
-            await tx.currentEntityState.upsert({
-                where: { logicalId },
-                create: {
-                    logicalId,
-                    entityTypeId: entityType.id,
-                    data: attrData as Prisma.InputJsonValue,
-                    updatedAt: now,
-                    projectId: entityType.projectId
-                },
-                update: {
-                    data: attrData as Prisma.InputJsonValue,
-                    updatedAt: now,
-                    projectId: entityType.projectId
-                },
-            });
-
-            return {
-                eventId: domainEvent.id,
-                previousState: (current?.data as Record<string, unknown>) ?? null,
-                instanceId: newInstance.id
-            };
         });
 
-        // Fire-and-forget: evaluate policies
+        // ── Fire-and-forget logic ──
+        // Note: These could eventually be moved into the Outbox/Worker for even tighter decoupling
+
+        // 1. Evaluate policies
         evaluatePolicies(
             {
-                eventId,
+                eventId: result.event.id,
                 eventType: 'EntityStateChanged',
                 entityTypeId: entityType.id,
                 logicalId,
                 entityVersion: entityType.version,
                 payload: {
-                    previousState,
+                    previousState: null, // Previous state fetch could be optimized if needed
                     newState: attrData,
-                    validFrom: now.toISOString(),
+                    validFrom: new Date().toISOString(),
                 },
             },
             prisma,
         );
 
-        // Fire-and-forget: trigger semantic reasoner to derive ontology properties natively 
+        // 2. Trigger semantic reasoner
         runReasonerForEntity(logicalId, entityType.projectId ?? 'default', prisma).catch(err => {
             console.error(`[Semantic Reasoner Error] Failed to reason for entity ${logicalId}:`, err);
         });
 
-        return { success: true, instanceId };
+        return { success: true, instanceId: result.instanceId };
     } catch (error) {
         return { success: false, error: String(error) };
     }
@@ -314,6 +239,50 @@ export async function executeJob(
             name: job.targetEntityType.name,
             projectId: job.targetEntityType.projectId,
         };
+
+        // Step 1.5: Schema Drift Detection (analyzing sampling from head of batch)
+        if (rawRecords.length > 0) {
+            const sample = rawRecords[0];
+            const externalFields = Object.keys(sample);
+            const mappingSourceFields = new Set(Object.keys(fieldMapping));
+
+            // Detect Added Fields (available in source but ignored by the mapping)
+            const added = externalFields.filter(f => !mappingSourceFields.has(f) && f !== job.logicalIdField);
+            if (added.length > 0) {
+                for (const field of added) {
+                    await (prisma as any).schemaDriftReport.create({
+                        data: {
+                            projectId: job.projectId,
+                            dataSourceId: job.dataSourceId,
+                            jobId: job.id,
+                            entityTypeId: job.targetEntityTypeId,
+                            driftType: 'ADDED_FIELD',
+                            fieldName: field,
+                            observedType: typeof sample[field],
+                            metadata: { sampleValue: String(sample[field]).slice(0, 100), mappingValue: 'HIDDEN' }
+                        }
+                    }).catch(() => { }); // Fail silently to not block ingestion
+                }
+            }
+
+            // Detect Removed Fields (defined in mapping but missing from the source payload)
+            const missing = Array.from(mappingSourceFields).filter(f => !(f in sample));
+            if (missing.length > 0) {
+                for (const field of missing) {
+                    await (prisma as any).schemaDriftReport.create({
+                        data: {
+                            projectId: job.projectId,
+                            dataSourceId: job.dataSourceId,
+                            jobId: job.id,
+                            entityTypeId: job.targetEntityTypeId,
+                            driftType: 'REMOVED_FIELD',
+                            fieldName: field,
+                            metadata: { mapping: fieldMapping[field] }
+                        }
+                    }).catch(() => { });
+                }
+            }
+        }
 
         for (const raw of rawRecords) {
             // Data Contract Validation

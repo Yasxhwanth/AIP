@@ -112,12 +112,22 @@ async function executePipeline(pipelineId, runId, prisma, trigger = 'manual', br
                     await log(`  Writing ${inputRecords.length} records to Ontology: ${etName}`);
                     const et = await prisma.entityType.findFirst({ where: { name: etName } });
                     if (et) {
+                        const { OntologyService } = require('./ontology-service');
+                        const ontologySvc = new OntologyService(prisma);
                         for (const rec of inputRecords) {
-                            const logicalId = rec.id || rec.logicalId || `p-${runId}-${Math.random().toString(36).slice(2, 7)}`;
-                            await prisma.currentEntityState.upsert({
-                                where: { logicalId: String(logicalId) },
-                                create: { entityTypeId: et.id, logicalId: String(logicalId), data: rec, updatedAt: new Date() },
-                                update: { data: rec, updatedAt: new Date() }
+                            const logicalId = String(rec.id || rec.logicalId || `p-${runId}-${Math.random().toString(36).slice(2, 7)}`);
+                            // Every sink record should have an idempotency key to prevent duplicates on pipeline retry
+                            const idempotencyKey = `PipelineSink:${runId}:${nodeId}:${logicalId}`;
+                            await ontologySvc.recordDomainEventAndApply({
+                                eventType: 'EntitySinkedViaPipeline',
+                                logicalId,
+                                entityTypeId: et.id,
+                                entityVersion: et.version,
+                                data: rec,
+                                projectId: et.projectId,
+                                actor: 'pipeline-engine',
+                                idempotencyKey,
+                                metadata: { runId, pipelineId, nodeId }
                             });
                         }
                         await log(`  ✓ Sink complete`);

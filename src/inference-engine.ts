@@ -174,24 +174,27 @@ const strategies: Record<string, StrategyFn> = {
 /**
  * Gathers input data for a model from the entity's current state
  * and optionally from recent telemetry.
+ * Returns both the values and their lineage (where they came from).
  */
 async function getModelInputs(
     logicalId: string,
     inputFields: string[],
     prisma: PrismaClient,
-): Promise<Record<string, unknown>> {
+): Promise<{ data: Record<string, unknown>; lineage: Record<string, any> }> {
     // Get current entity state from CQRS projection
     const currentState = await prisma.currentEntityState.findUnique({
         where: { logicalId },
     });
 
     const entityData = (currentState?.data ?? {}) as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
+    const data: Record<string, unknown> = {};
+    const lineage: Record<string, any> = {};
 
     for (const field of inputFields) {
         // First check entity state
         if (field in entityData) {
-            result[field] = entityData[field];
+            data[field] = entityData[field];
+            lineage[field] = { source: 'CurrentEntityState', logicalId, updatedAt: currentState?.updatedAt };
             continue;
         }
 
@@ -202,18 +205,21 @@ async function getModelInputs(
         });
 
         if (latest) {
-            result[field] = latest.value;
+            data[field] = latest.value;
+            lineage[field] = { source: 'TimeseriesMetric', id: latest.id, timestamp: latest.timestamp };
+        } else {
+            lineage[field] = { source: 'MISSING' };
         }
     }
 
-    return result;
+    return { data, lineage };
 }
 
 // ── Public API ───────────────────────────────────────────────────
 
 /**
  * Run inference for a specific model version against an entity.
- * Stores the result as an InferenceResult row.
+ * Stores the result as an InferenceResult row with deep lineage.
  */
 export async function runInference(
     modelVersionId: string,
@@ -232,7 +238,7 @@ export async function runInference(
     if (!strategyFn) throw new Error(`Unknown strategy '${version.strategy}'`);
 
     const inputFields = version.modelDefinition.inputFields as string[];
-    const input = await getModelInputs(logicalId, inputFields, prisma);
+    const { data: input, lineage } = await getModelInputs(logicalId, inputFields, prisma);
     const hyperparameters = version.hyperparameters as unknown as Hyperparameters;
 
     const startTime = performance.now();
@@ -251,6 +257,15 @@ export async function runInference(
     const endTime = performance.now();
     const durationMs = endTime - startTime;
 
+    // Generate natural language explanation for the prediction
+    const explanation = {
+        summary: isError ? 'Inference failed due to an execution error.' :
+            (prediction.anomaly ? 'Potential anomaly detected by model.' : 'Model confirms normal operating parameters.'),
+        rationale: !isError ? `Strategy ${version.strategy} evaluated ${inputFields.length} inputs. Confidence score: ${confidence}.` : prediction.error,
+        strategy: version.strategy,
+        timestamp: new Date()
+    };
+
     // Async capture of latency metrics
     setImmediate(async () => {
         try {
@@ -260,7 +275,7 @@ export async function runInference(
         }
     });
 
-    // Store result
+    // Store result with Stage 4 governance data
     const result = await prisma.inferenceResult.create({
         data: {
             modelVersionId,
@@ -268,12 +283,15 @@ export async function runInference(
             input: input as Prisma.InputJsonValue,
             output: prediction as Prisma.InputJsonValue,
             confidence,
+            lineage: lineage as Prisma.InputJsonValue,
+            explanation: explanation as Prisma.InputJsonValue,
             projectId: version.modelDefinition.projectId,
         },
     });
 
     return { inferenceResultId: result.id, prediction, confidence };
 }
+
 
 /**
  * Run inference in "simulation" mode for What-If scenarios.

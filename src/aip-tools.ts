@@ -349,12 +349,162 @@ export const ProposeChangeTool: AIPTool = {
     }
 };
 
+// ── History & Metrics Tools ────────────────────────────────────────
+
+/**
+ * get_history: Fetch DomainEvent history for an entity with optional date bounds
+ */
+export const GetHistoryTool: AIPTool = {
+    name: 'get_history',
+    description: 'Retrieve the full event-sourced change history for an entity, optionally filtered to a date range.',
+    parameters: z.object({
+        logicalId: z.string(),
+        from: z.string().optional().describe('ISO 8601 start date'),
+        to: z.string().optional().describe('ISO 8601 end date'),
+        limit: z.number().default(20)
+    }),
+    handler: async (params, { prisma }) => {
+        const where: any = { logicalId: params.logicalId };
+        if (params.from || params.to) {
+            where.createdAt = {};
+            if (params.from) where.createdAt.gte = new Date(params.from);
+            if (params.to) where.createdAt.lte = new Date(params.to);
+        }
+
+        const events = await (prisma as any).domainEvent.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: params.limit
+        });
+
+        return {
+            logicalId: params.logicalId,
+            count: events.length,
+            events: events.map((e: any) => ({
+                id: e.id,
+                eventType: e.eventType,
+                actor: e.actor,
+                occurredAt: e.createdAt,
+                payload: e.payload
+            }))
+        };
+    }
+};
+
+/**
+ * get_metrics: Read ComputedMetric rows for an entityId or project
+ */
+export const GetMetricsTool: AIPTool = {
+    name: 'get_metrics',
+    description: 'Retrieve computed metrics for a specific entity or all entities in a project.',
+    parameters: z.object({
+        entityId: z.string().optional().describe('Filter by specific entity instance ID'),
+        metricName: z.string().optional().describe('Filter by metric name')
+    }),
+    handler: async (params, { prisma, projectId }) => {
+        const where: any = { projectId };
+        if (params.entityId) where.entityInstanceId = params.entityId;
+        if (params.metricName) where.metricName = params.metricName;
+
+        const metrics = await (prisma as any).computedMetric.findMany({
+            where,
+            orderBy: { computedAt: 'desc' },
+            take: 50
+        });
+
+        return {
+            count: metrics.length,
+            metrics: metrics.map((m: any) => ({
+                id: m.id,
+                entityInstanceId: m.entityInstanceId,
+                metricName: m.metricName,
+                value: m.value,
+                computedAt: m.computedAt
+            }))
+        };
+    }
+};
+
+/**
+ * list_rejected_records: Surface quarantined bad rows
+ */
+export const ListRejectedRecordsTool: AIPTool = {
+    name: 'list_rejected_records',
+    description: 'List records rejected by data quality gates, optionally filtered by data source.',
+    parameters: z.object({
+        dataSourceId: z.string().optional(),
+        limit: z.number().default(20)
+    }),
+    handler: async (params, { prisma, projectId }) => {
+        const where: any = { projectId };
+        if (params.dataSourceId) where.dataSourceId = params.dataSourceId;
+
+        const records = await (prisma as any).rejectedRecord.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: params.limit
+        });
+
+        return {
+            count: records.length,
+            records: records.map((r: any) => ({
+                id: r.id,
+                dataSourceId: r.dataSourceId,
+                rejectionReason: r.rejectionReason,
+                rawData: r.rawData,
+                rejectedAt: r.createdAt
+            }))
+        };
+    }
+};
+
+/**
+ * retry_job: Re-queue a FAILED or DEAD_LETTER job
+ */
+export const RetryJobTool: AIPTool = {
+    name: 'retry_job',
+    description: 'Re-queue a failed or dead-letter background job so a worker will retry it. Requires admin or operator role.',
+    parameters: z.object({
+        jobId: z.string()
+    }),
+    handler: async (params, { prisma, projectId }) => {
+        const job = await (prisma as any).jobQueue.findUnique({
+            where: { id: params.jobId }
+        });
+
+        if (!job) return { success: false, error: `Job '${params.jobId}' not found.` };
+        if (!['FAILED', 'DEAD_LETTER'].includes(job.status)) {
+            return { success: false, error: `Job is in status '${job.status}'; only FAILED or DEAD_LETTER jobs can be retried.` };
+        }
+
+        const updated = await (prisma as any).jobQueue.update({
+            where: { id: params.jobId },
+            data: {
+                status: 'QUEUED',
+                attempts: 0,
+                lastError: null
+            }
+        });
+
+        return {
+            success: true,
+            jobId: updated.id,
+            newStatus: updated.status,
+            message: `Job '${params.jobId}' has been re-queued for retry.`
+        };
+    }
+};
+
 // ── Registry Initialization ────────────────────────────────────────
 
 export const defaultToolRegistry = new AIPToolRegistry();
 defaultToolRegistry.register(GetEntityTool);
 defaultToolRegistry.register(SearchEntitiesTool);
 defaultToolRegistry.register(GetLineageTool);
+defaultToolRegistry.register(GetHistoryTool);
+defaultToolRegistry.register(GetMetricsTool);
+defaultToolRegistry.register(ListRejectedRecordsTool);
+defaultToolRegistry.register(RetryJobTool);
 defaultToolRegistry.register(ListJobsTool);
 defaultToolRegistry.register(GetOutboxStatsTool);
 defaultToolRegistry.register(ExplainFailureTool);

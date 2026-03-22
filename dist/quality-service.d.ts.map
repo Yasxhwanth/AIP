@@ -1,0 +1,1 @@
+{"version":3,"file":"quality-service.d.ts","sourceRoot":"","sources":["../src/quality-service.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,YAAY,EAAE,MAAM,oBAAoB,CAAC;AAGlD,qBAAa,cAAc;IACX,OAAO,CAAC,MAAM;gBAAN,MAAM,EAAE,YAAY;IAExC;;OAEG;IACG,qBAAqB,CAAC,YAAY,EAAE,MAAM,EAAE,SAAS,EAAE,MAAM;;;;;;;;;;;;;IA+DnE;;OAEG;IACG,cAAc,CAAC,YAAY,EAAE,MAAM,EAAE,SAAS,EAAE,MAAM;;;;;;;;;;;;;CAM/D"}

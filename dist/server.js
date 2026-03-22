@@ -15,22 +15,29 @@ const relationship_derivation_service_1 = require("./relationship-derivation-ser
 const computed_metrics_1 = require("./computed-metrics");
 const rollup_engine_1 = require("./rollup-engine");
 const orchestrator_1 = require("./orchestrator");
+const ontology_rebuilder_1 = require("./ontology-rebuilder");
+const quality_service_1 = require("./quality-service");
 const inference_engine_1 = require("./inference-engine");
 const decision_engine_1 = require("./decision-engine");
 const schema_inference_service_1 = require("./schema-inference-service");
 const provenance_service_1 = require("./provenance-service");
 const abac_engine_1 = require("./abac-engine");
+const security_context_1 = require("./security-context");
 const apollo_service_1 = require("./apollo-service");
 const spark_service_1 = require("./spark-service");
 const identity_service_1 = require("./identity-service");
 const lineage_service_1 = require("./lineage-service");
 // import { createPipelineRouter } from './routers/pipeline-router';
 const aip_router_1 = require("./routers/aip-router");
+const governance_router_1 = require("./routers/governance-router");
 const agent_router_1 = require("./routers/agent-router");
 const health_router_1 = require("./routers/health-router");
 const maven_router_1 = require("./routers/maven-router");
+const governance_service_1 = require("./governance-service");
+const ontology_service_1 = require("./ontology-service");
 // import { pool } from './db';
 const outbox_service_1 = require("./outbox-service");
+const drone_telemetry_service_1 = require("./drone-telemetry-service");
 const helmet_1 = __importDefault(require("helmet"));
 const cors_1 = __importDefault(require("cors"));
 const logger_1 = __importDefault(require("./logger"));
@@ -84,20 +91,17 @@ const prismaRaw = new prisma_1.PrismaClient({
 const prisma = (0, tenant_context_1.getTenantPrisma)(prismaRaw);
 // Initialize engines
 const abac = new abac_engine_1.AbacEngine(prisma);
+const securityCtx = new security_context_1.SecurityContext(prisma);
 // Initialize services
 const apolloService = new apollo_service_1.ApolloService(prisma);
 const sparkService = new spark_service_1.SparkService(prisma);
+const ontologySvc = new ontology_service_1.OntologyService(prisma);
 const orchestrator = new orchestrator_1.Orchestrator(prisma);
+const rebuilder = new ontology_rebuilder_1.OntologyRebuilder(prisma);
+const qualitySvc = new quality_service_1.QualityService(prisma);
 // Global maps for WebSockets and Jobs
 const lineageSvc = new lineage_service_1.LineageService(prisma);
-app.use('/api/v1/health', (0, health_router_1.createHealthRouter)(prismaRaw));
-app.use('/api/v1/aip', (0, aip_router_1.createAipRouter)(prismaRaw));
-app.use('/api/v1/maven', (0, maven_router_1.createMavenRouter)(prismaRaw));
-app.use('/api/v1/agents', (0, agent_router_1.createAgentRouter)(prismaRaw));
-// ── Outbox Setup ────────────────────────────────────────────────────────────
-// ── Error Handling ──────────────────────────────────────────────
-const outboxService = new outbox_service_1.OutboxService(prismaRaw);
-outboxService.start();
+const governanceSvc = new governance_service_1.GovernanceService(prisma);
 // ── Enterprise Middleware ─────────────────────────────────────────
 app.use((0, helmet_1.default)());
 const corsOrigin = process.env.CORS_ORIGIN;
@@ -117,7 +121,17 @@ app.use((0, middleware_1.requestLogger)());
 app.use((0, middleware_1.apiKeyAuth)(prisma));
 app.use((0, middleware_1.tenantContext)());
 app.use((0, middleware_1.auditMiddleware)(prisma));
+app.use((0, middleware_1.securityGuard)(securityCtx));
 app.use((0, middleware_1.createRateLimiter)());
+// ── Outbox Setup ────────────────────────────────────────────────────────────
+const outboxService = new outbox_service_1.OutboxService(prismaRaw);
+outboxService.start();
+// ── Routers ─────────────────────────────────────────────────────────────
+app.use('/api/v1/health', (0, health_router_1.createHealthRouter)(prisma));
+app.use('/api/v1/aip', (0, aip_router_1.createAipRouter)(prisma));
+app.use('/api/governance', (0, governance_router_1.createGovernanceRouter)(prisma));
+app.use('/api/v1/maven', (0, maven_router_1.createMavenRouter)(prisma));
+app.use('/api/v1/agents', (0, agent_router_1.createAgentRouter)(prisma));
 // ── Projects & Dashboards ────────────────────────────────────────
 app.post('/projects', async (req, res) => {
     try {
@@ -179,12 +193,32 @@ app.get('/api/health', (req, res) => res.json({ status: 'UP', timestamp: new Dat
 // ── Telemetry APIs ────────────────────────────────────────────────────────
 app.get('/api/v1/telemetry/jobs', async (req, res) => {
     try {
-        const jobs = await prisma.jobQueue.findMany({
+        const rawProjectId = getProjectId(req);
+        const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID required' });
+        const summary = await prisma.jobQueue.groupBy({
+            by: ['status'],
+            where: { projectId },
+            _count: true
+        });
+        const activeWorkers = await prisma.jobWorker.count({
+            where: {
+                status: 'ACTIVE',
+                lastHeartbeat: { gte: new Date(Date.now() - 5 * 60 * 1000) }
+            }
+        });
+        const recentJobs = await prisma.jobQueue.findMany({
+            where: { projectId },
             orderBy: { createdAt: 'desc' },
             take: 50,
             include: { lockedByWorker: true }
         });
-        return res.json(jobs);
+        return res.json({
+            summary: summary.reduce((acc, curr) => ({ ...acc, [curr.status]: curr._count }), {}),
+            activeWorkers,
+            recentJobs
+        });
     }
     catch (err) {
         return res.status(500).json({ error: String(err) });
@@ -197,6 +231,189 @@ app.get('/api/v1/telemetry/workers', async (req, res) => {
             orderBy: { lastHeartbeat: 'desc' }
         });
         return res.json(workers);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.get('/api/v1/telemetry/agents', async (req, res) => {
+    try {
+        let projectId = req.auth?.projectId || req.query.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production') {
+            projectId = global.DEFAULT_PROJECT_ID;
+        }
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
+        // Aggregate stats from AuditLog for AGENT_TOOL actions
+        const logs = await prisma.auditLog.findMany({
+            where: {
+                projectId,
+                resourceType: 'AGENT_TOOL',
+                occurredAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24h
+            },
+            orderBy: { occurredAt: 'desc' }
+        });
+        const toolStats = {};
+        const executionTrace = [];
+        logs.forEach(log => {
+            const toolName = log.resourceId || 'unknown';
+            const metadata = log.metadata;
+            const status = metadata?.status || 'SUCCESS';
+            const duration = metadata?.durationMs || 0;
+            if (!toolStats[toolName]) {
+                toolStats[toolName] = { success: 0, failed: 0, total: 0, durSum: 0, p90Samples: [] };
+            }
+            toolStats[toolName].total++;
+            if (status === 'SUCCESS')
+                toolStats[toolName].success++;
+            else
+                toolStats[toolName].failed++;
+            toolStats[toolName].durSum += duration;
+            toolStats[toolName].p90Samples.push(duration);
+            executionTrace.push({
+                id: log.id,
+                tool: toolName,
+                actor: log.actor,
+                status,
+                durationMs: duration,
+                timestamp: log.occurredAt
+            });
+        });
+        // Finalize metrics
+        const metricsByTool = Object.entries(toolStats).map(([name, stats]) => {
+            const sortedDurs = [...stats.p90Samples].sort((a, b) => a - b);
+            const p90 = sortedDurs[Math.floor(sortedDurs.length * 0.9)] || 0;
+            return {
+                tool: name,
+                successRate: stats.total > 0 ? (stats.success / stats.total) * 100 : 0,
+                avgLatency: stats.total > 0 ? stats.durSum / stats.total : 0,
+                p90Latency: p90,
+                totalCalls: stats.total
+            };
+        });
+        return res.json({
+            summary: {
+                totalCalls: logs.length,
+                successRate: logs.length > 0 ? (logs.filter(l => l.metadata?.status === 'SUCCESS').length / logs.length) * 100 : 0,
+                avgLatency: logs.length > 0 ? logs.reduce((acc, l) => acc + (l.metadata?.durationMs || 0), 0) / logs.length : 0
+            },
+            metricsByTool,
+            recentTrace: executionTrace.slice(0, 20)
+        });
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── Change Request Governance APIs ───────────────────────────────
+app.get('/api/v1/change-requests', async (req, res) => {
+    try {
+        let projectId = req.auth?.projectId || req.query.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production')
+            projectId = global.DEFAULT_PROJECT_ID;
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
+        const status = req.query.status;
+        const crs = await governanceSvc.listChangeRequests(projectId, status);
+        return res.json(crs);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.post('/api/v1/change-requests', async (req, res) => {
+    try {
+        let projectId = req.auth?.projectId || req.body.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production')
+            projectId = global.DEFAULT_PROJECT_ID;
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID is required' });
+        const { resourceType, resourceId, proposedChanges, branchName } = req.body;
+        if (!resourceType || !proposedChanges)
+            return res.status(400).json({ error: 'resourceType and proposedChanges are required' });
+        const cr = await governanceSvc.createChangeRequest({
+            projectId,
+            resourceType,
+            resourceId,
+            proposedChanges,
+            createdBy: req.auth?.apiKeyName || 'system',
+            branchName: branchName || 'main'
+        });
+        return res.status(201).json(cr);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.patch('/api/v1/change-requests/:id/approve', async (req, res) => {
+    try {
+        const reviewer = req.auth?.apiKeyName || 'system';
+        const updated = await governanceSvc.approveAndApply(req.params.id, reviewer);
+        return res.json(updated);
+    }
+    catch (err) {
+        if (err.message?.includes('not found') || err.message?.includes('cannot be approved')) {
+            return res.status(400).json({ error: err.message });
+        }
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.patch('/api/v1/change-requests/:id/reject', async (req, res) => {
+    try {
+        const reviewer = req.auth?.apiKeyName || 'system';
+        const { reason } = req.body;
+        const updated = await governanceSvc.rejectChangeRequest(req.params.id, reviewer, reason || 'Rejected by reviewer');
+        return res.json(updated);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── API Latency Telemetry (for SRE dashboard) ─────────────────────
+app.get('/api/v1/telemetry/api-latency', async (req, res) => {
+    try {
+        let projectId = req.auth?.projectId || req.query.projectId || req.header('X-Project-Id');
+        if (!projectId && process.env.NODE_ENV !== 'production')
+            projectId = global.DEFAULT_PROJECT_ID;
+        // Aggregate last 60 minutes of AuditLog into 5-minute buckets
+        const now = Date.now();
+        const windowMs = 60 * 60 * 1000; // 1 hour
+        const bucketMs = 5 * 60 * 1000; // 5 min bucket
+        const NUM_BUCKETS = 12;
+        const logs = await prisma.auditLog.findMany({
+            where: {
+                ...(projectId ? { projectId } : {}),
+                occurredAt: { gte: new Date(now - windowMs) }
+            },
+            select: { occurredAt: true, metadata: true, status: true }
+        });
+        // Build 12 × 5-min buckets
+        const buckets = [];
+        for (let i = NUM_BUCKETS - 1; i >= 0; i--) {
+            const bucketStart = now - (i + 1) * bucketMs;
+            const bucketEnd = now - i * bucketMs;
+            const d = new Date(bucketStart);
+            const label = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+            buckets.push({ label, avgLatency: 0, errorRate: 0, count: 0, errorCount: 0, sumLatency: 0 });
+            const idx = NUM_BUCKETS - 1 - i;
+            for (const log of logs) {
+                const ts = new Date(log.occurredAt).getTime();
+                if (ts >= bucketStart && ts < bucketEnd) {
+                    buckets[idx].count++;
+                    if (log.status === 'FAILED' || log.status === 'DENIED')
+                        buckets[idx].errorCount++;
+                    const meta = log.metadata;
+                    buckets[idx].sumLatency += meta?.durationMs || meta?.responseTimeMs || 0;
+                }
+            }
+        }
+        const result = buckets.map(b => ({
+            label: b.label,
+            avgLatency: b.count > 0 ? Math.round(b.sumLatency / b.count) : 0,
+            errorRate: b.count > 0 ? parseFloat(((b.errorCount / b.count) * 100).toFixed(1)) : 0,
+            requestCount: b.count
+        }));
+        return res.json({ buckets: result, windowMinutes: 60, bucketMinutes: 5 });
     }
     catch (err) {
         return res.status(500).json({ error: String(err) });
@@ -337,6 +554,20 @@ app.post('/entity-types', async (req, res) => {
         }
         if (!projectId)
             return res.status(400).json({ error: 'Project ID is required' });
+        const isProduction = projectId.toLowerCase().includes('prod') || projectId === 'proj-production';
+        if (isProduction) {
+            const changeRequest = await governanceSvc.createChangeRequest({
+                projectId,
+                resourceType: 'EntityType',
+                proposedChanges: { name, attributes },
+                createdBy: req.auth?.apiKeyName || 'system',
+                branchName: 'main'
+            });
+            return res.status(202).json({
+                message: 'PLATFORM_GOVERNANCE_ENFORCED: ChangeRequest created for production workspace.',
+                changeRequest
+            });
+        }
         const created = await prisma.entityType.create({
             data: {
                 projectId,
@@ -490,23 +721,49 @@ app.post('/api/v1/pipelines/:id/run', async (req, res) => {
         const pipeline = await prisma.pipeline.findUnique({ where: { id } });
         if (!pipeline)
             return res.status(404).json({ error: 'Pipeline not found' });
-        // Simulate dry-run execution trace
-        const nodes = pipeline.nodes || [];
-        const trace = nodes.map((n, i) => ({
-            nodeId: n.id,
-            status: 'SUCCESS',
-            recordsProcessed: Math.floor(Math.random() * 1000) + 100,
-            durationMs: Math.floor(Math.random() * 50) + 10,
-            timestamp: new Date().toISOString()
-        }));
-        // In a real execution, this would dispatch to a worker cluster.
-        // For Phase 1, we return the synchronous trace to prove the UI wire-up.
-        return res.json({
+        const projectId = getProjectId(req);
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID required' });
+        // Dry run remains synchronous logic for immediate feedback (per roadmap Stage 1 context)
+        if (isDryRun) {
+            const nodes = pipeline.nodes || [];
+            const trace = nodes.map((n) => ({
+                nodeId: n.id,
+                status: 'SUCCESS',
+                recordsProcessed: Math.floor(Math.random() * 1000) + 100,
+                durationMs: Math.floor(Math.random() * 50) + 10,
+                timestamp: new Date().toISOString()
+            }));
+            return res.json({
+                pipelineId: id,
+                executionId: `dry_${Date.now()}`,
+                status: 'COMPLETED',
+                isDryRun: true,
+                trace
+            });
+        }
+        // Production run: create run record and enqueue job
+        const run = await prisma.pipelineRun.create({
+            data: {
+                pipelineId: id,
+                status: 'QUEUED',
+                projectId,
+                trigger: 'manual',
+                startedAt: new Date()
+            }
+        });
+        const job = await orchestrator.enqueue('PIPELINE_RUN', {
             pipelineId: id,
-            executionId: `exec_${Date.now()}`,
-            status: 'COMPLETED',
-            isDryRun,
-            trace
+            runId: run.id,
+            trigger: 'manual'
+        }, {
+            projectId
+        });
+        return res.status(202).json({
+            pipelineId: id,
+            runId: run.id,
+            jobId: job.id,
+            status: 'QUEUED'
         });
     }
     catch (err) {
@@ -906,10 +1163,6 @@ app.post('/api/v1/ontology/derive-relationships', async (req, res) => {
         return res.status(500).json({ error: 'failed to derive relationships', details: String(error) });
     }
 });
-// ══════════════════════════════════════════════════════════════════
-// ── No-Code Ontology Builder API (Timbr/Palantir style) ───────────
-// ══════════════════════════════════════════════════════════════════
-const ontology_reasoner_1 = require("./ontology-reasoner");
 function getProjectId(req) {
     const headerId = req.header('X-Project-Id');
     const projectIdStr = Array.isArray(headerId) ? headerId[0] : headerId;
@@ -1051,6 +1304,18 @@ app.get('/api/ontology/entity-types', async (req, res) => {
         return res.status(500).json({ error: String(err) });
     }
 });
+app.get('/api/v1/ontology/entity-types/:id/distribution', async (req, res) => {
+    try {
+        const projectId = getProjectId(req);
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID required' });
+        const stats = await qualitySvc.calculateDistribution(req.params.id, projectId);
+        return res.json(stats);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
 // ── GET /api/ontology/entity-types/:id/impact — preview downstream dependencies
 app.get('/api/ontology/entity-types/:id/impact', async (req, res) => {
     try {
@@ -1077,18 +1342,16 @@ app.post('/api/ontology/entity-types', async (req, res) => {
         const { name, attributes = [], strictGovernance = false, branchName = 'main' } = req.body;
         if (!name)
             return res.status(400).json({ error: 'name is required' });
-        if (strictGovernance && branchName === 'main') {
-            const changeRequest = await prisma.changeRequest.create({
-                data: {
-                    resourceType: 'EntityType',
-                    proposedChanges: { name, attributes },
-                    branchName,
-                    status: 'DRAFT',
-                    createdBy: req.auth?.apiKeyName || 'system',
-                    projectId
-                }
+        const isProduction = projectId.toLowerCase().includes('prod') || projectId === 'proj-production';
+        if ((isProduction || strictGovernance) && branchName === 'main') {
+            const changeRequest = await governanceSvc.createChangeRequest({
+                projectId,
+                resourceType: 'EntityType',
+                proposedChanges: { name, attributes },
+                createdBy: req.auth?.apiKeyName || 'system',
+                branchName
             });
-            return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
+            return res.status(202).json({ message: 'PLATFORM_GOVERNANCE_ENFORCED: ChangeRequest created for review', changeRequest });
         }
         const created = await prisma.entityType.create({
             data: {
@@ -1101,7 +1364,14 @@ app.post('/api/ontology/entity-types', async (req, res) => {
             include: { attributes: true },
         });
         // Track lineage
-        await lineageSvc.registerEdge({ sourceType: 'Project', sourceId: projectId, targetType: 'EntityType', targetId: created.id, transformation: 'created' });
+        await lineageSvc.registerEdge({
+            sourceType: 'Project',
+            sourceId: projectId,
+            targetType: 'EntityType',
+            targetId: created.id,
+            transformation: 'created',
+            projectId
+        });
         return res.status(201).json({ ...created, objectCount: 0 });
     }
     catch (err) {
@@ -1138,19 +1408,22 @@ app.post('/api/ontology/entity-types/:id/instances', (0, middleware_1.enforceIde
             });
         }
         else {
-            // Fallback if broker is down: Synchronous insert
-            const newInstance = await prisma.currentEntityState.create({
-                data: { logicalId: String(logicalId), entityTypeId, data: (data || {}), updatedAt: new Date() },
-            });
-            await prisma.entityEvent.create({
-                data: { logicalId: String(logicalId), entityTypeId, eventType: 'CREATED', payload: data || {} },
+            // Fallback if broker is down: Synchronous insert with event-sourcing discipline
+            const { projection } = await ontologySvc.recordDomainEventAndApply({
+                eventType: 'EntityCreated',
+                logicalId: String(logicalId),
+                entityTypeId,
+                entityVersion: et.version,
+                data: (data || {}),
+                projectId: et.projectId,
+                actor: req.auth?.apiKeyName || 'system'
             });
             if (redisClient) {
                 const keys = await redisClient.keys(`ontology:instances:${entityTypeId}:*`);
                 if (keys.length > 0)
                     await redisClient.del(keys);
             }
-            return res.json(newInstance);
+            return res.json(projection);
         }
     }
     catch (err) {
@@ -1329,7 +1602,7 @@ app.post('/api/ontology/relationships', async (req, res) => {
             return res.status(202).json({ message: 'ChangeRequest created for review', changeRequest });
         }
         const rel = await prisma.relationshipDefinition.create({
-            data: { name, sourceEntityTypeId, targetEntityTypeId, branchName },
+            data: { name, sourceEntityTypeId, targetEntityTypeId, branchName, projectId: sourceEt.projectId },
             include: {
                 sourceEntityType: { select: { id: true, name: true } },
                 targetEntityType: { select: { id: true, name: true } },
@@ -1351,121 +1624,96 @@ app.delete('/api/ontology/relationships/:id', async (req, res) => {
         return res.status(500).json({ error: String(err) });
     }
 });
-// ── GET /api/ontology/change-requests — list pending changes ──────────────────
-app.get('/api/ontology/change-requests', async (req, res) => {
+// ── GET /api/governance/change-requests — list changes ──────────────────
+app.get('/api/governance/change-requests', async (req, res) => {
     try {
-        const projectId = getProjectId(req);
-        const status = req.query.status || 'DRAFT';
+        const projectId = req.auth?.projectId || req.query.projectId;
+        const status = req.query.status;
         if (!projectId)
             return res.status(400).json({ error: 'Project ID required' });
-        const crs = await prisma.changeRequest.findMany({
-            where: { projectId, status },
-            orderBy: { createdAt: 'desc' }
-        });
+        const crs = await governanceSvc.listChangeRequests(projectId, status);
         return res.json(crs);
     }
     catch (err) {
         return res.status(500).json({ error: String(err) });
     }
 });
-// ── POST /api/ontology/change-requests — submit a branch for merge review ─────
-app.post('/api/ontology/change-requests', async (req, res) => {
+// ── POST /api/governance/change-requests/:id/approve ────────────────────────────
+app.post('/api/governance/change-requests/:id/approve', async (req, res) => {
     try {
-        const projectId = getProjectId(req);
-        const { branchName, description } = req.body;
-        if (!projectId || !branchName)
-            return res.status(400).json({ error: 'Project ID and Branch name required' });
-        // Determine diff (very simple version for now)
-        const branchTypes = await prisma.entityType.findMany({ where: { projectId, branchName }, include: { attributes: true } });
-        const mainTypes = await prisma.entityType.findMany({ where: { projectId, branchName: 'main' }, include: { attributes: true } });
-        const cr = await prisma.changeRequest.create({
-            data: {
-                projectId,
-                resourceType: 'Branch',
-                branchName,
-                proposedChanges: { description, entitiesCount: branchTypes.length },
-                diff: {
-                    added: branchTypes.filter(bt => !mainTypes.find(mt => mt.name === bt.name)).map(t => t.name),
-                    modified: branchTypes.filter(bt => mainTypes.find(mt => mt.name === bt.name)).map(t => t.name)
-                },
-                status: 'IN_REVIEW',
-                createdBy: req.auth?.apiKeyName || 'system'
-            }
-        });
-        return res.status(201).json(cr);
+        const reviewedBy = req.auth?.apiKeyName || 'system';
+        const cr = await governanceSvc.approveAndApply(req.params.id, reviewedBy);
+        return res.json({ success: true, cr });
+    }
+    catch (err) {
+        logger_1.default.error({ crId: req.params.id, error: String(err) }, 'Failed to approve change request');
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// ── POST /api/governance/change-requests/:id/reject ─────────────────────────────
+app.post('/api/governance/change-requests/:id/reject', async (req, res) => {
+    try {
+        const reviewedBy = req.auth?.apiKeyName || 'system';
+        const { reason } = req.body;
+        if (!reason)
+            return res.status(400).json({ error: 'Rejection reason required' });
+        const cr = await governanceSvc.rejectChangeRequest(req.params.id, reviewedBy, reason);
+        return res.json({ success: true, cr });
     }
     catch (err) {
         return res.status(500).json({ error: String(err) });
     }
 });
-// ── POST /api/ontology/change-requests/:id/approve ────────────────────────────
-app.post('/api/ontology/change-requests/:id/approve', async (req, res) => {
+// ── LEGACY Ontology-specific Change Requests (for backward compatibility) ─────
+app.get('/api/ontology/change-requests', async (req, res) => {
     try {
-        const cr = await prisma.changeRequest.findUnique({ where: { id: req.params.id } });
-        if (!cr || cr.status !== 'IN_REVIEW')
-            return res.status(404).json({ error: 'Reviewable ChangeRequest not found' });
-        if (cr.resourceType === 'Branch') {
-            // Execute Merge: Copy everything from branch to main
-            await prisma.$transaction(async (tx) => {
-                const branchTypes = await tx.entityType.findMany({
-                    where: { projectId: cr.projectId, branchName: cr.branchName },
-                    include: { attributes: true }
-                });
-                const branchRels = await tx.relationshipDefinition.findMany({
-                    where: { branchName: cr.branchName, sourceEntityType: { projectId: cr.projectId } }
-                });
-                // 1. Wipe existing main ontology for this project (or do partial update, but replace is safer for v1)
-                await tx.attributeDefinition.deleteMany({ where: { branchName: 'main', entityType: { projectId: cr.projectId } } });
-                await tx.relationshipDefinition.deleteMany({ where: { branchName: 'main', sourceEntityType: { projectId: cr.projectId } } });
-                await tx.entityType.deleteMany({ where: { projectId: cr.projectId, branchName: 'main' } });
-                // 2. Clone branch to main
-                const oldToNewIdMap = {};
-                for (const et of branchTypes) {
-                    const newEt = await tx.entityType.create({
-                        data: {
-                            name: et.name,
-                            version: et.version + 1, // increment version on merge
-                            branchName: 'main',
-                            projectId: cr.projectId,
-                            attributes: {
-                                create: et.attributes.map(a => ({
-                                    name: a.name,
-                                    dataType: a.dataType,
-                                    required: a.required,
-                                    temporal: a.temporal,
-                                    branchName: 'main'
-                                }))
-                            }
-                        }
-                    });
-                    oldToNewIdMap[et.id] = newEt.id;
+        const projectId = req.auth?.projectId || req.query.projectId;
+        const crs = await governanceSvc.listChangeRequests(projectId || '', req.query.status);
+        return res.json(crs);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+// (Keep branch merge logic as specialized case in /api/ontology/change-requests)
+app.post('/api/ontology/change-requests', async (req, res) => {
+    try {
+        const projectId = req.auth?.projectId || req.query.projectId;
+        const { branchName, description } = req.body;
+        if (!projectId || !branchName)
+            return res.status(400).json({ error: 'Project ID and Branch name required' });
+        const branchTypes = await prisma.entityType.findMany({ where: { projectId, branchName }, include: { attributes: true } });
+        const mainTypes = await prisma.entityType.findMany({ where: { projectId, branchName: 'main' }, include: { attributes: true } });
+        const cr = await governanceSvc.createChangeRequest({
+            projectId,
+            resourceType: 'Branch',
+            proposedChanges: { description, entitiesCount: branchTypes.length },
+            createdBy: req.auth?.apiKeyName || 'system',
+            branchName
+        });
+        // Manually add diff for branch UI
+        const updatedCr = await prisma.changeRequest.update({
+            where: { id: cr.id },
+            data: {
+                diff: {
+                    added: branchTypes.filter(bt => !mainTypes.find(mt => mt.name === bt.name)).map(t => t.name),
+                    modified: branchTypes.filter(bt => mainTypes.find(mt => mt.name === bt.name)).map(t => t.name)
                 }
-                for (const rel of branchRels) {
-                    await tx.relationshipDefinition.create({
-                        data: {
-                            name: rel.name,
-                            branchName: 'main',
-                            sourceEntityTypeId: oldToNewIdMap[rel.sourceEntityTypeId],
-                            targetEntityTypeId: oldToNewIdMap[rel.targetEntityTypeId]
-                        }
-                    });
-                }
-                // 3. Mark approved
-                await tx.changeRequest.update({
-                    where: { id: cr.id },
-                    data: { status: 'APPROVED', reviewedBy: req.auth?.apiKeyName || 'system', reviewedAt: new Date() }
-                });
-            });
-        }
-        else {
-            // Individual EntityType change - simpler logic
-            // ... handled per-type for now ...
-            await prisma.changeRequest.update({
-                where: { id: cr.id },
-                data: { status: 'APPROVED', reviewedBy: req.auth?.apiKeyName || 'system', reviewedAt: new Date() }
-            });
-        }
-        return res.json({ status: 'merged' });
+            }
+        });
+        return res.status(201).json(updatedCr);
+    }
+    catch (err) {
+        return res.status(500).json({ error: String(err) });
+    }
+});
+app.post('/api/v1/ontology/rebuild', async (req, res) => {
+    try {
+        const projectId = getProjectId(req);
+        if (!projectId)
+            return res.status(400).json({ error: 'Project ID required' });
+        const result = await rebuilder.rebuildProjectOntology(projectId);
+        return res.json(result);
     }
     catch (err) {
         return res.status(500).json({ error: String(err) });
@@ -1658,8 +1906,12 @@ app.post('/api/ontology/reason', async (req, res) => {
         const projectId = getProjectId(req);
         if (!projectId)
             return res.status(400).json({ error: 'Project ID required' });
-        const result = await (0, ontology_reasoner_1.runFullReasoner)(projectId, prisma);
-        return res.json({ success: true, ...result });
+        const job = await orchestrator.enqueue('SEMANTIC_REASONING', { projectId }, { projectId, idempotencyKey: `semantic-reasoning:${projectId}:${Date.now()}` });
+        return res.status(202).json({
+            message: 'Semantic reasoning job enqueued. Monitor via SRE Jobs dashboard.',
+            jobId: job.id,
+            status: job.status,
+        });
     }
     catch (err) {
         return res.status(500).json({ error: String(err) });
@@ -1764,6 +2016,21 @@ app.put('/entity-types/:id', async (req, res) => {
             projectId = global.DEFAULT_PROJECT_ID;
         if (!projectId)
             return res.status(400).json({ error: 'Project ID is required for version update' });
+        const isProduction = projectId.toLowerCase().includes('prod') || projectId === 'proj-production';
+        if (isProduction) {
+            const changeRequest = await governanceSvc.createChangeRequest({
+                projectId,
+                resourceType: 'EntityType',
+                resourceId: existing.id,
+                proposedChanges: { name: existing.name, attributes },
+                createdBy: req.auth?.apiKeyName || 'system',
+                branchName: 'main'
+            });
+            return res.status(202).json({
+                message: 'PLATFORM_GOVERNANCE_ENFORCED: Schema update requires approval in production.',
+                changeRequest
+            });
+        }
         // Insert-only versioning: create a new EntityType row + new AttributeDefinition rows.
         const createdVersion = await prisma.entityType.create({
             data: {
@@ -1808,7 +2075,10 @@ app.get('/api/v1/ontology/instances/current', async (req, res) => {
             };
         }
         const instances = await prisma.currentEntityState.findMany({
-            where: whereClause,
+            where: {
+                ...whereClause,
+                updatedAt: { gte: new Date(Date.now() - 30000) } // Active in last 30s
+            },
             include: {
                 entityType: {
                     select: { name: true }
@@ -1861,70 +2131,19 @@ app.post('/entity-types/:id/instances', async (req, res) => {
             }
         }
         const now = new Date();
-        // Temporal close/open + event emission — all in one atomic transaction
-        const { instance, previousState, eventId } = await prisma.$transaction(async (tx) => {
-            // Fetch the currently-active row to capture previousState
-            const current = await tx.entityInstance.findFirst({
-                where: {
-                    entityTypeId: entityType.id,
-                    logicalId,
-                    validTo: null,
-                },
-            });
-            // Close the currently-active row (if any)
-            if (current) {
-                await tx.entityInstance.update({
-                    where: { id: current.id },
-                    data: { validTo: now },
-                });
-            }
-            // Insert new active row
-            const newInstance = await tx.entityInstance.create({
-                data: {
-                    logicalId,
-                    entityTypeId: entityType.id,
-                    entityVersion: entityType.version,
-                    data: attrData,
-                    validFrom: now,
-                    validTo: null,
-                },
-            });
-            // Emit domain event (append-only, immutable) with idempotency key
-            const idempotencyKey = `EntityStateChanged:${logicalId}:${now.toISOString()}`;
-            const domainEvent = await tx.domainEvent.create({
-                data: {
-                    idempotencyKey,
-                    eventType: 'EntityStateChanged',
-                    entityTypeId: entityType.id,
-                    logicalId,
-                    entityVersion: entityType.version,
-                    payload: {
-                        previousState: current?.data ?? null,
-                        newState: attrData,
-                        validFrom: now.toISOString(),
-                    },
-                },
-            });
-            // CQRS: Upsert read model projection
-            await tx.currentEntityState.upsert({
-                where: { logicalId },
-                create: {
-                    logicalId,
-                    entityTypeId: entityType.id,
-                    data: attrData,
-                    updatedAt: now,
-                },
-                update: {
-                    data: attrData,
-                    updatedAt: now,
-                },
-            });
-            return {
-                instance: newInstance,
-                previousState: current?.data ?? null,
-                eventId: domainEvent.id,
-            };
+        // Temporal close/open + event emission — all via the canonical service
+        const { event, projection } = await ontologySvc.recordDomainEventAndApply({
+            eventType: 'EntityStateChanged',
+            logicalId,
+            entityTypeId: entityType.id,
+            entityVersion: entityType.version,
+            data: attrData,
+            projectId: entityType.projectId,
+            actor: req.auth?.apiKeyName || 'system',
+            idempotencyKey: `EntityStateChanged:${logicalId}:${now.toISOString()}`
         });
+        const eventId = event.id;
+        const previousState = event.payload?.previousState ?? null; // OntologyService provides this in the payload if implemented, or we can assume null if it's a fresh creation focus
         // Fire-and-forget: evaluate policies after transaction commits
         (0, policy_engine_1.evaluatePolicies)({
             eventId,
@@ -1938,7 +2157,7 @@ app.post('/entity-types/:id/instances', async (req, res) => {
                 validFrom: now.toISOString(),
             },
         }, prisma);
-        return res.status(201).json(instance);
+        return res.status(201).json(projection);
     }
     catch (error) {
         return res.status(500).json({
@@ -1976,10 +2195,9 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
             return res.status(403).json({ error: 'Access Denied', reason: evalResult.reason });
         }
         const items = req.body;
-        const now = new Date();
         const metaFields = new Set(['logicalId', 'validFrom', 'validTo']);
         const allowedNames = new Set(entityType.attributes.map((a) => a.name));
-        // 1. Validation phase
+        // 1. Validation phase (sync - keep fast feedback for callers)
         for (const item of items) {
             const logicalId = item.logicalId;
             if (!logicalId)
@@ -1995,85 +2213,13 @@ app.post('/entity-types/:id/instances/bulk', async (req, res) => {
                 }
             }
         }
-        // 2. Execution phase (in transaction)
-        const results = await prisma.$transaction(async (tx) => {
-            const createdInstances = [];
-            for (const item of items) {
-                const logicalId = item.logicalId;
-                // Extract attributes
-                const attrData = {};
-                for (const [key, value] of Object.entries(item)) {
-                    if (!metaFields.has(key))
-                        attrData[key] = value;
-                }
-                // Close currently-active row if exists
-                const current = await tx.entityInstance.findFirst({
-                    where: { entityTypeId: entityType.id, logicalId, validTo: null },
-                });
-                if (current) {
-                    await tx.entityInstance.update({
-                        where: { id: current.id },
-                        data: { validTo: now },
-                    });
-                }
-                const newInstance = await tx.entityInstance.create({
-                    data: {
-                        logicalId,
-                        entityTypeId: entityType.id,
-                        entityVersion: entityType.version,
-                        data: attrData,
-                        validFrom: now,
-                        validTo: null,
-                    },
-                });
-                createdInstances.push(newInstance);
-                const idempotencyKey = `EntityBulkStateChanged:${logicalId}:${now.toISOString()}`;
-                const domainEvent = await tx.domainEvent.create({
-                    data: {
-                        idempotencyKey,
-                        eventType: 'EntityStateChanged',
-                        entityTypeId: entityType.id,
-                        logicalId,
-                        entityVersion: entityType.version,
-                        payload: {
-                            previousState: current?.data ?? null,
-                            newState: attrData,
-                            validFrom: now.toISOString(),
-                        },
-                    },
-                });
-                // 3. Enqueue Outbox Event for external synchronization
-                await outbox_service_1.OutboxService.enqueue(tx, {
-                    projectId: (req.auth?.projectId || global.DEFAULT_PROJECT_ID),
-                    aggregateType: 'EntityType',
-                    aggregateId: entityType.id,
-                    eventType: 'EntityStateChanged',
-                    targetSystem: 'WEBHOOK', // Default to webhook for now
-                    payload: {
-                        entityTypeId: entityType.id,
-                        logicalId,
-                        data: attrData,
-                        timestamp: now.toISOString()
-                    },
-                    domainEventId: domainEvent.id
-                });
-                await tx.currentEntityState.upsert({
-                    where: { logicalId },
-                    create: {
-                        logicalId,
-                        entityTypeId: entityType.id,
-                        data: attrData,
-                        updatedAt: now,
-                    },
-                    update: {
-                        data: attrData,
-                        updatedAt: now,
-                    },
-                });
-            }
-            return { createdInstances };
+        // 2. Enqueue background job - heavy lifting done in Orchestrator worker
+        const bulkProjectId = req.auth?.projectId ?? req.header('X-Project-Id') ?? global.DEFAULT_PROJECT_ID;
+        const bulkJob = await orchestrator.enqueue('BULK_INGESTION', { entityTypeId: entityType.id, projectId: bulkProjectId, actor: req.auth?.apiKeyName ?? 'api', items }, { projectId: bulkProjectId, idempotencyKey: `bulk-ingest:${entityType.id}:${Date.now()}`, priority: 8 });
+        return res.status(202).json({
+            message: `Bulk ingestion of ${items.length} records enqueued. Monitor via SRE Jobs dashboard.`,
+            jobId: bulkJob.id, status: bulkJob.status, recordCount: items.length,
         });
-        return res.status(201).json({ success: true, count: results.createdInstances.length });
     }
     catch (error) {
         return res.status(500).json({ error: 'failed to execute bulk ingestion', details: String(error) });
@@ -2808,6 +2954,7 @@ app.post('/integration-jobs', async (req, res) => {
             targetType: 'EntityType',
             targetId: targetEntityTypeId,
             transformation: `IntegrationJob:${job.id}`,
+            projectId: job.projectId
         });
         return res.status(201).json(job);
     }
@@ -2900,10 +3047,14 @@ app.post('/integration-jobs/:id/execute', (0, middleware_1.enforceIdempotency)(p
     try {
         const { data } = req.body ?? {};
         const idempotencyKey = req.header('x-idempotency-key') || `manual-sync-${req.params.id}-${Date.now()}`;
+        const jobDef = await prisma.integrationJob.findUnique({ where: { id: req.params.id } });
+        if (!jobDef)
+            return res.status(404).json({ error: 'Integration job not found' });
         const job = await orchestrator.enqueue('INTEGRATION_SYNC', { data }, {
             idempotencyKey,
             integrationJobId: req.params.id,
-            priority: 10 // high priority for manual runs
+            priority: 10, // high priority for manual runs
+            projectId: jobDef.projectId
         });
         return res.status(202).json({
             message: 'Job enqueued',
@@ -3774,8 +3925,12 @@ app.post('/api/v1/identity/run-match', async (req, res) => {
         const { entityTypeId, threshold } = req.body;
         if (!entityTypeId)
             return res.status(400).json({ error: 'entityTypeId is required' });
+        const et = await prisma.entityType.findUnique({ where: { id: entityTypeId } });
+        if (!et)
+            return res.status(404).json({ error: 'entityType not found' });
         const count = await identity_service_1.IdentityService.runFuzzyMatchJob(entityTypeId, prisma, {
             threshold: threshold ?? 0.75,
+            projectId: et.projectId
         });
         return res.json({ success: true, newCandidatesCreated: count });
     }
@@ -3786,8 +3941,16 @@ app.post('/api/v1/identity/run-match', async (req, res) => {
 // Merge two candidates (human review: approve merge)
 app.post('/api/v1/identity/candidates/:id/merge', async (req, res) => {
     try {
+        const candidate = await prisma.matchCandidate.findUnique({ where: { id: req.params.id } });
+        if (!candidate)
+            return res.status(404).json({ error: 'MatchCandidate not found' });
         const reviewerName = req.auth?.apiKeyName ?? 'system';
-        await identity_service_1.IdentityService.mergeEntities(req.params.id, reviewerName, prisma);
+        await identity_service_1.IdentityService.mergeEntities({
+            candidateId: req.params.id,
+            reviewerName,
+            projectId: candidate.projectId,
+            prisma: prisma
+        });
         // Audit log
         await prisma.auditLog.create({
             data: {
@@ -3797,6 +3960,7 @@ app.post('/api/v1/identity/candidates/:id/merge', async (req, res) => {
                 resourceType: 'MatchCandidate',
                 resourceId: req.params.id,
                 metadata: { correlationId: req.correlationId },
+                projectId: candidate.projectId
             }
         });
         return res.json({ success: true });
@@ -3855,9 +4019,24 @@ app.post('/api/v1/identity/merge-batch', async (req, res) => {
             return res.status(400).json({ error: 'candidateIds must be an array' });
         const reviewerName = req.auth?.apiKeyName ?? 'system';
         const results = [];
+        const candidates = await prisma.matchCandidate.findMany({
+            where: { id: { in: candidateIds } }
+        });
+        const candidateMap = new Map(candidates.map((c) => [c.id, c]));
         for (const id of candidateIds) {
             try {
-                await identity_service_1.IdentityService.mergeEntities(id, reviewerName, prisma);
+                const candidate = candidateMap.get(id);
+                if (!candidate) {
+                    results.push({ id, status: 'error', error: 'MatchCandidate not found' });
+                    continue;
+                }
+                const currentCandidate = candidate;
+                await identity_service_1.IdentityService.mergeEntities({
+                    candidateId: id,
+                    reviewerName,
+                    projectId: currentCandidate.projectId || 'default',
+                    prisma: prisma
+                });
                 await prisma.auditLog.create({
                     data: {
                         actor: reviewerName,
@@ -3866,6 +4045,7 @@ app.post('/api/v1/identity/merge-batch', async (req, res) => {
                         resourceType: 'MatchCandidate',
                         resourceId: id,
                         metadata: { correlationId: req.correlationId, batch: true },
+                        projectId: currentCandidate.projectId || 'default'
                     }
                 });
                 results.push({ id, status: 'success' });
@@ -4069,26 +4249,19 @@ app.put('/api/v1/governance/legal-hold/:logicalId', async (req, res) => {
         if (enabled === undefined)
             return res.status(400).json({ error: 'Must provide enabled boolean' });
         const logicalId = req.params.logicalId;
-        // Check if entity exists
+        // Check if entity exists to get entityTypeId and projectId
         const entity = await prisma.currentEntityState.findUnique({
             where: { logicalId }
         });
         if (!entity)
             return res.status(404).json({ error: 'Entity not found' });
-        await prisma.currentEntityState.update({
-            where: { logicalId },
-            data: { legalHold: Boolean(enabled) }
-        });
-        const reviewerName = req.auth?.apiKeyName ?? 'system';
-        await prisma.auditLog.create({
-            data: {
-                actor: reviewerName,
-                actorRole: req.auth?.role ?? 'UNKNOWN',
-                action: enabled ? 'ENABLE_LEGAL_HOLD' : 'DISABLE_LEGAL_HOLD',
-                resourceType: 'CurrentEntityState',
-                resourceId: logicalId,
-                metadata: { correlationId: req.correlationId, reason },
-            }
+        await ontologySvc.recordDomainEventAndApply({
+            eventType: 'LegalHoldChanged',
+            logicalId,
+            entityTypeId: entity.entityTypeId,
+            data: { enabled, reason },
+            projectId: entity.projectId,
+            actor: req.auth?.apiKeyName || 'system'
         });
         return res.json({ success: true, logicalId, legalHold: Boolean(enabled) });
     }
@@ -4117,7 +4290,14 @@ app.delete('/api/v1/entities/:logicalId', async (req, res) => {
             });
             return res.status(403).json({ error: 'Deletion blocked: Entity is under Active Legal Hold.' });
         }
-        await prisma.currentEntityState.delete({ where: { logicalId } });
+        await ontologySvc.recordDomainEventAndApply({
+            eventType: 'EntityDeleted',
+            logicalId,
+            entityTypeId: entity.entityTypeId,
+            data: {},
+            projectId: entity.projectId,
+            actor: req.auth?.apiKeyName || 'system'
+        });
         return res.json({ success: true });
     }
     catch (err) {
@@ -6571,7 +6751,8 @@ app.get('/api/spark/jobs/:id/runs', async (req, res) => {
 app.post('/api/provenance/record', async (req, res) => {
     try {
         const { entityId, entityType, operationType, sourceSystem, operatorId, fields } = req.body;
-        const chains = await provenance_service_1.ProvenanceService.recordCryptoProvenance(entityId, entityType, operationType || 'write', sourceSystem, operatorId || 'system', fields, prisma);
+        const provProjectId = req.body.projectId || req.header('X-Project-Id') || 'default';
+        const chains = await provenance_service_1.ProvenanceService.recordCryptoProvenance(entityId, entityType, operationType || 'write', sourceSystem, operatorId || 'system', fields, provProjectId, prisma);
         return res.status(201).json({ status: 'ok', records: chains.length });
     }
     catch (err) {
@@ -6580,7 +6761,8 @@ app.post('/api/provenance/record', async (req, res) => {
 });
 app.post('/api/provenance/seal/:entityId', async (req, res) => {
     try {
-        const seal = await provenance_service_1.ProvenanceService.createIntegritySeal(req.params.entityId, req.body.entityType || 'Unknown', req.body.sealedBy || 'system', prisma);
+        const sealProjectId = req.body.projectId || req.header('X-Project-Id') || 'default';
+        const seal = await provenance_service_1.ProvenanceService.createIntegritySeal(req.params.entityId, req.body.entityType || 'Unknown', req.body.sealedBy || 'system', sealProjectId, prisma);
         return res.status(201).json(seal);
     }
     catch (err) {
@@ -6678,41 +6860,15 @@ app.get('/api/data/quality/rejected-records', async (req, res) => {
 app.post('/api/data/replay', async (req, res) => {
     try {
         const { entityTypeId } = req.body;
-        if (!entityTypeId)
+        const projectId = req.projectId;
+        if (!entityTypeId) {
             return res.status(400).json({ error: 'entityTypeId required' });
-        const events = await prisma.domainEvent.findMany({
-            where: { entityTypeId },
-            orderBy: { occurredAt: 'asc' }
-        });
-        let rebuiltCount = 0;
-        // VERY simplified atomic swap/rebuild: clear projection and run sequentially
-        await prisma.$transaction(async (tx) => {
-            await tx.currentEntityState.deleteMany({ where: { entityTypeId } });
-            const stateMap = new Map();
-            for (const ev of events) {
-                if (ev.eventType === 'EntityStateChanged') {
-                    const payload = ev.payload;
-                    if (payload.newState) {
-                        stateMap.set(ev.logicalId, {
-                            data: payload.newState,
-                            updatedAt: ev.occurredAt
-                        });
-                    }
-                }
-            }
-            for (const [logicalId, state] of stateMap.entries()) {
-                await tx.currentEntityState.create({
-                    data: {
-                        logicalId,
-                        entityTypeId,
-                        data: state.data,
-                        updatedAt: state.updatedAt
-                    }
-                });
-                rebuiltCount++;
-            }
-        });
-        return res.json({ status: 'ok', rebuiltCount });
+        }
+        if (!projectId) {
+            return res.status(401).json({ error: 'Project context missing' });
+        }
+        const result = await ontologySvc.replayEntityType(entityTypeId, projectId);
+        return res.json({ status: 'ok', rebuiltCount: result.rebuiltCount });
     }
     catch (error) {
         return res.status(500).json({ error: String(error) });
@@ -6738,6 +6894,8 @@ const server = app.listen(PORT, '0.0.0.0', async () => {
     logger_1.default.info(`Server listening on http://0.0.0.0:${PORT}`);
     // ── Attach WebSocket server to the same HTTP server ──────────────────────
     initWebSocketServer(server);
+    // Start in-process drone telemetry simulator (optional, guarded by ENABLE_DRONE_SIM)
+    (0, drone_telemetry_service_1.startDroneTelemetry)(prismaRaw);
     try {
         let proj = await prisma.project.findFirst({ orderBy: { createdAt: 'asc' } });
         if (!proj) {

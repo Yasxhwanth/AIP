@@ -136,7 +136,7 @@ class IdentityService {
     /**
      * Explicitly links an external identity to an internal logicalId.
      */
-    static async registerAlias(sourceSystem, externalId, targetLogicalId, confidence, prisma) {
+    static async registerAlias(sourceSystem, externalId, targetLogicalId, confidence, projectId, prisma) {
         return prisma.entityAlias.upsert({
             where: {
                 sourceSystem_externalId: {
@@ -146,13 +146,15 @@ class IdentityService {
             },
             update: {
                 targetLogicalId,
-                confidence
+                confidence,
+                projectId,
             },
             create: {
                 sourceSystem,
                 externalId,
                 targetLogicalId,
-                confidence
+                confidence,
+                projectId,
             }
         });
     }
@@ -162,8 +164,8 @@ class IdentityService {
      *
      * @returns number of new candidates created
      */
-    static async runFuzzyMatchJob(entityTypeId, prisma, options = {}) {
-        const { threshold = 0.75, sourceJobId, limit = 500 } = options;
+    static async runFuzzyMatchJob(entityTypeId, prisma, options = { projectId: 'default' }) {
+        const { threshold = 0.75, sourceJobId, limit = 500, projectId } = options;
         // Fetch current active instances for this entity type
         const instances = await prisma.currentEntityState.findMany({
             where: { entityTypeId },
@@ -202,6 +204,7 @@ class IdentityService {
                             matchReasons: score.reasons,
                             status: 'PENDING',
                             sourceJobId: sourceJobId ?? null,
+                            projectId: projectId,
                         }
                     }).catch(() => { });
                     created++;
@@ -214,7 +217,8 @@ class IdentityService {
      * Merges entity B into entity A: updates all aliases pointing to B to point to A,
      * then marks the MatchCandidate as MERGED.
      */
-    static async mergeEntities(candidateId, reviewerName, prisma) {
+    static async mergeEntities(params) {
+        const { candidateId, reviewerName, projectId, prisma } = params;
         const p = prisma;
         const candidate = await p.matchCandidate.findUnique({ where: { id: candidateId } });
         if (!candidate)
@@ -257,6 +261,7 @@ class IdentityService {
                 matchReasons: candidate.matchReasons,
                 resolution: 'MERGED',
                 resolvedBy: reviewerName,
+                projectId: projectId,
             }
         });
     }

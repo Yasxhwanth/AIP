@@ -1,68 +1,120 @@
 @import "tailwindcss";
 
-:root {
-  /* Palantir Foundry / mission-command design tokens */
+@theme {
   --color-pt-bg: #050709;
-  --color-pt-bg-panel: #0D1117;
-  --color-pt-bg-hover: #1A1F26;
-  --color-pt-text: #F5F8FA;
-  --color-pt-text-muted: #8A9BA8;
+  --color-pt-bg-panel: #0d1117;
+  --color-pt-bg-hover: #1a1f26;
+  --color-pt-text: #f5f8fa;
+  --color-pt-text-muted: #8a9ba8;
   --color-pt-border: rgba(255, 255, 255, 0.1);
   --color-pt-border-dark: rgba(255, 255, 255, 0.2);
-  --color-pt-intent-primary: #106BA3;
-  --color-pt-intent-success: #0D8050;
-  --color-pt-intent-warning: #BF7326;
-  --color-pt-intent-danger: #C23030;
+  --color-pt-intent-primary: #106ba3;
+  --color-pt-intent-success: #0d8050;
+  --color-pt-intent-warning: #bf7326;
+  --color-pt-intent-danger: #c23030;
+  --color-aip-cyan: #00fbff;
+  --font-sans: "IBM Plex Sans", "Segoe UI", "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", "Courier New", monospace;
+}
 
-  /* Brand Accents */
-  --color-aip-cyan: #00FBFF;
-  --color-aip-cyan-glow: rgba(0, 251, 255, 0.3);
+:root {
+  --pt-bg: var(--color-pt-bg);
+  --pt-bg-panel: var(--color-pt-bg-panel);
+  --pt-bg-hover: var(--color-pt-bg-hover);
+  --pt-text: var(--color-pt-text);
+  --pt-text-muted: var(--color-pt-text-muted);
+  --pt-border: rgba(255, 255, 255, 0.1);
+  --pt-border-dark: rgba(255, 255, 255, 0.2);
+  --pt-intent-primary: var(--color-pt-intent-primary);
+  --pt-intent-success: var(--color-pt-intent-success);
+  --pt-intent-warning: var(--color-pt-intent-warning);
+  --pt-intent-danger: var(--color-pt-intent-danger);
 
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", "Roboto Mono", monospace;
-
-  /* shadcn compatible variables */
-  --background: #050709;
-  --foreground: #F5F8FA;
-  --card: #0D1117;
-  --card-foreground: #F5F8FA;
-  --popover: #0D1117;
-  --popover-foreground: #8A9BA8;
-  --primary: #106BA3;
-  --primary-foreground: #F5F8FA;
-  --secondary: #1A1F26;
-  --secondary-foreground: #F5F8FA;
-  --muted: #1A1F26;
-  --muted-foreground: #8A9BA8;
-  --accent: #1A1F26;
-  --accent-foreground: #F5F8FA;
-  --destructive: #C23030;
-  --border: rgba(255, 255, 255, 0.1);
+  --background: var(--pt-bg);
+  --foreground: var(--pt-text);
+  --card: var(--pt-bg-panel);
+  --card-foreground: var(--pt-text);
+  --popover: var(--pt-bg-panel);
+  --popover-foreground: var(--pt-text-muted);
+  --primary: var(--pt-intent-primary);
+  --primary-foreground: var(--pt-text);
+  --secondary: var(--pt-bg-hover);
+  --secondary-foreground: var(--pt-text);
+  --muted: var(--pt-bg-hover);
+  --muted-foreground: var(--pt-text-muted);
+  --accent: var(--pt-bg-hover);
+  --accent-foreground: var(--pt-text);
+  --destructive: var(--pt-intent-danger);
+  --border: var(--pt-border);
   --input: rgba(255, 255, 255, 0.05);
-  --ring: #106BA3;
+  --ring: var(--pt-intent-primary);
   --radius: 2px;
 }
 
 html,
 body {
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: var(--color-pt-bg);
-  color: var(--color-pt-text);
+  background-color: var(--pt-bg);
+  color: var(--pt-text);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
+  box-sizing: border-box;
   border-color: var(--border);
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
+}
+
+#__next {
+  height: 100%;
+}
+
+.aip-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--pt-bg);
+}
+
+.aip-scroll {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.aip-panel {
+  background: color-mix(in srgb, var(--pt-bg-panel) 84%, transparent);
+  border: 1px solid var(--pt-border);
+  border-radius: 2px;
+  backdrop-filter: blur(8px);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
 }

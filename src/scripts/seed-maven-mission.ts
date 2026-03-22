@@ -2,12 +2,14 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma';
+import { OntologyService } from '../ontology-service';
 
 const baseUrl = process.env.DATABASE_URL || '';
 const databaseUrl = baseUrl.replace('aip_app:aip_password', 'aip_user:aip_password');
 const pool = new Pool({ connectionString: databaseUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+const ontologySvc = new OntologyService(prisma);
 
 async function main() {
     console.log('🚛 Starting Global Logistics Maven Mission Seed...');
@@ -111,22 +113,15 @@ async function main() {
     ];
 
     for (const entity of entities) {
-        await prisma.currentEntityState.upsert({
-            where: { logicalId: entity.logicalId },
-            update: {
-                data: entity.data as any,
-                projectId,
-                updatedAt: new Date()
-            },
-            create: {
-                logicalId: entity.logicalId,
-                entityTypeId: entity.entityTypeId,
-                data: entity.data as any,
-                projectId,
-                updatedAt: new Date()
-            }
+        await ontologySvc.recordDomainEventAndApply({
+            eventType: 'EntityCreated',
+            logicalId: entity.logicalId,
+            entityTypeId: entity.entityTypeId,
+            data: entity.data as any,
+            projectId,
+            actor: 'system-seed'
         });
-        console.log(`Seeded/Updated entity: ${entity.logicalId}`);
+        console.log(`Seeded entity: ${entity.logicalId}`);
     }
 
     // 4. Seed Maven Agent
@@ -222,6 +217,31 @@ async function main() {
         }
     });
     console.log('Seeded Decision Rule: Port Congestion Critical');
+
+    // 7. Seed Policy Definitions for Alerting
+    await prisma.policyDefinition.upsert({
+        where: { name: 'Congestion Critical Alert' },
+        update: {
+            projectId,
+            entityTypeId: portEt,
+            eventType: 'EntityStateChanged',
+            condition: { field: 'queue_vessels', operator: '>', value: 10 } as any,
+            actionType: 'EmitAlert',
+            actionConfig: { alertType: 'PortCongestionAlert', severity: 'critical' } as any,
+            enabled: true
+        },
+        create: {
+            name: 'Congestion Critical Alert',
+            projectId,
+            entityTypeId: portEt,
+            eventType: 'EntityStateChanged',
+            condition: { field: 'queue_vessels', operator: '>', value: 10 } as any,
+            actionType: 'EmitAlert',
+            actionConfig: { alertType: 'PortCongestionAlert', severity: 'critical' } as any,
+            enabled: true
+        }
+    });
+    console.log('Seeded Policy: Congestion Critical Alert');
 
     console.log('✅ Maven Mission Infrastructure Seed Complete!');
 }

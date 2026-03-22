@@ -140,6 +140,7 @@ const strategies = {
 /**
  * Gathers input data for a model from the entity's current state
  * and optionally from recent telemetry.
+ * Returns both the values and their lineage (where they came from).
  */
 async function getModelInputs(logicalId, inputFields, prisma) {
     // Get current entity state from CQRS projection
@@ -147,11 +148,13 @@ async function getModelInputs(logicalId, inputFields, prisma) {
         where: { logicalId },
     });
     const entityData = (currentState?.data ?? {});
-    const result = {};
+    const data = {};
+    const lineage = {};
     for (const field of inputFields) {
         // First check entity state
         if (field in entityData) {
-            result[field] = entityData[field];
+            data[field] = entityData[field];
+            lineage[field] = { source: 'CurrentEntityState', logicalId, updatedAt: currentState?.updatedAt };
             continue;
         }
         // Fall back to latest telemetry value
@@ -160,15 +163,19 @@ async function getModelInputs(logicalId, inputFields, prisma) {
             orderBy: { timestamp: 'desc' },
         });
         if (latest) {
-            result[field] = latest.value;
+            data[field] = latest.value;
+            lineage[field] = { source: 'TimeseriesMetric', id: latest.id, timestamp: latest.timestamp };
+        }
+        else {
+            lineage[field] = { source: 'MISSING' };
         }
     }
-    return result;
+    return { data, lineage };
 }
 // ── Public API ───────────────────────────────────────────────────
 /**
  * Run inference for a specific model version against an entity.
- * Stores the result as an InferenceResult row.
+ * Stores the result as an InferenceResult row with deep lineage.
  */
 async function runInference(modelVersionId, logicalId, prisma) {
     // Load version + definition
@@ -182,7 +189,7 @@ async function runInference(modelVersionId, logicalId, prisma) {
     if (!strategyFn)
         throw new Error(`Unknown strategy '${version.strategy}'`);
     const inputFields = version.modelDefinition.inputFields;
-    const input = await getModelInputs(logicalId, inputFields, prisma);
+    const { data: input, lineage } = await getModelInputs(logicalId, inputFields, prisma);
     const hyperparameters = version.hyperparameters;
     const startTime = performance.now();
     let isError = false;
@@ -199,16 +206,24 @@ async function runInference(modelVersionId, logicalId, prisma) {
     }
     const endTime = performance.now();
     const durationMs = endTime - startTime;
+    // Generate natural language explanation for the prediction
+    const explanation = {
+        summary: isError ? 'Inference failed due to an execution error.' :
+            (prediction.anomaly ? 'Potential anomaly detected by model.' : 'Model confirms normal operating parameters.'),
+        rationale: !isError ? `Strategy ${version.strategy} evaluated ${inputFields.length} inputs. Confidence score: ${confidence}.` : prediction.error,
+        strategy: version.strategy,
+        timestamp: new Date()
+    };
     // Async capture of latency metrics
     setImmediate(async () => {
         try {
-            await recordLatencyMetric(modelVersionId, durationMs, isError, prisma);
+            await recordLatencyMetric(modelVersionId, durationMs, isError, version.modelDefinition.projectId, prisma);
         }
         catch (e) {
             console.error("Failed to record latency metric:", e);
         }
     });
-    // Store result
+    // Store result with Stage 4 governance data
     const result = await prisma.inferenceResult.create({
         data: {
             modelVersionId,
@@ -216,6 +231,9 @@ async function runInference(modelVersionId, logicalId, prisma) {
             input: input,
             output: prediction,
             confidence,
+            lineage: lineage,
+            explanation: explanation,
+            projectId: version.modelDefinition.projectId,
         },
     });
     return { inferenceResultId: result.id, prediction, confidence };
@@ -247,7 +265,7 @@ async function simulateInference(modelVersionId, simulatedInputs, prisma) {
  * Since Prisma doesn't natively support concurrent upsert arrays for percentiles easily,
  * we will use an approximate rolling average update here, and increment the counts.
  */
-async function recordLatencyMetric(modelVersionId, durationMs, isError, prisma) {
+async function recordLatencyMetric(modelVersionId, durationMs, isError, projectId, prisma) {
     const now = new Date();
     // Round down to the nearest 5 minutes
     const coeff = 1000 * 60 * 5;
@@ -272,7 +290,8 @@ async function recordLatencyMetric(modelVersionId, durationMs, isError, prisma) 
                     p99: durationMs,
                     avg: durationMs,
                     requestCount: 1,
-                    errorCount: isError ? 1 : 0
+                    errorCount: isError ? 1 : 0,
+                    projectId: projectId
                 }
             });
             return;

@@ -10,6 +10,7 @@ export interface AuditLogOptions {
     before?: any;
     after?: any;
     metadata?: any;
+    explanation?: any; // New for Stage 4
 }
 
 export class AuditService {
@@ -19,7 +20,7 @@ export class AuditService {
      * Logs a platform action with high-fidelity state tracking.
      */
     async logAction(options: AuditLogOptions) {
-        const { actor, action, resourceType, resourceId, projectId, before, after, metadata } = options;
+        const { actor, action, resourceType, resourceId, projectId, before, after, metadata, explanation } = options;
 
         try {
             // Apply PII masking to before/after payloads
@@ -36,6 +37,7 @@ export class AuditService {
                     projectId,
                     before: maskedBefore ? JSON.parse(JSON.stringify(maskedBefore)) : null,
                     after: maskedAfter ? JSON.parse(JSON.stringify(maskedAfter)) : null,
+                    explanation: explanation ? JSON.parse(JSON.stringify(explanation)) : null,
                     metadata: {
                         ...metadata,
                         ip: metadata?.ip || '0.0.0.0',

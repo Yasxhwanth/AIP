@@ -1,7 +1,7 @@
 import { PrismaClient } from './generated/prisma';
 /**
  * Run inference for a specific model version against an entity.
- * Stores the result as an InferenceResult row.
+ * Stores the result as an InferenceResult row with deep lineage.
  */
 export declare function runInference(modelVersionId: string, logicalId: string, prisma: PrismaClient): Promise<{
     inferenceResultId: string;
